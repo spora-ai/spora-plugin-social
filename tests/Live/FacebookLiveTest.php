@@ -12,6 +12,7 @@ use Spora\Plugins\Social\Tests\Live\Support\LiveCheck;
 use Spora\Plugins\Social\Tests\Live\Support\LiveContext;
 use Spora\Plugins\Social\Tests\Live\Support\LiveContract;
 use Spora\Plugins\Social\Tests\Live\Support\LiveTarget;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
 it('builds an authorization url with the unified login', function () {
     LiveContext::instance()
@@ -83,7 +84,7 @@ it('exchanges the code for a token the configuration decides the life of', funct
             LiveContract::holds(
                 str_starts_with(
                     (string) $tokenCall['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/oauth/access_token',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/oauth/access_token',
                 ),
                 'the token was not exchanged on the graph host the unified login is served from',
             );
@@ -138,7 +139,7 @@ it('lists the pages the business shared', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $call['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/' . $businessId . '/owned_pages',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/' . $businessId . '/owned_pages',
                 ),
                 'the page list did not come from the business owned pages endpoint on the graph host',
             );
@@ -179,7 +180,7 @@ it('publishes a post on the page', function () {
                 body: 'Live check from Spora — this post is taken down again straight away.',
             ));
 
-            $call = $recorder->last('POST', '/feed');
+            $call = $recorder->last('POST', SocialFixtures::FACEBOOK_FEED_PATH);
 
             if ($result->externalId !== null) {
                 $context->rememberPublished(SocialPlatform::Facebook, $result->externalId);
@@ -198,12 +199,12 @@ it('publishes a post on the page', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $call['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/',
                 ),
                 'the post did not go to the graph host the unified login is served from',
             );
             LiveContract::holds(
-                str_ends_with((string) $call['url'], '/' . $page->externalId . '/feed'),
+                str_ends_with((string) $call['url'], '/' . $page->externalId . SocialFixtures::FACEBOOK_FEED_PATH),
                 'the post did not go to the feed of the page',
             );
             LiveContract::holds(
@@ -223,12 +224,12 @@ it('takes the post down again', function () {
         ->run(function () {
             $context = LiveContext::instance();
             $page = $context->accounts(SocialPlatform::Facebook)[0] ?? null;
-            $publishCall = $context->http(SocialPlatform::Facebook)->last('POST', '/feed');
+            $publishCall = $context->http(SocialPlatform::Facebook)->last('POST', SocialFixtures::FACEBOOK_FEED_PATH);
 
             LiveContract::holds($publishCall !== null, 'the publish request was not recorded');
             LiveContract::holds($page !== null, 'there is no page to delete the post from');
 
-            $base = substr((string) $publishCall['url'], 0, -strlen('/feed'));
+            $base = substr((string) $publishCall['url'], 0, -strlen(SocialFixtures::FACEBOOK_FEED_PATH));
             $postId = (string) $context->published(SocialPlatform::Facebook);
 
             $response = $context->http(SocialPlatform::Facebook)->request(
@@ -311,7 +312,7 @@ it('reads the page insights with the connection token', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $call['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/',
                 ),
                 'the insights did not come from the graph host the unified login is served from',
             );

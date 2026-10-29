@@ -191,30 +191,54 @@ final class SocialMediaController extends AbstractSocialController
             $principalId = $this->writablePrincipalId($request);
             $body = $this->body($request);
 
-            $platforms = [];
-            foreach (is_array($body['platforms'] ?? null) ? $body['platforms'] : [] as $name) {
-                $platform = is_string($name) ? SocialPlatform::tryFromName($name) : null;
-                if ($platform !== null) {
-                    $platforms[] = $platform->value;
-                }
-            }
-
-            $accountIds = [];
-            foreach (is_array($body['account_ids'] ?? null) ? $body['account_ids'] : [] as $value) {
-                if (is_numeric($value)) {
-                    $accountIds[] = (int) $value;
-                }
-            }
-
             $draft = $this->drafts->generate(
                 $principalId,
                 (string) ($body['brief'] ?? ''),
-                $platforms,
-                $accountIds,
+                $this->platformNames($body),
+                $this->accountIds($body),
             );
 
             return $this->ok($draft);
         });
+    }
+
+    /**
+     * The platforms the draft is written for.
+     *
+     * @param  array<string, mixed> $body
+     * @return list<string>
+     */
+    private function platformNames(array $body): array
+    {
+        $names = [];
+
+        foreach (is_array($body['platforms'] ?? null) ? $body['platforms'] : [] as $name) {
+            $platform = is_string($name) ? SocialPlatform::tryFromName($name) : null;
+            if ($platform !== null) {
+                $names[] = $platform->value;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * The accounts the draft is written for.
+     *
+     * @param  array<string, mixed> $body
+     * @return list<int>
+     */
+    private function accountIds(array $body): array
+    {
+        $ids = [];
+
+        foreach (is_array($body['account_ids'] ?? null) ? $body['account_ids'] : [] as $value) {
+            if (is_numeric($value)) {
+                $ids[] = (int) $value;
+            }
+        }
+
+        return $ids;
     }
 
     /**

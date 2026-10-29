@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\OAuth;
 
-use DateTimeImmutable;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use League\OAuth2\Client\Grant\GrantFactory;
@@ -26,12 +25,17 @@ use Throwable;
  * and the refresh grant. The providers differ in their endpoints and in
  * what their token exchange looks like, so those live in the subclasses.
  *
+ * What a grant turned into lives in {@see TokenExchange}; this class is
+ * about the flow itself.
+ *
  * Guzzle arrives with the library, and the identity calls below use the
  * same client — so a plugin install pulls one HTTP stack for OAuth and a
  * second for publishing, each used for one thing.
  */
 abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthProviderInterface
 {
+    protected readonly TokenExchange $exchange;
+
     public function __construct(
         string $clientId,
         string $clientSecret,
@@ -39,6 +43,8 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
         ?ClientInterface $httpClient = null,
         ?GrantFactory $grantFactory = null,
     ) {
+        $this->exchange = new TokenExchange();
+
         parent::__construct(
             [
                 'clientId'     => $clientId,
@@ -101,7 +107,10 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
     {
         $this->pkceCode = $pkceVerifier;
 
-        return $this->toTokenSet($this->requestToken('authorization_code', ['code' => $code]));
+        return $this->exchange->toTokenSet(
+            $this->requestToken('authorization_code', ['code' => $code]),
+            $this->getScopeSeparator(),
+        );
     }
 
     public function refresh(OAuthTokenSet $tokens): OAuthTokenSet
@@ -115,7 +124,10 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
         // would send a `code_verifier` the platform did not ask for.
         $this->pkceCode = null;
 
-        return $this->toTokenSet($this->requestToken('refresh_token', ['refresh_token' => $refreshToken]));
+        return $this->exchange->toTokenSet(
+            $this->requestToken('refresh_token', ['refresh_token' => $refreshToken]),
+            $this->getScopeSeparator(),
+        );
     }
 
     /**
@@ -126,29 +138,8 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
         try {
             return $this->getAccessToken($grant, $options);
         } catch (Throwable $e) {
-            throw SocialException::platform($this->describeFailure($e), 'OAUTH_EXCHANGE_FAILED');
+            throw SocialException::platform($this->exchange->describeFailure($e), 'OAUTH_EXCHANGE_FAILED');
         }
-    }
-
-    /**
-     * @param array<string, mixed> $extra
-     */
-    protected function toTokenSet(AccessTokenInterface $token, array $extra = []): OAuthTokenSet
-    {
-        $expiresAt = null;
-        if ($token->getExpires() !== null) {
-            $expiresAt = new DateTimeImmutable('@' . $token->getExpires());
-        }
-
-        $values = $token->getValues();
-
-        return new OAuthTokenSet(
-            accessToken: $token->getToken(),
-            refreshToken: $this->stringOrNull($token->getRefreshToken()),
-            expiresAt: $expiresAt,
-            scopes: $this->scopesOf($values),
-            extra: $extra,
-        );
     }
 
     /**
@@ -173,7 +164,7 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
                 'headers' => $headers,
             ]));
         } catch (Throwable $e) {
-            throw SocialException::platform($this->describeFailure($e), 'PLATFORM_REQUEST_FAILED');
+            throw SocialException::platform($this->exchange->describeFailure($e), 'PLATFORM_REQUEST_FAILED');
         }
 
         return is_array($parsed) ? $parsed : [];
@@ -235,44 +226,5 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
             0,
             $data,
         );
-    }
-
-    /**
-     * The scopes the platform answered with, split the way the platform
-     * joins them.
-     *
-     * Meta answers with commas and LinkedIn with spaces, so the separator
-     * is the provider's own: splitting on the wrong one leaves the whole
-     * scope string as a single scope, and every scope check then fails.
-     *
-     * @param array<string, mixed> $values
-     * @return list<string>
-     */
-    protected function scopesOf(array $values): array
-    {
-        $scope = $values['scope'] ?? null;
-        if (!is_string($scope) || $scope === '') {
-            return [];
-        }
-
-        return array_values(array_filter(array_map('trim', explode($this->getScopeSeparator(), $scope))));
-    }
-
-    protected function describeFailure(Throwable $e): string
-    {
-        if ($e instanceof IdentityProviderException) {
-            return $e->getMessage();
-        }
-
-        return $e->getMessage() !== '' ? $e->getMessage() : 'The platform did not answer as expected.';
-    }
-
-    protected function stringOrNull(mixed $value): ?string
-    {
-        if (!is_string($value) || $value === '') {
-            return null;
-        }
-
-        return $value;
     }
 }

@@ -45,7 +45,7 @@ $configuredProviders = 0;
 $seenProviders = [];
 
 foreach (SocialPlatform::cases() as $platform) {
-    $provider = $credentials->providerOf($platform);
+    $provider = $context->names->providerOf($platform);
 
     // One login per provider: the Meta callback is registered once and
     // covers both networks, so it is printed once.
@@ -178,7 +178,7 @@ function liveParseRedirect(string $redirect): array
 $signed = [];
 
 foreach (SocialPlatform::cases() as $platform) {
-    $provider = $credentials->providerOf($platform);
+    $provider = $context->names->providerOf($platform);
 
     // One login per provider: the Meta login is one dialog and one token
     // for both networks, so it is walked once.

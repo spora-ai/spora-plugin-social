@@ -19,6 +19,7 @@ use Spora\Plugins\Social\Publish\PublisherRegistry;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
+use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialMetricsService;
 use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
@@ -234,9 +235,8 @@ function pngBytes(): string
 
     ob_start();
     imagepng($image);
-    $bytes = (string) ob_get_clean();
 
-    return $bytes;
+    return (string) ob_get_clean();
 }
 
 /**
@@ -251,9 +251,8 @@ function jpegBytes(): string
 
     ob_start();
     imagejpeg($image);
-    $bytes = (string) ob_get_clean();
 
-    return $bytes;
+    return (string) ob_get_clean();
 }
 
 /**
@@ -294,12 +293,14 @@ function connectionService(
         new MockResponse('', ['http_code' => 200]),
     ]));
 
+    $settings = new SocialSettings(socialConfig($appUrl === null ? ['SPORA_APP_URL' => ''] : ['SPORA_APP_URL' => $appUrl]));
+
     return new SocialConnectionService(
-        new SocialSettings(socialConfig($appUrl === null ? ['SPORA_APP_URL' => ''] : ['SPORA_APP_URL' => $appUrl])),
+        $settings,
         $resolver ?? new FakeProviderResolver([]),
         new SocialStateCodec(securityManager()),
-        securityManager(),
         $probe,
+        new SocialConnectionTokens($settings, $resolver ?? new FakeProviderResolver([]), securityManager()),
     );
 }
 
@@ -470,8 +471,12 @@ function postPublisher(array $answers = []): SocialPublisher
         new SocialSettings(socialConfig()),
         new FakeProviderResolver([]),
         new SocialStateCodec(securityManager()),
-        securityManager(),
         new SocialAppUrlProbe(new MockHttpClient([new MockResponse('', ['http_code' => 200])])),
+        new SocialConnectionTokens(
+            new SocialSettings(socialConfig()),
+            new FakeProviderResolver([]),
+            securityManager(),
+        ),
     );
 
     $paths = new Spora\Core\Paths(BASE_PATH);

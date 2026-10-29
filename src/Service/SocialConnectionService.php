@@ -4,16 +4,12 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Service;
 
-use DateTimeImmutable;
 use Illuminate\Support\Carbon;
-use Spora\Core\SecurityManagerInterface;
-use Spora\Core\ValueObjects\EncryptedValue;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialConnection;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\OAuthAccountIdentity;
-use Spora\Plugins\Social\OAuth\OAuthProviderInterface;
 use Spora\Plugins\Social\OAuth\OAuthProviderResolver;
 use Spora\Plugins\Social\OAuth\OAuthTokenSet;
 use Spora\Plugins\Social\OAuth\SocialStateCodec;
@@ -22,18 +18,8 @@ use Throwable;
 /**
  * The connections: one login per provider, and the accounts it covers.
  *
- * The token belongs to the connection, not to an account. Under a Meta
- * system-user token one token covers every Instagram account and every
- * Page the client shared, so a token per account would be the same token
- * stored several times — and a refresh would have to keep them in step.
- *
- * The tokens are stored encrypted with core's security manager — the same
- * mechanism the settings use for secrets — and are decrypted only on the
- * way to a platform.
- *
- * The refresh happens *ahead* of the expiry, not when a publish fails: a
- * publish that discovers the expiry is a post that went out to nowhere.
- * A Meta token has no refresh grant, and its provider says so.
+ * The token belongs to the connection, not to an account — that is
+ * {@see SocialConnectionTokens}' business.
  */
 final class SocialConnectionService
 {
@@ -55,8 +41,8 @@ final class SocialConnectionService
         private readonly SocialSettings $settings,
         private readonly OAuthProviderResolver $providers,
         private readonly SocialStateCodec $stateCodec,
-        private readonly SecurityManagerInterface $security,
         private readonly SocialAppUrlProbe $appUrlProbe,
+        private readonly SocialConnectionTokens $tokens,
     ) {}
 
     /**
@@ -177,7 +163,7 @@ final class SocialConnectionService
         $oauth = $this->providers->for($provider);
         $tokens = $oauth->exchangeCode($code, $pkce);
 
-        $connection = $this->storeConnection($principalId, $provider, $tokens);
+        $connection = $this->tokens->store($principalId, $provider, $tokens);
 
         $accounts = [];
 
@@ -199,27 +185,10 @@ final class SocialConnectionService
 
     /**
      * Renew the connection's token now.
-     *
-     * A token that does not expire is handed back unchanged — the
-     * provider says so, and the operator is told why.
      */
     public function refresh(int $connectionId, int $principalId): SocialConnection
     {
-        $connection = $this->find($connectionId, $principalId);
-        $provider = $this->providerOf($connection);
-
-        $refreshed = $provider->refresh($this->tokenSetOf($connection));
-
-        if ($refreshed->accessToken !== $this->decrypt($connection->access_token)) {
-            $connection->access_token = $this->encrypt($refreshed->accessToken);
-            $connection->refresh_token = $refreshed->refreshToken !== null
-                ? $this->encrypt($refreshed->refreshToken)
-                : $connection->refresh_token;
-            $connection->expires_at = $this->carbonOf($refreshed->expiresAt);
-            $connection->save();
-        }
-
-        return $connection->fresh() ?? $connection;
+        return $this->tokens->refresh($this->find($connectionId, $principalId));
     }
 
     /**
@@ -237,17 +206,15 @@ final class SocialConnectionService
         $checkedAt = gmdate('c');
 
         try {
-            $token = $this->accessToken($connection);
+            $token = $this->tokens->accessToken($connection);
         } catch (SocialException $e) {
             return ['status' => 'error', 'message' => $e->getMessage(), 'checked_at' => $checkedAt];
         }
 
         try {
-            $this->providerOf($connection)->resolveAccounts(
-                new OAuthTokenSet(accessToken: $token),
-            );
+            $this->tokens->resolveAccounts($connection, new OAuthTokenSet(accessToken: $token));
         } catch (Throwable $e) {
-            $status = $this->statusOfFailure($e->getMessage());
+            $status = $this->tokens->statusOfFailure($e->getMessage());
 
             $connection->status = $status;
             $connection->save();
@@ -303,67 +270,29 @@ final class SocialConnectionService
     }
 
     /**
-     * What a failed call says about the token.
-     *
-     * The platform naming the token itself is a different answer from
-     * "the call failed": only the first one needs the operator to ask
-     * their client to connect again.
-     */
-    private function statusOfFailure(string $message): string
-    {
-        $text = strtolower($message);
-
-        return str_contains($text, 'token') && (str_contains($text, 'invalid') || str_contains($text, 'revoked'))
-            ? SocialConnection::STATUS_REVOKED
-            : SocialConnection::STATUS_ERROR;
-    }
-
-    /**
      * The token to publish with, renewed first when it is close to expiry.
      */
     public function accessToken(SocialConnection $connection): string
     {
-        if ($this->needsRefresh($connection)) {
-            $connection = $this->refresh((int) $connection->id, (int) $connection->principal_id);
-        }
-
-        return $this->decrypt($connection->access_token);
+        return $this->tokens->accessToken($connection);
     }
 
     /**
      * The token an account publishes with.
-     *
-     * The account's connection holds it — one login, one token, many
-     * accounts.
      */
     public function tokenFor(SocialAccount $account): string
     {
-        $connection = $account->connection;
-
-        if ($connection === null) {
-            throw SocialException::conflict('This account has no connection, so it has no token.');
-        }
-
-        return $this->accessToken($connection);
+        return $this->tokens->tokenFor($account);
     }
 
     /**
      * The scopes the platform granted the connection's token.
      *
-     * Empty when the token carries none — a Meta system-user token reports
-     * its permissions through the configuration, not through the token
-     * response. The caller decides what an empty list means; here it is
-     * only the fact.
-     *
      * @return list<string>
      */
     public function grantedScopes(SocialConnection $connection): array
     {
-        if ($connection->scopes === null || $connection->scopes === '') {
-            return [];
-        }
-
-        return array_values(array_filter(array_map('trim', explode(' ', $connection->scopes))));
+        return $this->tokens->grantedScopes($connection);
     }
 
     public function findAccount(int $accountId, int $principalId): SocialAccount
@@ -378,64 +307,6 @@ final class SocialConnectionService
         }
 
         return $account;
-    }
-
-    /**
-     * Whether the token is close enough to its expiry to be worth renewing
-     * before the next call.
-     *
-     * A token with no expiry never needs renewing.
-     */
-    private function needsRefresh(SocialConnection $connection): bool
-    {
-        if ($connection->expires_at === null) {
-            return false;
-        }
-
-        $threshold = DateTimeParser::nowUtc()->addDays(self::REFRESH_WINDOW_DAYS);
-
-        return $connection->expires_at <= $threshold;
-    }
-
-    private function providerOf(SocialConnection $connection): OAuthProviderInterface
-    {
-        $provider = SocialProvider::tryFromName((string) $connection->provider);
-
-        if ($provider === null) {
-            throw SocialException::conflict('This connection has an unknown provider.');
-        }
-
-        return $this->providers->for($provider);
-    }
-
-    private function storeConnection(
-        int $principalId,
-        SocialProvider $provider,
-        OAuthTokenSet $tokens,
-    ): SocialConnection {
-        $connection = SocialConnection::query()
-            ->where('principal_id', $principalId)
-            ->where('provider', $provider->value)
-            ->first();
-
-        if ($connection === null) {
-            $connection = new SocialConnection();
-            $connection->principal_id = $principalId;
-            $connection->provider = $provider->value;
-        }
-
-        $connection->business_external_id = $this->stringOrNull($tokens->extra['business_external_id'] ?? null);
-        $connection->config_id = $provider === SocialProvider::Meta ? $this->settings->metaConfigId() : null;
-        $connection->access_token = $this->encrypt($tokens->accessToken);
-        $connection->refresh_token = $tokens->refreshToken !== null
-            ? $this->encrypt($tokens->refreshToken)
-            : $connection->refresh_token;
-        $connection->expires_at = $this->carbonOf($tokens->expiresAt);
-        $connection->scopes = $tokens->scopes !== [] ? implode(' ', $tokens->scopes) : $connection->scopes;
-        $connection->status = SocialConnection::STATUS_ACTIVE;
-        $connection->save();
-
-        return $connection;
     }
 
     private function storeAccount(SocialConnection $connection, OAuthAccountIdentity $identity): SocialAccount
@@ -463,45 +334,6 @@ final class SocialConnectionService
         $account->save();
 
         return $account;
-    }
-
-    private function tokenSetOf(SocialConnection $connection): OAuthTokenSet
-    {
-        return new OAuthTokenSet(
-            accessToken: $this->decrypt($connection->access_token),
-            refreshToken: $connection->refresh_token !== null ? $this->decrypt($connection->refresh_token) : null,
-            expiresAt: $connection->expires_at !== null
-                ? new DateTimeImmutable('@' . $connection->expires_at->getTimestamp())
-                : null,
-            scopes: $this->grantedScopes($connection),
-            extra: ['business_external_id' => $connection->business_external_id],
-        );
-    }
-
-    private function encrypt(string $plaintext): string
-    {
-        return $this->security->encrypt($plaintext)->toStorageString();
-    }
-
-    /**
-     * The stored form of an expiry.
-     *
-     * The token set carries a `DateTimeImmutable`; the column is an
-     * Eloquent datetime, which wants a Carbon.
-     */
-    private function carbonOf(?DateTimeImmutable $when): ?Carbon
-    {
-        return $when === null ? null : Carbon::instance($when);
-    }
-
-    private function decrypt(string $stored): string
-    {
-        return $this->security->decrypt(new EncryptedValue($stored));
-    }
-
-    private function stringOrNull(mixed $value): ?string
-    {
-        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**

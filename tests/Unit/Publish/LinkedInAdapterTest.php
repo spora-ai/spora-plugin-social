@@ -7,6 +7,7 @@ use Spora\Plugins\Social\Publish\DeleteRequest;
 use Spora\Plugins\Social\Publish\LinkedInAdapter;
 use Spora\Plugins\Social\Publish\PublishMedia;
 use Spora\Plugins\Social\Publish\PublishRequest;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -42,6 +43,69 @@ function linkedInAdapter(array $responses, array &$seen): LinkedInAdapter
     return new LinkedInAdapter(platformApi($http));
 }
 
+/**
+ * The 201 a created post answers with.
+ *
+ * The post id is in the header: "The Post is created with a 201 response
+ * and the response header `x-restli-id` contains the Post ID such as
+ * `urn:li:share:6844785523593134080`".
+ *
+ * @return array{body: string, status: int, headers: array<string, string>}
+ */
+function linkedInCreatedPost(): array
+{
+    return [
+        'body' => '',
+        'status' => 201,
+        'headers' => ['x-restli-id' => 'urn:li:share:6844785523593134080'],
+    ];
+}
+
+/**
+ * The upload slot LinkedIn opens, and the two answers that follow it.
+ *
+ * @param  string $image the image urn the slot carries
+ * @return list<array{body: string, status?: int, headers?: array<string, string>}>
+ */
+function linkedInImageUploadResponses(string $image): array
+{
+    return [
+        [
+            'body' => json_encode([
+                'value' => [
+                    'uploadUrlExpiresAt' => 1650567510704,
+                    'uploadUrl' => SocialFixtures::LINKEDIN_UPLOAD_URL,
+                    'image' => $image,
+                ],
+            ]),
+        ],
+        ['body' => '', 'status' => 201],
+        linkedInCreatedPost(),
+    ];
+}
+
+/**
+ * The post the fixtures publish as.
+ */
+function linkedInRequest(string $externalId, string $body, ?PublishMedia $media = null): PublishRequest
+{
+    return new PublishRequest(
+        externalId: $externalId,
+        kind: SocialAccountKind::Organization,
+        accessToken: 'INSERT_TOKEN',
+        body: $body,
+        media: $media,
+    );
+}
+
+/**
+ * The image the fixtures publish.
+ */
+function linkedInImage(): PublishMedia
+{
+    return new PublishMedia(mimeType: 'image/png', bytes: 'PNGBYTES', filename: 'chart.png');
+}
+
 it('posts the documented text-only body with both version headers', function () {
     $seen = [];
 
@@ -52,18 +116,9 @@ it('posts the documented text-only body with both version headers', function () 
     //   -H 'Linkedin-Version: {version number in the format YYYYMM}'
     //   -H 'Content-Type: application/json'
     //   --data '{ "author": "urn:li:organization:5515715", "commentary": "Sample text Post", ... }'
-    $adapter = linkedInAdapter([[
-        'body' => '',
-        'status' => 201,
-        'headers' => ['x-restli-id' => 'urn:li:share:6844785523593134080'],
-    ]], $seen);
+    $adapter = linkedInAdapter([linkedInCreatedPost()], $seen);
 
-    $result = $adapter->publish(new PublishRequest(
-        externalId: 'urn:li:organization:5515715',
-        kind: SocialAccountKind::Organization,
-        accessToken: 'INSERT_TOKEN',
-        body: 'Sample text Post',
-    ));
+    $result = $adapter->publish(linkedInRequest('urn:li:organization:5515715', SocialFixtures::LINKEDIN_TEXT));
 
     expect($result->success)->toBeTrue();
 
@@ -79,12 +134,12 @@ it('posts the documented text-only body with both version headers', function () 
         ->and($headers)->toHaveKey('x-restli-protocol-version')
         ->and($headers['x-restli-protocol-version'])->toBe('2.0.0')
         ->and($headers)->toHaveKey('linkedin-version')
-        ->and($headers['linkedin-version'])->toBe('202610')
+        ->and($headers['linkedin-version'])->toBe(SocialFixtures::LINKEDIN_VERSION)
         ->and($headers['content-type'])->toBe('application/json');
 
     expect(sentJson($request['options']))->toBe([
         'author'                     => 'urn:li:organization:5515715',
-        'commentary'                 => 'Sample text Post',
+        'commentary'                 => SocialFixtures::LINKEDIN_TEXT,
         'visibility'                 => 'PUBLIC',
         'distribution'               => [
             'feedDistribution'             => 'MAIN_FEED',
@@ -99,21 +154,9 @@ it('posts the documented text-only body with both version headers', function () 
 it('reads the post id from the x-restli-id header', function () {
     $seen = [];
 
-    // Posts API → "Post Creation Response": "The Post is created with a
-    // 201 response and the response header `x-restli-id` contains the Post
-    // ID such as `urn:li:share:6844785523593134080`".
-    $adapter = linkedInAdapter([[
-        'body' => '',
-        'status' => 201,
-        'headers' => ['x-restli-id' => 'urn:li:share:6844785523593134080'],
-    ]], $seen);
+    $adapter = linkedInAdapter([linkedInCreatedPost()], $seen);
 
-    $result = $adapter->publish(new PublishRequest(
-        externalId: 'urn:li:organization:5515715',
-        kind: SocialAccountKind::Organization,
-        accessToken: 'INSERT_TOKEN',
-        body: 'Sample text Post',
-    ));
+    $result = $adapter->publish(linkedInRequest('urn:li:organization:5515715', SocialFixtures::LINKEDIN_TEXT));
 
     expect($result->externalId)->toBe('urn:li:share:6844785523593134080')
         ->and($result->externalUrl)->toBe('https://www.linkedin.com/feed/update/urn:li:share:6844785523593134080');
@@ -130,30 +173,15 @@ it('uploads an image in the documented three steps and names the image urn', fun
     // Image API → "Create Image content":
     //   POST https://api.linkedin.com/rest/posts
     //   --data '{ "author": "...", "commentary": "test strings!", ..., "content": { "media": { "altText": "...", "id": "urn:li:image:C5610AQFj6TdYowm17w" } }, ... }'
-    $adapter = linkedInAdapter([
-        [
-            'body' => json_encode([
-                'value' => [
-                    'uploadUrlExpiresAt' => 1650567510704,
-                    'uploadUrl' => 'https://www.linkedin.com/dms-uploads/C4E10AQFoyyAjHPMQuQ/uploaded-image/0',
-                    'image' => 'urn:li:image:C4E10AQFoyyAjHPMQuQ',
-                ],
-            ]),
-        ],
-        ['body' => '', 'status' => 201],
-        [
-            'body' => '',
-            'status' => 201,
-            'headers' => ['x-restli-id' => 'urn:li:share:6844785523593134080'],
-        ],
-    ], $seen);
+    $adapter = linkedInAdapter(
+        linkedInImageUploadResponses('urn:li:image:C4E10AQFoyyAjHPMQuQ'),
+        $seen,
+    );
 
-    $result = $adapter->publish(new PublishRequest(
-        externalId: 'urn:li:organization:5583111',
-        kind: SocialAccountKind::Organization,
-        accessToken: 'INSERT_TOKEN',
-        body: 'test strings!',
-        media: new PublishMedia(mimeType: 'image/png', bytes: 'PNGBYTES', filename: 'chart.png'),
+    $result = $adapter->publish(linkedInRequest(
+        'urn:li:organization:5583111',
+        SocialFixtures::LINKEDIN_IMAGE_TEXT,
+        linkedInImage(),
     ));
 
     expect($result->success)->toBeTrue();
@@ -167,15 +195,15 @@ it('uploads an image in the documented three steps and names the image urn', fun
 
     $initializeHeaders = sentHeaders($seen[0]['options']);
     expect($initializeHeaders)->toHaveKey('linkedin-version')
-        ->and($initializeHeaders['linkedin-version'])->toBe('202610');
+        ->and($initializeHeaders['linkedin-version'])->toBe(SocialFixtures::LINKEDIN_VERSION);
 
     expect($seen[1]['method'])->toBe('PUT')
-        ->and($seen[1]['url'])->toBe('https://www.linkedin.com/dms-uploads/C4E10AQFoyyAjHPMQuQ/uploaded-image/0')
+        ->and($seen[1]['url'])->toBe(SocialFixtures::LINKEDIN_UPLOAD_URL)
         ->and($seen[1]['options']['body'])->toBe('PNGBYTES');
 
     expect(sentJson($seen[2]['options']))->toBe([
         'author'                     => 'urn:li:organization:5583111',
-        'commentary'                 => 'test strings!',
+        'commentary'                 => SocialFixtures::LINKEDIN_IMAGE_TEXT,
         'visibility'                 => 'PUBLIC',
         'distribution'               => [
             'feedDistribution'             => 'MAIN_FEED',
@@ -197,30 +225,15 @@ it('rewrites the legacy vector urn into the image urn the post names', function 
     // `urn:li:image:ABC123`".
     //
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
-    $adapter = linkedInAdapter([
-        [
-            'body' => json_encode([
-                'value' => [
-                    'uploadUrlExpiresAt' => 1650567510704,
-                    'uploadUrl' => 'https://www.linkedin.com/dms-uploads/C4E10AQFoyyAjHPMQuQ/uploaded-image/0',
-                    'image' => 'urn:li:digitalMediaAsset:ABC123',
-                ],
-            ]),
-        ],
-        ['body' => '', 'status' => 201],
-        [
-            'body' => '',
-            'status' => 201,
-            'headers' => ['x-restli-id' => 'urn:li:share:6844785523593134080'],
-        ],
-    ], $seen);
+    $adapter = linkedInAdapter(
+        linkedInImageUploadResponses('urn:li:digitalMediaAsset:ABC123'),
+        $seen,
+    );
 
-    $result = $adapter->publish(new PublishRequest(
-        externalId: 'urn:li:organization:5583111',
-        kind: SocialAccountKind::Organization,
-        accessToken: 'INSERT_TOKEN',
-        body: 'test strings!',
-        media: new PublishMedia(mimeType: 'image/png', bytes: 'PNGBYTES', filename: 'chart.png'),
+    $result = $adapter->publish(linkedInRequest(
+        'urn:li:organization:5583111',
+        SocialFixtures::LINKEDIN_IMAGE_TEXT,
+        linkedInImage(),
     ));
 
     expect($result->success)->toBeTrue()
@@ -253,7 +266,7 @@ it('deletes the post with the documented request', function () {
         ->and($request['url'])->toBe('https://api.linkedin.com/rest/posts/urn%3Ali%3Ashare%3A6844785523593134080');
 
     $headers = sentHeaders($request['options']);
-    expect($headers['linkedin-version'])->toBe('202610')
+    expect($headers['linkedin-version'])->toBe(SocialFixtures::LINKEDIN_VERSION)
         ->and($headers['x-restli-protocol-version'])->toBe('2.0.0')
         ->and($headers['x-restli-method'])->toBe('DELETE')
         ->and($headers['authorization'])->toBe('Bearer INSERT_TOKEN');
@@ -311,4 +324,80 @@ it('refuses a video, which v1 does not publish', function () {
     expect($result->success)->toBeFalse()
         ->and($result->error)->toContain('images only')
         ->and($seen)->toHaveCount(0);
+});
+
+it('says that the upload slot could not be opened', function () {
+    $seen = [];
+
+    $adapter = linkedInAdapter([[
+        'body'   => '{"message":"Not allowed"}',
+        'status' => 403,
+    ]], $seen);
+
+    $result = $adapter->publish(linkedInRequest(
+        'urn:li:organization:5583111',
+        SocialFixtures::LINKEDIN_IMAGE_TEXT,
+        linkedInImage(),
+    ));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->error)->toContain('Not allowed');
+});
+
+it('says that the platform opened no slot at all', function () {
+    $seen = [];
+
+    $adapter = linkedInAdapter([['body' => '{}']], $seen);
+
+    $result = $adapter->publish(linkedInRequest(
+        'urn:li:organization:5583111',
+        SocialFixtures::LINKEDIN_IMAGE_TEXT,
+        linkedInImage(),
+    ));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->error)->toContain('did not return an upload slot');
+});
+
+it('says that the image itself was refused', function () {
+    $seen = [];
+
+    $adapter = linkedInAdapter([
+        [
+            'body' => json_encode([
+                'value' => [
+                    'uploadUrlExpiresAt' => 1650567510704,
+                    'uploadUrl' => SocialFixtures::LINKEDIN_UPLOAD_URL,
+                    'image' => 'urn:li:image:C4E10AQFoyyAjHPMQuQ',
+                ],
+            ]),
+        ],
+        ['body' => '{"message":"Too large"}', 'status' => 413],
+    ], $seen);
+
+    $result = $adapter->publish(linkedInRequest(
+        'urn:li:organization:5583111',
+        SocialFixtures::LINKEDIN_IMAGE_TEXT,
+        linkedInImage(),
+    ));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->error)->toContain('Too large');
+});
+
+it('says that the image has no bytes to upload', function () {
+    $seen = [];
+
+    $adapter = linkedInAdapter([['body' => '{}']], $seen);
+
+    $result = $adapter->publish(new PublishRequest(
+        externalId: 'urn:li:organization:5583111',
+        kind: SocialAccountKind::Organization,
+        accessToken: 'INSERT_TOKEN',
+        body: SocialFixtures::LINKEDIN_IMAGE_TEXT,
+        media: new PublishMedia(mimeType: 'image/png'),
+    ));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->error)->toContain('no bytes to upload');
 });

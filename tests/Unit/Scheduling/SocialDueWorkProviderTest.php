@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\Scheduling\SocialDueWorkProvider;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Spora\Scheduling\DueWork;
 
 /**
@@ -24,11 +25,15 @@ function dueWorkProvider(array $answers = [], array $containers = []): SocialDue
                 new Spora\Plugins\Social\Service\SocialSettings(socialConfig()),
                 new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
                 new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()),
-                securityManager(),
                 new Spora\Plugins\Social\Service\SocialAppUrlProbe(
                     new Symfony\Component\HttpClient\MockHttpClient([
                         new Symfony\Component\HttpClient\Response\MockResponse('', ['http_code' => 200]),
                     ]),
+                ),
+                new Spora\Plugins\Social\Service\SocialConnectionTokens(
+                    new Spora\Plugins\Social\Service\SocialSettings(socialConfig()),
+                    new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
+                    securityManager(),
                 ),
             ),
             apiVersions(),
@@ -74,7 +79,7 @@ function halfFinishedTarget(int $principalId, string $containerId): SocialPostTa
     // ask about a container that was made a moment ago.
     SocialPostTarget::query()
         ->where('id', $target->id)
-        ->update(['updated_at' => gmdate('Y-m-d H:i:s', time() - 3600)]);
+        ->update(['updated_at' => gmdate(SocialFixtures::DB_DATETIME, time() - 3600)]);
 
     return $target;
 }
@@ -121,7 +126,7 @@ it('answers with the visible principal ids and the due posts', function () {
         ->and($work[0]->principalId)->toBe($principalId)
         ->and($work[0]->payload['kind'])->toBe(SocialDueWorkProvider::KIND_POST)
         ->and($work[0]->payload['post_id'])->toBe($post->id)
-        ->and($work[0]->dueAt)->toBe(gmdate('Y-m-d H:i:s', $post->scheduled_for->getTimestamp()));
+        ->and($work[0]->dueAt)->toBe(gmdate(SocialFixtures::DB_DATETIME, $post->scheduled_for->getTimestamp()));
 });
 
 it('answers with nothing when there is no visible principal', function () {
@@ -141,7 +146,7 @@ it('keeps going when one item fails', function () {
         provider: SocialDueWorkProvider::class,
         principalId: $principalId,
         payload: ['kind' => SocialDueWorkProvider::KIND_POST, 'post_id' => $post->id],
-        dueAt: gmdate('Y-m-d H:i:s'),
+        dueAt: gmdate(SocialFixtures::DB_DATETIME),
     );
 
     // The failure is swallowed: the worker must not see an exception.

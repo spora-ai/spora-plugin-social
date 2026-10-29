@@ -151,11 +151,8 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
 
     private function runMetric(int $targetId): void
     {
-        if ($targetId <= 0) {
-            return;
-        }
+        $target = $this->targetOf($targetId);
 
-        $target = SocialPostTarget::query()->with('post')->find($targetId);
         if ($target === null) {
             return;
         }
@@ -171,11 +168,8 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
      */
     private function runContainer(int $targetId): void
     {
-        if ($targetId <= 0) {
-            return;
-        }
+        $target = $this->targetOf($targetId);
 
-        $target = SocialPostTarget::query()->with('post')->find($targetId);
         if ($target === null) {
             return;
         }
@@ -196,6 +190,18 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
         }
 
         $post->save();
+    }
+
+    /**
+     * The target the work is about, or null when there is none.
+     */
+    private function targetOf(int $targetId): ?SocialPostTarget
+    {
+        if ($targetId <= 0) {
+            return null;
+        }
+
+        return SocialPostTarget::query()->with('post')->find($targetId);
     }
 
     /**
@@ -237,8 +243,7 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
             ->subDays(self::READING_INTERVAL_DAYS)
             ->format('Y-m-d');
 
-        /** @var list<SocialPostTarget> $targets */
-        $targets = SocialPostTarget::query()
+        return array_values(SocialPostTarget::query()
             ->join('social_posts', 'social_posts.id', '=', 'social_post_targets.post_id')
             ->leftJoin('social_post_metrics', 'social_post_metrics.target_id', '=', 'social_post_targets.id')
             ->whereIn('social_posts.principal_id', $principalIds)
@@ -251,9 +256,7 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
             })
             ->select('social_post_targets.*')
             ->get()
-            ->all();
-
-        return $targets;
+            ->all());
     }
 
     /**

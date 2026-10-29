@@ -53,8 +53,7 @@ final class ContainerReconciliation
     {
         $askedBefore = gmdate(self::DB_DATETIME_FORMAT, time() - (self::RECONCILE_INTERVAL_MINUTES * 60));
 
-        /** @var list<SocialPostTarget> $targets */
-        $targets = SocialPostTarget::query()
+        return array_values(SocialPostTarget::query()
             ->join('social_posts', 'social_posts.id', '=', 'social_post_targets.post_id')
             ->whereIn('social_posts.principal_id', $principalIds)
             ->where('social_post_targets.status', SocialPostTarget::STATUS_PUBLISHING)
@@ -62,9 +61,7 @@ final class ContainerReconciliation
             ->where('social_post_targets.updated_at', '<=', $askedBefore)
             ->select('social_post_targets.*')
             ->get()
-            ->all();
-
-        return $targets;
+            ->all());
     }
 
     /**
@@ -83,6 +80,14 @@ final class ContainerReconciliation
             return false;
         }
 
+        return $this->resolveContainer($target, $containerId);
+    }
+
+    /**
+     * What the container answered, written down.
+     */
+    private function resolveContainer(SocialPostTarget $target, string $containerId): bool
+    {
         $status = $this->statusOf($target, $containerId);
 
         if ($status === 'PUBLISHED') {

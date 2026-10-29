@@ -2,11 +2,12 @@
 
 declare(strict_types=1);
 
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 it('records the outcome of every target separately', function () {
     $publisher = postPublisher([
-        'linkedin' => [['body' => '{"id":"urn:li:share:9"}']],
+        'linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]],
         'facebook' => [['body' => '{"error":{"message":"Missing permission"}}', 'status' => 400]],
     ]);
     $service = postService();
@@ -18,7 +19,7 @@ it('records the outcome of every target separately', function () {
 
     $post = $service->create($principalId, [
         'title'       => 'Q4 release',
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id, $facebook->id],
     ]);
 
@@ -57,7 +58,7 @@ it('derives published when every target published', function () {
     $facebook = publishableAccount($principalId, 'facebook', 'page');
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id, $facebook->id],
     ]);
 
@@ -78,7 +79,7 @@ it('derives failed when no target published', function () {
     $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id],
     ]);
 
@@ -90,7 +91,7 @@ it('derives failed when no target published', function () {
 
 it('retries only the targets that failed', function () {
     $publisher = postPublisher([
-        'linkedin' => [['body' => '{"id":"urn:li:share:9"}']],
+        'linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]],
         'facebook' => [['body' => '{"error":{"message":"Missing permission"}}', 'status' => 400]],
     ]);
     $service = postService();
@@ -101,7 +102,7 @@ it('retries only the targets that failed', function () {
     $facebook = publishableAccount($principalId, 'facebook', 'page');
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id, $facebook->id],
     ]);
 
@@ -124,7 +125,7 @@ it('uses the body of the platform when the post carries one', function () {
         'linkedin' => function (string $method, string $url, array $options) use (&$captured): MockResponse {
             $captured = json_decode((string) $options['body'], true);
 
-            return new MockResponse('{"id":"urn:li:share:9"}');
+            return new MockResponse(SocialFixtures::LINKEDIN_SHARE);
         },
     ]);
     $service = postService();
@@ -177,7 +178,7 @@ it('refuses a post that names an account of another principal', function () {
     $foreign = createSocialAccount($otherId, 'linkedin', 'organization');
 
     expect(fn() => $service->create($ownerId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$foreign->id],
     ]))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'was not found for this principal');
 });
@@ -221,13 +222,13 @@ it('reads a wall-clock time in the zone the post names', function () {
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
     $post = $service->create($principalId, [
-        'body'          => 'We shipped…',
+        'body'          => SocialFixtures::POST_BODY,
         'account_ids'   => [$account->id],
-        'timezone'      => 'Europe/Berlin',
+        'timezone'      => SocialFixtures::BERLIN,
         'scheduled_for' => '2026-11-02 09:00',
     ]);
 
-    expect($post->timezone)->toBe('Europe/Berlin')
+    expect($post->timezone)->toBe(SocialFixtures::BERLIN)
         // 09:00 in Berlin is 08:00 UTC.
         ->and($post->scheduled_for?->toIso8601String())->toBe('2026-11-02T08:00:00+00:00');
 });
@@ -240,9 +241,9 @@ it('keeps a time that carries its own offset where it is', function () {
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
     $post = $service->create($principalId, [
-        'body'          => 'We shipped…',
+        'body'          => SocialFixtures::POST_BODY,
         'account_ids'   => [$account->id],
-        'timezone'      => 'Europe/Berlin',
+        'timezone'      => SocialFixtures::BERLIN,
         'scheduled_for' => '2026-11-02T09:00:00+05:00',
     ]);
 
@@ -258,14 +259,14 @@ it('refuses a time it cannot read', function () {
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
     expect(fn() => $service->create($principalId, [
-        'body'          => 'We shipped…',
+        'body'          => SocialFixtures::POST_BODY,
         'account_ids'   => [$account->id],
         'scheduled_for' => 'sometime next week',
     ]))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'scheduled_for is not a valid date');
 });
 
 it('refuses a body over the platform limit', function () {
-    $publisher = postPublisher(['linkedin' => [['body' => '{"id":"urn:li:share:9"}']]]);
+    $publisher = postPublisher(['linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]]]);
 
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
@@ -288,7 +289,7 @@ it('refuses a body over the platform limit', function () {
 
 it('judges every platform against its own body and its own limit', function () {
     $publisher = postPublisher([
-        'linkedin'  => [['body' => '{"id":"urn:li:share:9"}']],
+        'linkedin'  => [['body' => SocialFixtures::LINKEDIN_SHARE]],
         'instagram' => [['body' => '{"id":"17900000000000002"}']],
     ]);
 
@@ -313,4 +314,29 @@ it('judges every platform against its own body and its own limit', function () {
         ->and($targets[1]->status)->toBe('failed')
         ->and($targets[1]->error)->toContain('2200')
         ->and($targets[1]->error)->toContain('Instagram');
+});
+
+it('replaces the accounts and the attachments of a post', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $first = publishableAccount($principalId, 'linkedin', 'organization');
+    $second = publishableAccount($principalId, 'facebook', 'page');
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/jpeg', 'payload' => jpegBytes()]);
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$first->id],
+    ]);
+
+    $updated = $service->update((int) $post->id, $principalId, [
+        'account_ids' => [$second->id],
+        'media'       => [['media_asset_id' => $asset->id]],
+    ]);
+
+    expect($updated->targets()->get())->toHaveCount(1)
+        ->and($updated->targets()->first()?->account_id)->toBe($second->id)
+        ->and($updated->media()->get())->toHaveCount(1);
 });

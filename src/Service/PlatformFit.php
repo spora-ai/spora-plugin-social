@@ -47,6 +47,10 @@ final class PlatformFit
 
     private const MEGABYTE = 1048576;
 
+    private const MIME_JPEG = 'image/jpeg';
+    private const MIME_PNG = 'image/png';
+    private const MIME_MP4 = 'video/mp4';
+
     /**
      * How many attachments a post may carry.
      *
@@ -76,7 +80,7 @@ final class PlatformFit
                 'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
                 'fetches_media'  => false,
-                'mime_types'     => ['image/jpeg', 'image/png', 'image/gif'],
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, 'image/gif'],
                 'max_bytes'      => 8 * self::MEGABYTE,
                 'max_characters' => 3000,
                 'media'          => 'JPEG, PNG or GIF, up to 8 MB.',
@@ -86,7 +90,7 @@ final class PlatformFit
                 'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
                 'fetches_media'  => false,
-                'mime_types'     => ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'video/mp4'],
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, 'image/gif', 'image/bmp', self::MIME_MP4],
                 'max_bytes'      => 1024 * self::MEGABYTE,
                 'max_characters' => 63206,
                 'media'          => 'JPEG, PNG, GIF, BMP or MP4, up to 1 GB.',
@@ -96,7 +100,7 @@ final class PlatformFit
                 'media_required' => true,
                 'media_count'    => self::MEDIA_PER_POST,
                 'fetches_media'  => true,
-                'mime_types'     => ['image/jpeg', 'video/mp4'],
+                'mime_types'     => [self::MIME_JPEG, self::MIME_MP4],
                 'max_bytes'      => 100 * self::MEGABYTE,
                 'max_characters' => 2200,
                 'media'          => 'JPEG or MP4, up to 100 MB.',
@@ -159,8 +163,8 @@ final class PlatformFit
                 'max_bytes'      => $rule['max_bytes'],
                 'max_text'       => $rule['max_characters'],
                 'media_note'     => $rule['label'] . ' accepts ' . $rule['media'],
-                'media_remedy'   => self::remedyForMime(SocialPlatform::from($platform), 'image/png'),
-                'video_remedy'   => self::remedyForMime(SocialPlatform::from($platform), 'video/mp4'),
+                'media_remedy'   => self::remedyForMime(SocialPlatform::from($platform), self::MIME_PNG),
+                'video_remedy'   => self::remedyForMime(SocialPlatform::from($platform), self::MIME_MP4),
                 'size_remedy'    => self::REMEDY_COMPRESS,
             ];
         }

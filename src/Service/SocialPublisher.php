@@ -8,7 +8,6 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
-use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialAccountKind;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
@@ -105,23 +104,47 @@ final class SocialPublisher
             return SocialPost::STATUS_DRAFT;
         }
 
-        $published = $targets->filter(
-            static fn(SocialPostTarget $t): bool => $t->status === SocialPostTarget::STATUS_PUBLISHED,
-        )->count();
-
-        if ($published === $targets->count()) {
-            return SocialPost::STATUS_PUBLISHED;
-        }
+        $published = $this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHED);
 
         if ($published > 0) {
-            return SocialPost::STATUS_PARTIAL;
+            return $this->publishedStatus($published, $targets->count());
         }
 
-        $takenDown = $targets->filter(
-            static fn(SocialPostTarget $t): bool => $t->status === SocialPostTarget::STATUS_DELETED,
-        )->count();
+        return $this->unpublishedStatus($targets);
+    }
+
+    /**
+     * The status of a post with at least one published target.
+     */
+    private function publishedStatus(int $published, int $total): string
+    {
+        return $published === $total ? SocialPost::STATUS_PUBLISHED : SocialPost::STATUS_PARTIAL;
+    }
+
+    /**
+     * The status of a post with nothing published.
+     *
+     * A target that was taken back down is not a failure — the post went
+     * out and came back — so a post with nothing left on any network is
+     * cancelled rather than failed.
+     */
+    private function unpublishedStatus(Collection $targets): string
+    {
+        $takenDown = $this->countWithStatus($targets, SocialPostTarget::STATUS_DELETED);
 
         return $takenDown === $targets->count() ? SocialPost::STATUS_CANCELLED : SocialPost::STATUS_FAILED;
+    }
+
+    /**
+     * How many targets carry a status.
+     *
+     * @param Collection<int, SocialPostTarget> $targets
+     */
+    private function countWithStatus(Collection $targets, string $status): int
+    {
+        return $targets->filter(
+            static fn(SocialPostTarget $t): bool => $t->status === $status,
+        )->count();
     }
 
     /**
@@ -252,7 +275,7 @@ final class SocialPublisher
                 kind: SocialAccountKind::from((string) $account->kind),
                 accessToken: $this->connections->tokenFor($account),
                 body: $body,
-                media: $this->prepareMedia($post, $account, $platform),
+                media: $this->prepareMedia($post, $platform),
                 // The container is written down as soon as the platform has
                 // one, because the target is in `publishing` until the
                 // publish is done — and a publish that dies here leaves a
@@ -354,7 +377,7 @@ final class SocialPublisher
      * Instagram the prepared media is the JPEG derivative, which is what
      * the platform will actually see.
      */
-    private function prepareMedia(SocialPost $post, SocialAccount $account, SocialPlatform $platform): ?PublishMedia
+    private function prepareMedia(SocialPost $post, SocialPlatform $platform): ?PublishMedia
     {
         $attachment = $post->media()->orderBy('position')->first();
 

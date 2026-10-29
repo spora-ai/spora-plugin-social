@@ -74,6 +74,8 @@ use Throwable;
 #[ToolParameter(name: 'connection_id', type: 'integer', description: 'The connection id. Required for disconnect, refresh and health.', required: ['disconnect', 'refresh', 'health'])]
 final class SocialConnectionsTool extends AbstractSocialTool
 {
+    private const CONNECTION_ID_REQUIRED = 'Error (VALIDATION_ERROR): connection_id is required.';
+
     public function __construct(
         private readonly SocialConnectionService $connections,
     ) {}
@@ -148,7 +150,7 @@ final class SocialConnectionsTool extends AbstractSocialTool
         $connectionId = (int) ($arguments['connection_id'] ?? 0);
 
         if ($connectionId <= 0) {
-            return new ToolResult(false, 'Error (VALIDATION_ERROR): connection_id is required.');
+            return new ToolResult(false, self::CONNECTION_ID_REQUIRED);
         }
 
         $this->connections->disconnect($connectionId, $principalId);
@@ -161,7 +163,7 @@ final class SocialConnectionsTool extends AbstractSocialTool
         $connectionId = (int) ($arguments['connection_id'] ?? 0);
 
         if ($connectionId <= 0) {
-            return new ToolResult(false, 'Error (VALIDATION_ERROR): connection_id is required.');
+            return new ToolResult(false, self::CONNECTION_ID_REQUIRED);
         }
 
         $connection = $this->connections->refresh($connectionId, $principalId);
@@ -196,7 +198,7 @@ final class SocialConnectionsTool extends AbstractSocialTool
         $connectionId = (int) ($arguments['connection_id'] ?? 0);
 
         if ($connectionId <= 0) {
-            return new ToolResult(false, 'Error (VALIDATION_ERROR): connection_id is required.');
+            return new ToolResult(false, self::CONNECTION_ID_REQUIRED);
         }
 
         $health = $this->connections->health($connectionId, $principalId);

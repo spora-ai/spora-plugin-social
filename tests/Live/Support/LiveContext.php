@@ -9,6 +9,7 @@ use Spora\Core\SecurityManager;
 use Spora\Core\SecurityManagerInterface;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialProvider;
+use Spora\Plugins\Social\OAuth\LinkedInPermissions;
 use Spora\Plugins\Social\OAuth\LinkedInProvider;
 use Spora\Plugins\Social\OAuth\MetaProvider;
 use Spora\Plugins\Social\OAuth\OAuthAccountIdentity;
@@ -18,6 +19,7 @@ use Spora\Plugins\Social\OAuth\SocialStateCodec;
 use Spora\Plugins\Social\Service\ApiVersions;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
+use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
 use Symfony\Component\HttpClient\HttpClient;
@@ -38,6 +40,7 @@ final class LiveContext
     public readonly LiveCredentials $credentials;
     public readonly LiveSecrets $secrets;
     public readonly LiveReport $report;
+    public readonly LiveVariableNames $names;
 
     /** @var array<string, OAuthProviderInterface> */
     private array $providers = [];
@@ -64,11 +67,15 @@ final class LiveContext
 
     private ?ApiVersions $versions = null;
 
+    private readonly LiveRequirements $requirements;
+
     private function __construct()
     {
         $this->secrets = new LiveSecrets();
-        $this->credentials = new LiveCredentials();
+        $this->names = new LiveVariableNames();
+        $this->credentials = new LiveCredentials($this->names);
         $this->report = new LiveReport(LiveReport::defaultPath(), $this->secrets);
+        $this->requirements = new LiveRequirements($this);
 
         foreach (SocialPlatform::cases() as $platform) {
             $this->secrets->remember($this->credentials->clientSecret($platform));
@@ -95,20 +102,16 @@ final class LiveContext
      */
     public function provider(SocialPlatform $platform): OAuthProviderInterface
     {
-        $provider = $this->credentials->providerOf($platform);
+        $provider = $this->names->providerOf($platform);
 
         return $this->providers[$provider] ??= match ($provider) {
             'linkedin' => new LinkedInProvider(
                 (string) $this->credentials->clientId($platform),
                 (string) $this->credentials->clientSecret($platform),
                 $this->redirectUri($platform),
-                includeOrganizationScope: $this->settings()->linkedInOrganizationScopeEnabled(),
+                $this->linkedInPermissions(),
                 httpClient: $this->oauthRecorder($platform)->client(),
                 versions: $this->versions(),
-                readOrganizationAcls: $this->settings()->linkedInReadOrganizationAclsEnabled(),
-                readOrganizationStats: $this->settings()->linkedInReadOrganizationStatsEnabled(),
-                readMemberFeed: $this->settings()->linkedInReadMemberFeedEnabled(),
-                readOrganizationFeed: $this->settings()->linkedInReadOrganizationFeedEnabled(),
             ),
             default => new MetaProvider(
                 clientId: (string) $this->credentials->clientId($platform),
@@ -155,6 +158,20 @@ final class LiveContext
     }
 
     /**
+     * The permissions the operator's LinkedIn app asks for.
+     */
+    public function linkedInPermissions(): LinkedInPermissions
+    {
+        return new LinkedInPermissions(
+            organizationScope: $this->credentials->linkedInOrganizationScope(),
+            readOrganizationAcls: $this->credentials->linkedInReadOrganizationAcls(),
+            readOrganizationStats: $this->credentials->linkedInReadOrganizationStats(),
+            readMemberFeed: $this->credentials->linkedInReadMemberFeed(),
+            readOrganizationFeed: $this->credentials->linkedInReadOrganizationFeed(),
+        );
+    }
+
+    /**
      * The api versions the plugin speaks.
      *
      * The operator's own settings decide, so the live run checks the
@@ -189,8 +206,8 @@ final class LiveContext
             $this->settings(),
             new FakeProviderResolver([]),
             new SocialStateCodec($this->security()),
-            $this->security(),
             new SocialAppUrlProbe(HttpClient::create()),
+            new SocialConnectionTokens($this->settings(), new FakeProviderResolver([]), $this->security()),
         );
     }
 
@@ -202,7 +219,7 @@ final class LiveContext
      */
     public function exchange(SocialPlatform $platform): OAuthTokenSet
     {
-        $provider = $this->credentials->providerOf($platform);
+        $provider = $this->names->providerOf($platform);
 
         if (isset($this->tokens[$provider])) {
             return $this->tokens[$provider];
@@ -223,7 +240,7 @@ final class LiveContext
 
     public function tokens(SocialPlatform $platform): OAuthTokenSet
     {
-        return $this->tokens[$this->credentials->providerOf($platform)] ?? new OAuthTokenSet(accessToken: '');
+        return $this->tokens[$this->names->providerOf($platform)] ?? new OAuthTokenSet(accessToken: '');
     }
 
     /**
@@ -233,7 +250,7 @@ final class LiveContext
      */
     public function accounts(SocialPlatform $platform): array
     {
-        $provider = $this->credentials->providerOf($platform);
+        $provider = $this->names->providerOf($platform);
 
         if (!isset($this->accounts[$provider])) {
             if (!isset($this->tokens[$provider])) {
@@ -271,14 +288,6 @@ final class LiveContext
         return $this->oauth[$platform->value] ??= new LiveGuzzleRecorder($this->secrets);
     }
 
-    /**
-     * @return list<array{method: string, url: string, status: int, headers: array<string, string>, form: array<string, string>, request: string}>
-     */
-    public function oauthCalls(SocialPlatform $platform): array
-    {
-        return $this->oauthRecorder($platform)->calls();
-    }
-
     public function rememberPublished(SocialPlatform $platform, string $id): void
     {
         $this->published[$platform->value] = $id;
@@ -291,67 +300,25 @@ final class LiveContext
 
     /**
      * Why a check cannot run, or null when it can.
-     *
-     * The reasons name the environment variable that is missing, so the
-     * operator is told what to set rather than that something is absent.
      */
     public function missingRequirement(SocialPlatform $platform, int $needs): ?string
     {
-        if (($needs & LiveCheck::CREDENTIALS) !== 0) {
-            if ($this->credentials->clientId($platform) === null || $this->credentials->clientSecret($platform) === null) {
-                return sprintf(
-                    'the %s credentials are not in the environment (%s and %s)',
-                    $platform->value,
-                    $this->credentials->clientIdName($platform),
-                    $this->credentials->clientSecretName($platform),
-                );
-            }
+        return $this->requirements->missing($platform, $needs);
+    }
 
-            if ($this->redirectUri($platform) === '') {
-                return sprintf(
-                    '%s is not set, so there is no redirect uri to send the browser to',
-                    LiveCredentials::ENV_REDIRECT_URI,
-                );
-            }
-        }
+    /**
+     * Whether a login's token was bought in this run.
+     */
+    public function hasToken(string $provider): bool
+    {
+        return isset($this->tokens[$provider]);
+    }
 
-        if (($needs & LiveCheck::AUTHORIZATION) !== 0) {
-            if ($this->credentials->authorizationCode($platform) === null) {
-                return sprintf(
-                    'no authorization code for %s (%s is not set — the operator did not complete the sign-in)',
-                    $platform->value,
-                    $this->credentials->authorizationCodeName($platform),
-                );
-            }
-
-            if ($this->credentials->pkceVerifier($platform) === null) {
-                return sprintf(
-                    'no pkce verifier for %s (%s is not set)',
-                    $platform->value,
-                    $this->credentials->pkceVerifierName($platform),
-                );
-            }
-        }
-
-        $provider = $this->credentials->providerOf($platform);
-
-        if (($needs & LiveCheck::TOKEN) !== 0 && !isset($this->tokens[$provider])) {
-            return isset($this->exchanges[$provider])
-                ? sprintf('the %s token exchange did not produce a token', $provider)
-                : sprintf('the %s token exchange did not run in this session', $provider);
-        }
-
-        if (($needs & LiveCheck::PUBLIC_IMAGE) !== 0 && $this->credentials->publicImageUrl() === null) {
-            return sprintf(
-                '%s is not set, so there is no publicly reachable image to publish',
-                LiveCredentials::ENV_PUBLIC_IMAGE_URL,
-            );
-        }
-
-        if (($needs & LiveCheck::PUBLISHED) !== 0 && !isset($this->published[$platform->value])) {
-            return sprintf('nothing was published on %s in this run', $platform->value);
-        }
-
-        return null;
+    /**
+     * Whether a login's token exchange was tried in this run.
+     */
+    public function hasExchange(string $provider): bool
+    {
+        return isset($this->exchanges[$provider]);
     }
 }

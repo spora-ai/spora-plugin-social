@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Service;
 
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialPost;
@@ -29,18 +29,19 @@ final class SocialPostService
      */
     public function create(int $principalId, array $input): SocialPost
     {
-        $accountIds = $this->accountIds($input);
-        $accounts = $this->resolveAccounts($principalId, $accountIds);
+        $fields = new PostInput($input);
+
+        $accounts = $this->resolveAccounts($principalId, $fields->accountIds());
 
         $post = new SocialPost();
         $post->principal_id = $principalId;
-        $post->title = $this->stringOrNull($input['title'] ?? null);
-        $post->body = $this->stringOrNull($input['body'] ?? null);
-        $post->platform_bodies = $this->platformBodies($input);
-        $post->source = $this->source($input);
-        $timezone = $this->timezone($input);
+        $post->title = $fields->title();
+        $post->body = $fields->body();
+        $post->platform_bodies = $fields->platformBodies();
+        $post->source = $fields->source();
+        $timezone = $fields->timezone();
         $post->timezone = $timezone;
-        $post->scheduled_for = $this->scheduledFor($input, $timezone);
+        $post->scheduled_for = $fields->scheduledFor($timezone);
         $post->status = $post->scheduled_for !== null
             ? SocialPost::STATUS_SCHEDULED
             : SocialPost::STATUS_DRAFT;
@@ -87,30 +88,7 @@ final class SocialPostService
                 ->where('platform', $platform));
         }
 
-        $from = $this->dayBoundary($filters['from'] ?? null, false);
-        $to = $this->dayBoundary($filters['to'] ?? null, true);
-
-        if ($from !== null || $to !== null) {
-            // The window answers "what is going out in these days": a post
-            // that is due in it, and a post that went out in it.
-            $query->where(function ($builder) use ($from, $to): void {
-                $builder->where(function ($inner) use ($from, $to): void {
-                    if ($from !== null) {
-                        $inner->where('scheduled_for', '>=', $from);
-                    }
-                    if ($to !== null) {
-                        $inner->where('scheduled_for', '<=', $to);
-                    }
-                })->orWhere(function ($inner) use ($from, $to): void {
-                    if ($from !== null) {
-                        $inner->where('published_at', '>=', $from);
-                    }
-                    if ($to !== null) {
-                        $inner->where('published_at', '<=', $to);
-                    }
-                });
-            });
-        }
+        $this->applyWindow($query, $filters);
 
         $total = (clone $query)->count();
 
@@ -125,6 +103,45 @@ final class SocialPostService
             ->all();
 
         return ['items' => $items, 'total' => $total];
+    }
+
+    /**
+     * The window the list is narrowed by.
+     *
+     * @param array<string, mixed> $filters
+     */
+    private function applyWindow(Builder $query, array $filters): void
+    {
+        $from = $this->dayBoundary($filters['from'] ?? null, false);
+        $to = $this->dayBoundary($filters['to'] ?? null, true);
+
+        if ($from === null && $to === null) {
+            return;
+        }
+
+        // The window answers "what is going out in these days": a post
+        // that is due in it, and a post that went out in it.
+        $query->where(function (Builder $builder) use ($from, $to): void {
+            $builder->where(function (Builder $inner) use ($from, $to): void {
+                $this->between($inner, 'scheduled_for', $from, $to);
+            })->orWhere(function (Builder $inner) use ($from, $to): void {
+                $this->between($inner, 'published_at', $from, $to);
+            });
+        });
+    }
+
+    /**
+     * The column inside the window, when the window has a bound for it.
+     */
+    private function between(Builder $builder, string $column, ?string $from, ?string $to): void
+    {
+        if ($from !== null) {
+            $builder->where($column, '>=', $from);
+        }
+
+        if ($to !== null) {
+            $builder->where($column, '<=', $to);
+        }
     }
 
     /**
@@ -171,35 +188,36 @@ final class SocialPostService
     public function update(int $postId, int $principalId, array $input): SocialPost
     {
         $post = $this->find($postId, $principalId);
+        $fields = new PostInput($input);
 
-        if (array_key_exists('title', $input)) {
-            $post->title = $this->stringOrNull($input['title']);
+        if ($fields->has('title')) {
+            $post->title = $fields->title();
         }
-        if (array_key_exists('body', $input)) {
-            $post->body = $this->stringOrNull($input['body']);
+        if ($fields->has('body')) {
+            $post->body = $fields->body();
         }
-        if (array_key_exists('platform_bodies', $input)) {
-            $post->platform_bodies = $this->platformBodies($input);
+        if ($fields->has('platform_bodies')) {
+            $post->platform_bodies = $fields->platformBodies();
         }
 
         // The zone first: a wall-clock time is read in the post's zone, so
         // the zone has to be settled before the time is parsed.
-        $timezone = $this->timezone($input);
+        $timezone = $fields->timezone();
 
-        if (array_key_exists('scheduled_for', $input)) {
-            $post->scheduled_for = $this->scheduledFor($input, $timezone);
+        if ($fields->has('scheduled_for')) {
+            $post->scheduled_for = $fields->scheduledFor($timezone);
         }
-        if (array_key_exists('timezone', $input)) {
+        if ($fields->has('timezone')) {
             $post->timezone = $timezone;
         }
 
         $post->save();
 
-        if (array_key_exists('account_ids', $input)) {
-            $this->replaceTargets($post, $this->resolveAccounts($principalId, $this->accountIds($input)));
+        if ($fields->has('account_ids')) {
+            $this->replaceTargets($post, $this->resolveAccounts($principalId, $fields->accountIds()));
         }
 
-        if (array_key_exists('media', $input)) {
+        if ($fields->has('media')) {
             $this->replaceMedia($post, $input);
         }
 
@@ -254,28 +272,6 @@ final class SocialPostService
 
         return $post->fresh() ?? $post;
     }
-
-    /**
-     * @param  array<string, mixed> $input
-     * @return list<int>
-     */
-    private function accountIds(array $input): array
-    {
-        $raw = $input['account_ids'] ?? [];
-        if (!is_array($raw)) {
-            return [];
-        }
-
-        $ids = [];
-        foreach ($raw as $value) {
-            if (is_numeric($value)) {
-                $ids[] = (int) $value;
-            }
-        }
-
-        return array_values(array_unique($ids));
-    }
-
     /**
      * @param  list<int> $accountIds
      * @return list<SocialAccount>
@@ -372,90 +368,5 @@ final class SocialPostService
         // A window names no zone, so it is a UTC window: the columns hold
         // UTC and a day boundary has to be the same boundary everywhere.
         return DateTimeParser::toUtc($raw, 'UTC')?->format('Y-m-d H:i:s');
-    }
-
-    /**
-     * @param  array<string, mixed> $input
-     * @return array<string, string>|null
-     */
-    private function platformBodies(array $input): ?array
-    {
-        $raw = $input['platform_bodies'] ?? null;
-        if (!is_array($raw)) {
-            return null;
-        }
-
-        $bodies = [];
-        foreach ($raw as $platform => $body) {
-            if (is_string($platform) && is_string($body)) {
-                $bodies[$platform] = $body;
-            }
-        }
-
-        return $bodies !== [] ? $bodies : null;
-    }
-
-    private function source(array $input): string
-    {
-        $source = $input['source'] ?? SocialPost::SOURCE_MANUAL;
-        if (!is_string($source) || !in_array($source, [
-            SocialPost::SOURCE_MANUAL,
-            SocialPost::SOURCE_AI,
-        ], true)) {
-            return SocialPost::SOURCE_MANUAL;
-        }
-
-        return $source;
-    }
-
-    /**
-     * The zone the post's wall-clock times are written in.
-     *
-     * A name PHP does not know falls back to UTC rather than failing the
-     * post: the zone is a convenience, and the operator's copy matters
-     * more than the zone.
-     */
-    private function timezone(array $input): string
-    {
-        $timezone = $input['timezone'] ?? 'UTC';
-
-        if (!is_string($timezone) || $timezone === '') {
-            return 'UTC';
-        }
-
-        return DateTimeParser::isKnownZone($timezone) ? $timezone : 'UTC';
-    }
-
-    /**
-     * The moment the post goes out.
-     *
-     * A value with its own offset is absolute; a value without one is a
-     * wall-clock time in the post's own zone.
-     */
-    private function scheduledFor(array $input, string $timezone): ?Carbon
-    {
-        $raw = $input['scheduled_for'] ?? null;
-        if (!is_string($raw) || trim($raw) === '') {
-            return null;
-        }
-
-        $parsed = DateTimeParser::toUtc(trim($raw), $timezone);
-
-        if ($parsed === null) {
-            throw SocialException::validation('scheduled_for is not a valid date.');
-        }
-
-        return $parsed;
-    }
-
-    private function stringOrNull(mixed $value): ?string
-    {
-        if (!is_string($value)) {
-            return null;
-        }
-
-        $trimmed = trim($value);
-
-        return $trimmed === '' ? null : $trimmed;
     }
 }

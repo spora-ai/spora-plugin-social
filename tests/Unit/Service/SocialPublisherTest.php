@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Spora\Plugins\Social\Model\SocialPostTarget;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
 /**
  * Taking a published post back down.
@@ -13,7 +14,7 @@ use Spora\Plugins\Social\Model\SocialPostTarget;
 it('takes the post back down on every network that published it', function () {
     $publisher = postPublisher([
         'linkedin' => [
-            ['body' => '{"id":"urn:li:share:9"}'],
+            ['body' => SocialFixtures::LINKEDIN_SHARE],
             ['body' => '', 'status' => 204],
         ],
         'facebook' => [
@@ -29,7 +30,7 @@ it('takes the post back down on every network that published it', function () {
     $facebook = publishableAccount($principalId, 'facebook', 'page');
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id, $facebook->id],
     ]);
 
@@ -56,7 +57,7 @@ it('leaves an instagram target published, because instagram cannot delete', func
         'linkedin' => [
             ['body' => '{"value":{"uploadUrl":"https://www.linkedin.com/dms-uploads/x/0","image":"urn:li:image:X"}}'],
             ['body' => '', 'status' => 200],
-            ['body' => '{"id":"urn:li:share:9"}', 'status' => 201],
+            ['body' => SocialFixtures::LINKEDIN_SHARE, 'status' => 201],
             ['body' => '', 'status' => 204],
         ],
         'instagram' => [
@@ -75,7 +76,7 @@ it('leaves an instagram target published, because instagram cannot delete', func
     $asset = createMediaAsset($principalId, ['mime_type' => 'image/jpeg', 'payload' => jpegBytes()]);
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id, $instagram->id],
         'media'       => [['media_asset_id' => $asset->id, 'position' => 0]],
     ]);
@@ -111,7 +112,7 @@ it('keeps the container id of an instagram publish, so the container can be aske
     $asset = createMediaAsset($principalId, ['mime_type' => 'image/jpeg', 'payload' => jpegBytes()]);
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$instagram->id],
         'media'       => [['media_asset_id' => $asset->id, 'position' => 0]],
     ]);
@@ -128,7 +129,7 @@ it('keeps the container id of an instagram publish, so the container can be aske
 
 it('refuses to publish a post that carries a second attachment', function () {
     $publisher = postPublisher([
-        'linkedin' => [['body' => '{"id":"urn:li:share:9"}']],
+        'linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]],
     ]);
     $service = postService();
 
@@ -140,7 +141,7 @@ it('refuses to publish a post that carries a second attachment', function () {
     $second = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
 
     $post = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id],
         'media'       => [['media_asset_id' => $first->id, 'position' => 0]],
     ]);

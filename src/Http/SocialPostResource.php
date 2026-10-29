@@ -52,8 +52,6 @@ final class SocialPostResource
                 }
             }
 
-            $account = $target->account;
-
             $targetRows[] = [
                 'id'           => (int) $target->id,
                 'account_id'   => (int) $target->account_id,

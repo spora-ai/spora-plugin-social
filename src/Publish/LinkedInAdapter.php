@@ -33,6 +33,34 @@ final class LinkedInAdapter implements PublisherInterface
 
     public function publish(PublishRequest $request): PublishResult
     {
+        $media = $request->media;
+
+        if ($media !== null && !$media->isImage()) {
+            return PublishResult::failed('LinkedIn v1 publishes images only.');
+        }
+
+        $imageId = null;
+
+        if ($media !== null) {
+            $upload = $this->uploadImage($request);
+
+            if ($upload['id'] === null) {
+                return PublishResult::failed(
+                    $upload['error'] ?? 'LinkedIn refused the image upload.',
+                );
+            }
+
+            $imageId = $upload['id'];
+        }
+
+        return $this->sendPost($request, $imageId);
+    }
+
+    /**
+     * The post itself.
+     */
+    private function sendPost(PublishRequest $request, ?string $imageId): PublishResult
+    {
         $body = [
             'author'                     => $request->externalId,
             'commentary'                 => $request->body,
@@ -46,19 +74,8 @@ final class LinkedInAdapter implements PublisherInterface
             'isReshareDisabledByAuthor' => false,
         ];
 
-        if ($request->media !== null) {
-            if (!$request->media->isImage()) {
-                return PublishResult::failed('LinkedIn v1 publishes images only.');
-            }
-
-            $upload = $this->uploadImage($request);
-            if ($upload['id'] === null) {
-                return PublishResult::failed(
-                    $upload['error'] ?? 'LinkedIn refused the image upload.',
-                );
-            }
-
-            $body['content'] = ['media' => ['id' => $upload['id']]];
+        if ($imageId !== null) {
+            $body['content'] = ['media' => ['id' => $imageId]];
         }
 
         $response = $this->api->http->postJson(
@@ -124,6 +141,50 @@ final class LinkedInAdapter implements PublisherInterface
             return ['id' => null, 'error' => 'The image has no bytes to upload.'];
         }
 
+        $sent = $this->sendImage($request, $media);
+
+        if ($sent['error'] !== null) {
+            return ['id' => null, 'error' => $sent['error']];
+        }
+
+        return ['id' => $sent['urn'], 'error' => null];
+    }
+
+    /**
+     * The bytes, into the slot the platform opened.
+     *
+     * @return array{urn: ?string, error: ?string}
+     */
+    private function sendImage(PublishRequest $request, PublishMedia $media): array
+    {
+        $slot = $this->openUploadSlot($request);
+
+        if ($slot['error'] !== null) {
+            return ['urn' => null, 'error' => $slot['error']];
+        }
+
+        $upload = $this->api->http->request('PUT', $slot['uploadUrl'], [
+            'body'    => $media->bytes,
+            'headers' => ['Content-Type' => $media->mimeType],
+        ]);
+
+        if (!$upload->isSuccessful()) {
+            return [
+                'urn'   => null,
+                'error' => $upload->errorMessage() ?? 'LinkedIn refused the image upload.',
+            ];
+        }
+
+        return ['urn' => $this->imageUrn($slot['urn']), 'error' => null];
+    }
+
+    /**
+     * The upload slot the platform opened, or the reason there is none.
+     *
+     * @return array{uploadUrl: string, urn: string, error: ?string}
+     */
+    private function openUploadSlot(PublishRequest $request): array
+    {
         $initialize = $this->api->http->postJson(
             self::IMAGES_URL,
             ['initializeUploadRequest' => ['owner' => $request->externalId]],
@@ -133,36 +194,25 @@ final class LinkedInAdapter implements PublisherInterface
 
         if (!$initialize->isSuccessful()) {
             return [
-                'id'    => null,
-                'error' => $initialize->errorMessage() ?? 'LinkedIn refused to open an upload slot.',
+                'uploadUrl' => '',
+                'urn'       => '',
+                'error'     => $initialize->errorMessage() ?? 'LinkedIn refused to open an upload slot.',
             ];
         }
 
         $value = $initialize->body['value'] ?? null;
-        if (!is_array($value)) {
-            return ['id' => null, 'error' => 'LinkedIn did not return an upload slot.'];
-        }
-
-        $uploadUrl = $value['uploadUrl'] ?? null;
-        $urn = $value['image'] ?? null;
+        $uploadUrl = is_array($value) ? ($value['uploadUrl'] ?? null) : null;
+        $urn = is_array($value) ? ($value['image'] ?? null) : null;
 
         if (!is_string($uploadUrl) || $uploadUrl === '' || !is_string($urn) || $urn === '') {
-            return ['id' => null, 'error' => 'LinkedIn did not return an upload slot.'];
-        }
-
-        $upload = $this->api->http->request('PUT', $uploadUrl, [
-            'body'    => $media->bytes,
-            'headers' => ['Content-Type' => $media->mimeType],
-        ]);
-
-        if (!$upload->isSuccessful()) {
             return [
-                'id'    => null,
-                'error' => $upload->errorMessage() ?? 'LinkedIn refused the image upload.',
+                'uploadUrl' => '',
+                'urn'       => '',
+                'error'     => 'LinkedIn did not return an upload slot.',
             ];
         }
 
-        return ['id' => $this->imageUrn($urn), 'error' => null];
+        return ['uploadUrl' => $uploadUrl, 'urn' => $urn, 'error' => null];
     }
 
     /**

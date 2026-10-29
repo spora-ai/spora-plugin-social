@@ -7,6 +7,7 @@ use Spora\Plugins\Social\Publish\DeleteRequest;
 use Spora\Plugins\Social\Publish\FacebookAdapter;
 use Spora\Plugins\Social\Publish\PublishMedia;
 use Spora\Plugins\Social\Publish\PublishRequest;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -56,14 +57,14 @@ it('publishes a text post to the page feed with the configured graph version', f
     $adapter = facebookAdapter([['body' => '{"id":"123456_789"}']], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '123456',
+        externalId: SocialFixtures::FACEBOOK_PAGE_ID,
         kind: SocialAccountKind::Page,
         accessToken: 'PAGE_TOKEN',
-        body: 'We shipped…',
+        body: SocialFixtures::POST_BODY,
     ));
 
     expect($result->success)->toBeTrue()
-        ->and($result->externalId)->toBe('123456_789')
+        ->and($result->externalId)->toBe(SocialFixtures::FACEBOOK_POST_ID)
         ->and($result->externalUrl)->toBe('https://www.facebook.com/123456_789');
 
     expect($seen)->toHaveCount(1);
@@ -73,7 +74,7 @@ it('publishes a text post to the page feed with the configured graph version', f
         ->and($request['url'])->toBe('https://graph.facebook.com/v26.0/123456/feed');
 
     $fields = formFields($request['options']);
-    expect($fields['message'])->toBe('We shipped…')
+    expect($fields['message'])->toBe(SocialFixtures::POST_BODY)
         ->and($fields['published'])->toBe('true')
         ->and($fields['access_token'])->toBe('PAGE_TOKEN');
 });
@@ -84,7 +85,7 @@ it('publishes an image to the photos endpoint as a multipart upload', function (
     $adapter = facebookAdapter([['body' => '{"id":"123456_790","post_id":"123456_790"}']], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '123456',
+        externalId: SocialFixtures::FACEBOOK_PAGE_ID,
         kind: SocialAccountKind::Page,
         accessToken: 'PAGE_TOKEN',
         body: 'Look at this',
@@ -113,7 +114,7 @@ it('deletes the page post with the documented request', function () {
     $adapter = facebookAdapter([['body' => '{"success":true}']], $seen);
 
     $result = $adapter->delete(new DeleteRequest(
-        externalId: '123456_789',
+        externalId: SocialFixtures::FACEBOOK_POST_ID,
         kind: SocialAccountKind::Page,
         accessToken: 'PAGE_TOKEN',
     ));
@@ -136,7 +137,7 @@ it('reports the platform error when the delete is refused', function () {
     ]], $seen);
 
     $result = $adapter->delete(new DeleteRequest(
-        externalId: '123456_789',
+        externalId: SocialFixtures::FACEBOOK_POST_ID,
         kind: SocialAccountKind::Page,
         accessToken: 'PAGE_TOKEN',
     ));
@@ -154,12 +155,62 @@ it('reports the platform error when the page refuses the post', function () {
     ]], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '123456',
+        externalId: SocialFixtures::FACEBOOK_PAGE_ID,
         kind: SocialAccountKind::Page,
         accessToken: 'PAGE_TOKEN',
-        body: 'We shipped…',
+        body: SocialFixtures::POST_BODY,
     ));
 
     expect($result->success)->toBeFalse()
         ->and($result->error)->toBe('(#200) Missing permission');
+});
+
+it('publishes a video to the page', function () {
+    $seen = [];
+
+    $adapter = facebookAdapter([['body' => '{"id":"the-video"}']], $seen);
+
+    $result = $adapter->publish(new PublishRequest(
+        externalId: 'the-page',
+        kind: SocialAccountKind::Page,
+        accessToken: 'PAGE_TOKEN',
+        body: SocialFixtures::POST_BODY,
+        media: new PublishMedia(
+            mimeType: 'video/mp4',
+            publicUrl: 'https://www.example.com/videos/clip.mp4',
+        ),
+    ));
+
+    expect($result->success)->toBeTrue()
+        ->and($seen[0]['url'])->toContain('/the-page/videos');
+});
+
+it('refuses a video the platform cannot fetch', function () {
+    $seen = [];
+    $adapter = facebookAdapter([['body' => '{}']], $seen);
+
+    $result = $adapter->publish(new PublishRequest(
+        externalId: 'the-page',
+        kind: SocialAccountKind::Page,
+        accessToken: 'PAGE_TOKEN',
+        body: SocialFixtures::POST_BODY,
+        media: new PublishMedia(mimeType: 'video/mp4'),
+    ));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->error)->toContain('publicly reachable URL');
+});
+
+it('says that the deletion was not confirmed', function () {
+    $seen = [];
+    $adapter = facebookAdapter([['body' => '{"success":false}']], $seen);
+
+    $result = $adapter->delete(new DeleteRequest(
+        externalId: 'the-post',
+        kind: SocialAccountKind::Page,
+        accessToken: 'PAGE_TOKEN',
+    ));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->error)->toContain('did not confirm the deletion');
 });

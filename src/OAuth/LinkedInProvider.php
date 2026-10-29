@@ -40,32 +40,18 @@ final class LinkedInProvider extends AbstractOAuthProvider
     public const SCOPE_MEMBER_SOCIAL_FEED = 'r_member_social_feed';
     public const SCOPE_ORGANIZATION_SOCIAL_FEED = 'r_organization_social_feed';
 
-    private readonly bool $organizationScopeRequested;
-    private readonly bool $readOrganizationAclsRequested;
-    private readonly bool $readOrganizationStatsRequested;
-    private readonly bool $readMemberFeedRequested;
-    private readonly bool $readOrganizationFeedRequested;
     private readonly ApiVersions $versions;
 
     public function __construct(
         string $clientId,
         string $clientSecret,
         string $redirectUri,
-        bool $includeOrganizationScope = false,
+        private readonly LinkedInPermissions $permissions,
         ?ClientInterface $httpClient = null,
         ?ApiVersions $versions = null,
-        bool $readOrganizationAcls = false,
-        bool $readOrganizationStats = false,
-        bool $readMemberFeed = false,
-        bool $readOrganizationFeed = false,
     ) {
         parent::__construct($clientId, $clientSecret, $redirectUri, $httpClient);
 
-        $this->organizationScopeRequested = $includeOrganizationScope;
-        $this->readOrganizationAclsRequested = $readOrganizationAcls;
-        $this->readOrganizationStatsRequested = $readOrganizationStats;
-        $this->readMemberFeedRequested = $readMemberFeed;
-        $this->readOrganizationFeedRequested = $readOrganizationFeed;
         $this->versions = $versions ?? new ApiVersions(
             ApiVersions::DEFAULT_GRAPH,
             ApiVersions::DEFAULT_LINKEDIN,
@@ -104,7 +90,7 @@ final class LinkedInProvider extends AbstractOAuthProvider
             self::SCOPE_MEMBER_SOCIAL,
         ];
 
-        if ($this->organizationScopeRequested) {
+        if ($this->permissions->organizationScope) {
             // Writing as an organisation. The permissions that find the
             // organisations and read their numbers are asked for on their
             // own, so an app without them is not refused the whole
@@ -112,7 +98,7 @@ final class LinkedInProvider extends AbstractOAuthProvider
             $scopes[] = self::SCOPE_ORGANIZATION_SOCIAL;
         }
 
-        if ($this->readOrganizationAclsRequested) {
+        if ($this->permissions->readOrganizationAcls) {
             // The permission that finds the organisations the member
             // administers.
             //
@@ -120,21 +106,21 @@ final class LinkedInProvider extends AbstractOAuthProvider
             $scopes[] = self::SCOPE_ORGANIZATION_ADMIN;
         }
 
-        if ($this->readOrganizationStatsRequested) {
+        if ($this->permissions->readOrganizationStats) {
             // The permission that reads an organisation's share statistics.
             //
             // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/share-statistics
             $scopes[] = self::SCOPE_ORGANIZATION_ADMIN_REPORTING;
         }
 
-        if ($this->readMemberFeedRequested) {
+        if ($this->permissions->readMemberFeed) {
             // The permission that reads a member post's reactions.
             //
             // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
             $scopes[] = self::SCOPE_MEMBER_SOCIAL_FEED;
         }
 
-        if ($this->readOrganizationFeedRequested) {
+        if ($this->permissions->readOrganizationFeed) {
             // The permission that reads an organisation post's reactions.
             //
             // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
@@ -170,8 +156,8 @@ final class LinkedInProvider extends AbstractOAuthProvider
                 platform: SocialPlatform::LinkedIn,
                 externalId: 'urn:li:person:' . $personId,
                 kind: SocialAccountKind::Member,
-                displayName: $this->stringOrNull($profile['name'] ?? null),
-                username: $this->stringOrNull($profile['email'] ?? null),
+                displayName: $this->exchange->stringOrNull($profile['name'] ?? null),
+                username: $this->exchange->stringOrNull($profile['email'] ?? null),
                 extra: ['author_urn' => 'urn:li:person:' . $personId],
             ),
         ];
@@ -210,7 +196,7 @@ final class LinkedInProvider extends AbstractOAuthProvider
                 continue;
             }
 
-            $urn = $this->stringOrNull($element['organization'] ?? $element['organizationTarget'] ?? null);
+            $urn = $this->exchange->stringOrNull($element['organization'] ?? $element['organizationTarget'] ?? null);
             if ($urn === null) {
                 continue;
             }
@@ -256,7 +242,7 @@ final class LinkedInProvider extends AbstractOAuthProvider
             return null;
         }
 
-        return $this->stringOrNull($organization['localizedName'] ?? null);
+        return $this->exchange->stringOrNull($organization['localizedName'] ?? null);
     }
 
     private function organizationId(string $urn): string

@@ -7,6 +7,7 @@ use Spora\Plugins\Social\OAuth\OAuthTokenSet;
 use Spora\Plugins\Social\OAuth\SocialStateCodec;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
+use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeOAuthProvider;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
@@ -225,12 +226,14 @@ it('refuses to connect when the app url is not publicly reachable', function () 
         new MockResponse('', ['error' => 'Connection refused']),
     ]));
 
+    $settings = new SocialSettings(socialConfig());
+
     $service = new SocialConnectionService(
-        new SocialSettings(socialConfig()),
+        $settings,
         new FakeProviderResolver([]),
         new SocialStateCodec(securityManager()),
-        securityManager(),
         $probe,
+        new SocialConnectionTokens($settings, new FakeProviderResolver([]), securityManager()),
     );
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
@@ -238,12 +241,14 @@ it('refuses to connect when the app url is not publicly reachable', function () 
 });
 
 it('refuses to connect Meta without a configuration id', function () {
+    $settings = new SocialSettings(socialConfig([SocialSettings::KEY_META_CONFIG_ID => '']));
+
     $service = new SocialConnectionService(
-        new SocialSettings(socialConfig([SocialSettings::KEY_META_CONFIG_ID => ''])),
+        $settings,
         new FakeProviderResolver([]),
         new SocialStateCodec(securityManager()),
-        securityManager(),
         new SocialAppUrlProbe(new MockHttpClient([new MockResponse('', ['http_code' => 200])])),
+        new SocialConnectionTokens($settings, new FakeProviderResolver([]), securityManager()),
     );
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))

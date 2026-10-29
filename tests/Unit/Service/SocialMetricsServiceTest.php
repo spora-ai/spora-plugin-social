@@ -8,6 +8,7 @@ use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
+use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialMetricsService;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
@@ -17,14 +18,15 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 /**
  * A metrics service that records the requests it makes.
  *
+ * @param list<string>                                                            $bodies the answers, in order
  * @param list<array{method: string, url: string, options: array<string, mixed>}> $seen
  */
-function recordingMetricsService(array &$seen): SocialMetricsService
+function recordingMetricsService(array &$seen, array $bodies = ['{}']): SocialMetricsService
 {
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
+    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen, $bodies) {
         $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
 
-        return new MockResponse('{}');
+        return new MockResponse($bodies[count($seen) - 1] ?? '{}');
     });
 
     return new SocialMetricsService(
@@ -39,15 +41,9 @@ function recordingMetricsService(array &$seen): SocialMetricsService
  */
 function metricsConnectionService(): SocialConnectionService
 {
-    return new SocialConnectionService(
-        new SocialSettings(socialConfig()),
-        new FakeProviderResolver([]),
-        new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()),
-        securityManager(),
-        new SocialAppUrlProbe(new MockHttpClient([
-            new MockResponse('', ['http_code' => 200]),
-        ])),
-    );
+    return new SocialConnectionService(new SocialSettings(socialConfig()), new FakeProviderResolver([]), new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()), new SocialAppUrlProbe(new MockHttpClient([
+        new MockResponse('', ['http_code' => 200]),
+    ])), new SocialConnectionTokens(new SocialSettings(socialConfig()), new FakeProviderResolver([]), securityManager()));
 }
 
 /**
@@ -90,6 +86,46 @@ function publishedTargetOn(SocialAccount $account, string $externalId): SocialPo
 }
 
 /**
+ * The counters a reading does not have.
+ */
+function expectNoCounters(?Spora\Plugins\Social\Model\SocialPostMetric $row): void
+{
+    expect($row?->reach)->toBeNull()
+        ->and($row?->impressions)->toBeNull()
+        ->and($row?->likes)->toBeNull()
+        ->and($row?->comments)->toBeNull()
+        ->and($row?->shares)->toBeNull()
+        ->and($row?->clicks)->toBeNull();
+}
+
+/**
+ * A published target on a linkedin account with the given scopes.
+ *
+ * @param  list<string> $scopes
+ */
+function publishedTargetWithScopes(string $kind, array $scopes): SocialPostTarget
+{
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $account = linkedInAccountWithScopes($principalId, $kind, $scopes);
+
+    return publishedTargetOn($account, 'urn:li:share:9');
+}
+
+/**
+ * The reading the service stores for a published linkedin post.
+ *
+ * @return Spora\Plugins\Social\Model\SocialPostMetric|null
+ */
+function linkedInReading(SocialMetricsService $service, string $kind = 'organization'): ?Spora\Plugins\Social\Model\SocialPostMetric
+{
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = publishedTarget($principalId, 'linkedin', $kind, 'urn:li:share:9');
+
+    return $service->collect($target->fresh() ?? $target);
+}
+
+/**
  * A published target with a reading of the given counters.
  *
  * @param array<string, int|null> $counters
@@ -116,11 +152,7 @@ it('leaves the reach of a linkedin member post empty and says why', function () 
         ['body' => '{"likesSummary":{"totalLikes":12},"commentsSummary":{"totalFirstLevelComments":3}}'],
     ]);
 
-    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
-
-    $target = publishedTarget($principalId, 'linkedin', 'member', 'urn:li:share:9');
-
-    $row = $service->collect($target->fresh() ?? $target);
+    $row = linkedInReading($service, 'member');
 
     expect($row)->not->toBeNull()
         ->and($row?->reach)->toBeNull()
@@ -138,11 +170,7 @@ it('counts an organisation post\'s reach in unique impressions, not impressions'
         ['body' => '{"elements":[{"totalShareStatistics":{"uniqueImpressionsCount":9327,"impressionCount":14490816,"likeCount":52,"commentCount":70,"shareCount":0,"clickCount":109276}}]}'],
     ]);
 
-    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
-
-    $target = publishedTarget($principalId, 'linkedin', 'organization', 'urn:li:share:9');
-
-    $row = $service->collect($target->fresh() ?? $target);
+    $row = linkedInReading($service);
 
     // The share statistics name both counts: "uniqueImpressionsCount —
     // Number of unique impressions" and "impressionCount — Number of
@@ -163,11 +191,7 @@ it('reads the up-to-date reactions of a linkedin organisation post', function ()
         ['body' => '{"elements":[{"totalShareStatistics":{"uniqueImpressionsCount":9327,"impressionCount":14490816,"likeCount":20,"commentCount":4,"shareCount":3,"clickCount":18}}]}'],
     ]);
 
-    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
-
-    $target = publishedTarget($principalId, 'linkedin', 'organization', 'urn:li:share:9');
-
-    $row = $service->collect($target->fresh() ?? $target);
+    $row = linkedInReading($service);
 
     // "The socialActions endpoint provides up-to-date counts of likes and
     // comments for a share that matches the LinkedIn feed" — so the social
@@ -184,17 +208,7 @@ it('reads the up-to-date reactions of a linkedin organisation post', function ()
 it('reads an organisation post\'s reactions from the social actions endpoint', function () {
     $seen = [];
 
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
-        $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
-
-        return new MockResponse('{}');
-    });
-
-    $service = new SocialMetricsService(
-        new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
-        metricsConnectionService(),
-        apiVersions(),
-    );
+    $service = recordingMetricsService($seen);
 
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
@@ -223,36 +237,20 @@ it('reads an organisation post\'s reactions from the social actions endpoint', f
 it('skips the social actions read the token is not allowed to make', function () {
     $seen = [];
 
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
-        $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
-
-        return new MockResponse(
-            '{"elements":[{"totalShareStatistics":{"uniqueImpressionsCount":9327,"impressionCount":14490816,'
-            . '"likeCount":52,"commentCount":70,"shareCount":3,"clickCount":109276}}]}',
-        );
-    });
-
-    $service = new SocialMetricsService(
-        new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
-        metricsConnectionService(),
-        apiVersions(),
-    );
-
-    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $service = recordingMetricsService($seen, [
+        '{"elements":[{"totalShareStatistics":{"uniqueImpressionsCount":9327,"impressionCount":14490816,'
+        . '"likeCount":52,"commentCount":70,"shareCount":3,"clickCount":109276}}]}',
+    ]);
 
     // The token carries the scopes it was granted, and the social actions
     // of an organisation's shares are not among them.
-    $account = linkedInAccountWithScopes($principalId, 'organization', [
+    $row = $service->collect(publishedTargetWithScopes('organization', [
         'openid',
         'profile',
         'email',
         'w_member_social',
         'rw_organization_admin',
-    ]);
-
-    $target = publishedTargetOn($account, 'urn:li:share:9');
-
-    $row = $service->collect($target->fresh() ?? $target);
+    ]));
 
     // A request that would always be refused is not worth making every
     // day: only the share statistics are read.
@@ -270,17 +268,7 @@ it('skips the social actions read the token is not allowed to make', function ()
 it('skips the social actions read a member token is not allowed to make', function () {
     $seen = [];
 
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
-        $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
-
-        return new MockResponse('{}');
-    });
-
-    $service = new SocialMetricsService(
-        new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
-        metricsConnectionService(),
-        apiVersions(),
-    );
+    $service = recordingMetricsService($seen);
 
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
@@ -305,32 +293,16 @@ it('skips the social actions read a member token is not allowed to make', functi
 it('skips the share statistics read the token is not allowed to make', function () {
     $seen = [];
 
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
-        $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
-
-        return new MockResponse('{}');
-    });
-
-    $service = new SocialMetricsService(
-        new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
-        metricsConnectionService(),
-        apiVersions(),
-    );
-
-    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $service = recordingMetricsService($seen);
 
     // The token carries neither read permission, so neither read can
     // succeed.
-    $account = linkedInAccountWithScopes($principalId, 'organization', [
+    $row = $service->collect(publishedTargetWithScopes('organization', [
         'openid',
         'profile',
         'email',
         'w_member_social',
-    ]);
-
-    $target = publishedTargetOn($account, 'urn:li:share:9');
-
-    $row = $service->collect($target->fresh() ?? $target);
+    ]));
 
     // Neither read is made: both would always be refused.
     expect($seen)->toHaveCount(0)
@@ -345,24 +317,10 @@ it('skips the share statistics read the token is not allowed to make', function 
 it('attempts the reads a token with no recorded scopes cannot be judged for', function () {
     $seen = [];
 
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
-        $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
+    // A read the token is not allowed to make is refused.
+    $service = recordingMetricsService($seen, ['{"error":{"message":"ACCESS_DENIED","status":403}}']);
 
-        // A read the token is not allowed to make is refused.
-        return new MockResponse('{"error":{"message":"ACCESS_DENIED","status":403}}', ['http_code' => 403]);
-    });
-
-    $service = new SocialMetricsService(
-        new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
-        metricsConnectionService(),
-        apiVersions(),
-    );
-
-    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
-
-    $target = publishedTarget($principalId, 'linkedin', 'organization', 'urn:li:share:9');
-
-    $row = $service->collect($target->fresh() ?? $target);
+    $row = linkedInReading($service);
 
     // The token's scopes were never recorded, so the plugin cannot judge
     // the reads and makes them: a refused read is the platform's answer.
@@ -396,17 +354,7 @@ it('reads the impressions of an instagram post', function () {
 it('reads the facebook insights with the page token, not the user token', function () {
     $seen = [];
 
-    $http = new MockHttpClient(function (string $method, string $url, array $options) use (&$seen) {
-        $seen[] = ['method' => $method, 'url' => $url, 'options' => $options];
-
-        return new MockResponse('{"data":[]}');
-    });
-
-    $service = new SocialMetricsService(
-        new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
-        metricsConnectionService(),
-        apiVersions(),
-    );
+    $service = recordingMetricsService($seen, ['{"data":[]}']);
 
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

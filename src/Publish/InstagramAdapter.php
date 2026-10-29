@@ -29,6 +29,8 @@ final class InstagramAdapter implements PublisherInterface
 {
     public const POST_URL = 'https://www.instagram.com/p/';
 
+    private const BEARER = 'Bearer ';
+
     /**
      * What the operator is told when they ask for the impossible.
      *
@@ -64,10 +66,17 @@ final class InstagramAdapter implements PublisherInterface
         }
 
         $limit = $this->publishingLimit($request);
-        if ($limit !== null) {
-            return $limit;
-        }
 
+        return $limit ?? $this->publishContainer($request, $media);
+    }
+
+    /**
+     * The container, and then the post.
+     *
+     * @see https://developers.facebook.com/docs/instagram-platform/content-publishing
+     */
+    private function publishContainer(PublishRequest $request, PublishMedia $media): PublishResult
+    {
         $container = $this->createContainer($request, $media);
         if ($container['id'] === null) {
             return PublishResult::failed(
@@ -82,26 +91,24 @@ final class InstagramAdapter implements PublisherInterface
             ($request->onContainer)($container['id']);
         }
 
+        return $this->publishCreated($request, $container['id']);
+    }
+
+    /**
+     * The post the container became.
+     */
+    private function publishCreated(PublishRequest $request, string $containerId): PublishResult
+    {
         $published = $this->api->http->postJson(
             $this->api->versions->graphUrl(ApiVersions::GRAPH_HOST, '/' . $request->externalId . '/media_publish'),
-            ['creation_id' => $container['id']],
+            ['creation_id' => $containerId],
             [],
-            ['Authorization' => 'Bearer ' . $request->accessToken],
+            ['Authorization' => self::BEARER . $request->accessToken],
         );
 
-        if (!$published->isSuccessful()) {
-            return PublishResult::failed(
-                $published->errorMessage() ?? 'Instagram refused to publish the container (HTTP ' . $published->status . ').',
-            );
-        }
-
-        // The container's status reads PUBLISHED once it has gone out, so
-        // only a status that names a failure is a failure.
-        //
-        // @see https://developers.facebook.com/docs/instagram-platform/content-publishing
-        $status = $published->body['status_code'] ?? null;
-        if (is_string($status) && in_array($status, ['ERROR', 'EXPIRED'], true)) {
-            return PublishResult::failed('Instagram did not finish the media: ' . $status . '.');
+        $failure = $this->failureOf($published);
+        if ($failure !== null) {
+            return PublishResult::failed($failure);
         }
 
         $id = $published->body['id'] ?? null;
@@ -112,8 +119,31 @@ final class InstagramAdapter implements PublisherInterface
         return PublishResult::published(
             $id,
             self::POST_URL . $id,
-            containerId: $container['id'],
+            containerId: $containerId,
         );
+    }
+
+    /**
+     * Why the platform refused to publish the container, if it did.
+     *
+     * The container's status reads PUBLISHED once it has gone out, so only
+     * a status that names a failure is a failure.
+     *
+     * @see https://developers.facebook.com/docs/instagram-platform/content-publishing
+     */
+    private function failureOf(PlatformHttpResponse $response): ?string
+    {
+        if (!$response->isSuccessful()) {
+            return $response->errorMessage()
+                ?? 'Instagram refused to publish the container (HTTP ' . $response->status . ').';
+        }
+
+        $status = $response->body['status_code'] ?? null;
+        if (is_string($status) && in_array($status, ['ERROR', 'EXPIRED'], true)) {
+            return 'Instagram did not finish the media: ' . $status . '.';
+        }
+
+        return null;
     }
 
     /**
@@ -154,34 +184,48 @@ final class InstagramAdapter implements PublisherInterface
             '/' . $request->externalId . '/content_publishing_limit',
         ), [
             'query'   => ['fields' => 'quota_usage,config'],
-            'headers' => ['Authorization' => 'Bearer ' . $request->accessToken],
+            'headers' => ['Authorization' => self::BEARER . $request->accessToken],
         ]);
 
-        if (!$response->isSuccessful()) {
-            return null;
-        }
+        $quota = $this->quotaOf($response);
 
-        $data = $response->body['data'][0] ?? null;
-        if (!is_array($data)) {
-            return null;
-        }
-
-        $usage = $data['quota_usage'] ?? null;
-        $total = $data['config']['quota_total'] ?? null;
-
-        if (!is_numeric($usage) || !is_numeric($total)) {
-            return null;
-        }
-
-        if ((int) $usage < (int) $total) {
+        if ($quota['usage'] === null || $quota['total'] === null || $quota['usage'] < $quota['total']) {
             return null;
         }
 
         return PublishResult::failed(sprintf(
             'Instagram has published %d of its %d posts in the last 24 hours; the platform refuses more until the window moves.',
-            (int) $usage,
-            (int) $total,
+            $quota['usage'],
+            $quota['total'],
         ));
+    }
+
+    /**
+     * The quota the account has used and the quota it has.
+     *
+     * Null when the platform did not answer with both numbers: a limit the
+     * plugin cannot read is a limit it cannot enforce.
+     *
+     * @return array{usage: ?int, total: ?int}
+     */
+    private function quotaOf(PlatformHttpResponse $response): array
+    {
+        if (!$response->isSuccessful()) {
+            return ['usage' => null, 'total' => null];
+        }
+
+        $data = $response->body['data'][0] ?? null;
+        if (!is_array($data)) {
+            return ['usage' => null, 'total' => null];
+        }
+
+        $usage = $data['quota_usage'] ?? null;
+        $total = $data['config']['quota_total'] ?? null;
+
+        return [
+            'usage' => is_numeric($usage) ? (int) $usage : null,
+            'total' => is_numeric($total) ? (int) $total : null,
+        ];
     }
 
     /**
@@ -197,7 +241,7 @@ final class InstagramAdapter implements PublisherInterface
             $this->api->versions->graphUrl(ApiVersions::GRAPH_HOST, '/' . $request->externalId . '/media'),
             $body,
             [],
-            ['Authorization' => 'Bearer ' . $request->accessToken],
+            ['Authorization' => self::BEARER . $request->accessToken],
         );
 
         if (!$response->isSuccessful()) {

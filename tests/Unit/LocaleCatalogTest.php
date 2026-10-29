@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Spora\Plugins\Social\SocialPlugin;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
 $catalogDir = dirname(__DIR__, 2) . '/locales';
 $pluginRoot = dirname(__DIR__, 2);
@@ -88,7 +89,7 @@ it('never leaves a message untranslated', function (string $file) {
 })->with([$catalogDir . '/de.json']);
 
 it('never carries a key the source no longer produces', function () use ($pluginRoot, $sourceLiterals) {
-    $messages = (array) json_decode((string) file_get_contents($pluginRoot . '/locales/de.json'), true, 512, JSON_THROW_ON_ERROR);
+    $messages = (array) json_decode((string) file_get_contents($pluginRoot . SocialFixtures::LOCALE_CATALOGUE), true, 512, JSON_THROW_ON_ERROR);
     $literals = $sourceLiterals($pluginRoot);
 
     $orphans = [];
@@ -103,7 +104,7 @@ it('never carries a key the source no longer produces', function () use ($plugin
 });
 
 it('never keys a message on an interpolated template', function () use ($pluginRoot) {
-    $messages = (array) json_decode((string) file_get_contents($pluginRoot . '/locales/de.json'), true, 512, JSON_THROW_ON_ERROR);
+    $messages = (array) json_decode((string) file_get_contents($pluginRoot . SocialFixtures::LOCALE_CATALOGUE), true, 512, JSON_THROW_ON_ERROR);
 
     $interpolated = [];
 
@@ -113,7 +114,7 @@ it('never keys a message on an interpolated template', function () use ($pluginR
         // `%s` / `%d` templates, and a key with no placeholder is not a
         // template. Such a key can never resolve.
         foreach ([(string) $english, (string) $german] as $text) {
-            if (preg_match('/\{\$[A-Za-z_][A-Za-z0-9_]*\}/', $text) === 1) {
+            if (preg_match('/\{\$\w+\}/', $text) === 1) {
                 $interpolated[] = $text;
             }
         }
@@ -123,7 +124,7 @@ it('never keys a message on an interpolated template', function () use ($pluginR
 });
 
 it('gives every placeholder the same count in the key and the translation', function () use ($pluginRoot) {
-    $messages = (array) json_decode((string) file_get_contents($pluginRoot . '/locales/de.json'), true, 512, JSON_THROW_ON_ERROR);
+    $messages = (array) json_decode((string) file_get_contents($pluginRoot . SocialFixtures::LOCALE_CATALOGUE), true, 512, JSON_THROW_ON_ERROR);
 
     $mismatched = [];
 

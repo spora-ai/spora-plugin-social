@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Spora\Plugins\Social\OAuth\MetaProvider;
 use Spora\Plugins\Social\OAuth\OAuthTokenSet;
 use Spora\Plugins\Social\Tests\Support\GuzzleRecorder;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
 /**
  * The Meta login, transcribed from the documentation.
@@ -17,7 +18,7 @@ it('builds the login url of the configuration', function () {
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client(),
@@ -34,7 +35,7 @@ it('builds the login url of the configuration', function () {
         ->and(parse_url($url, PHP_URL_PATH))->toBe('/v26.0/dialog/oauth')
         ->and($query['client_id'])->toBe('client-id')
         ->and($query['config_id'])->toBe('config-id')
-        ->and($query['redirect_uri'])->toBe('https://spora.test/callback')
+        ->and($query['redirect_uri'])->toBe(SocialFixtures::OAUTH_CALLBACK)
         ->and($query['response_type'])->toBe('code')
         ->and($query['state'])->toBe('signed-state')
         // The configuration carries the permissions; a scope list would be
@@ -47,7 +48,7 @@ it('exchanges the code server to server and stores the client business id', func
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client([
@@ -62,7 +63,7 @@ it('exchanges the code server to server and stores the client business id', func
         // A system-user token "defaults to never expire", so there is no
         // expiry to store.
         ->and($tokens->expiresAt)->toBeNull()
-        ->and($tokens->extra['business_external_id'])->toBe('987654321');
+        ->and($tokens->extra['business_external_id'])->toBe(SocialFixtures::META_MEMBER_ID);
 
     // "GET https://graph.facebook.com/{version}/oauth/access_token?
     //  client_id=…&client_secret=…&code=…"
@@ -84,7 +85,7 @@ it('records the scopes the token response names', function () {
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client([
@@ -105,7 +106,7 @@ it('leaves the scopes unknown when the token response names none', function () {
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client([
@@ -126,7 +127,7 @@ it('renews nothing, because the token does not expire', function () {
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client(),
@@ -144,7 +145,7 @@ it('resolves the instagram accounts and the pages the client shared', function (
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client([
@@ -159,7 +160,7 @@ it('resolves the instagram accounts and the pages the client shared', function (
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'the-suat',
-        extra: ['business_external_id' => '987654321'],
+        extra: ['business_external_id' => SocialFixtures::META_MEMBER_ID],
     ));
 
     expect($accounts)->toHaveCount(2)
@@ -188,7 +189,7 @@ it('leaves the pages out when the token cannot list them', function () {
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         null,
         $recorder->client([
@@ -204,7 +205,7 @@ it('leaves the pages out when the token cannot list them', function () {
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'the-suat',
-        extra: ['business_external_id' => '987654321'],
+        extra: ['business_external_id' => SocialFixtures::META_MEMBER_ID],
     ));
 
     // The pages need the `business_management` permission; without it the

@@ -110,6 +110,8 @@ use Throwable;
 #[ToolParameter(name: 'limit', type: 'integer', description: 'How many posts to return (default 20, capped at 100).', required: false, default: 20)]
 final class SocialPostTool extends AbstractSocialTool
 {
+    private const STATUS_SUFFIX = '. Its status is ';
+
     public function __construct(
         private readonly SocialPostService $posts,
         private readonly SocialPublisher $publisher,
@@ -185,7 +187,7 @@ final class SocialPostTool extends AbstractSocialTool
         $post = $this->publisher->publish($this->postId($arguments), $principalId);
 
         return ToolResult::ok(
-            'Published post #' . $post->id . '. Its status is ' . $post->status . '.',
+            'Published post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.',
             ['post' => SocialPostResource::toArray($post)],
         );
     }
@@ -237,7 +239,7 @@ final class SocialPostTool extends AbstractSocialTool
         $post = $this->publisher->retry($this->postId($arguments), $principalId);
 
         return ToolResult::ok(
-            'Retried the failed accounts of post #' . $post->id . '. Its status is ' . $post->status . '.',
+            'Retried the failed accounts of post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.',
             ['post' => SocialPostResource::toArray($post)],
         );
     }
@@ -247,7 +249,7 @@ final class SocialPostTool extends AbstractSocialTool
         $post = $this->publisher->delete($this->postId($arguments), $principalId);
 
         return ToolResult::ok(
-            'Took down post #' . $post->id . '. Its status is ' . $post->status . '.',
+            'Took down post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.',
             ['post' => SocialPostResource::toArray($post)],
         );
     }

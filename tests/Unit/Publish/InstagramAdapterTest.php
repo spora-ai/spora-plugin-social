@@ -7,6 +7,7 @@ use Spora\Plugins\Social\Publish\DeleteRequest;
 use Spora\Plugins\Social\Publish\InstagramAdapter;
 use Spora\Plugins\Social\Publish\PublishMedia;
 use Spora\Plugins\Social\Publish\PublishRequest;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -42,7 +43,7 @@ it('creates a container on the graph host and publishes it', function () {
     //   POST "https://graph.facebook.com/<API_VERSION>/<IG_ID>/media"
     //   -H "Content-Type: application/json"
     //   -H "Authorization: Bearer <ACCESS_TOKEN>"
-    //   -d '{ "image_url": "https://www.example.com/images/bronz-fonz.jpg" }'
+    //   -d '{ "image_url": SocialFixtures::INSTAGRAM_IMAGE_URL }'
     //   → { "id": "<IG_CONTAINER_ID>" }
     //
     // Content publishing → "Publish the container":
@@ -53,24 +54,24 @@ it('creates a container on the graph host and publishes it', function () {
     //   → { "id": "<IG_MEDIA_ID>" }
     $adapter = instagramAdapter([
         ['body' => '{"data":[{"quota_usage":2,"config":{"quota_total":50,"quota_duration":86400}}]}'],
-        ['body' => '{"id":"17900000000000001"}'],
+        ['body' => SocialFixtures::INSTAGRAM_CONTAINER_RESPONSE],
         ['body' => '{"id":"17900000000000002"}'],
     ], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '17841405822304914',
+        externalId: SocialFixtures::INSTAGRAM_ACCOUNT_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
-        body: 'Fruit candies',
+        body: SocialFixtures::INSTAGRAM_CAPTION,
         media: new PublishMedia(
-            mimeType: 'image/jpeg',
-            publicUrl: 'https://www.example.com/images/bronz-fonz.jpg',
+            mimeType: SocialFixtures::MIME_JPEG,
+            publicUrl: SocialFixtures::INSTAGRAM_IMAGE_URL,
             filename: 'bronz-fonz.jpg',
         ),
     ));
 
     expect($result->success)->toBeTrue()
-        ->and($result->externalId)->toBe('17900000000000002')
+        ->and($result->externalId)->toBe(SocialFixtures::INSTAGRAM_MEDIA_ID)
         ->and($result->externalUrl)->toBe('https://www.instagram.com/p/17900000000000002');
 
     expect($seen)->toHaveCount(3);
@@ -83,8 +84,8 @@ it('creates a container on the graph host and publishes it', function () {
         ->and($containerHeaders['content-type'])->toBe('application/json');
 
     expect(sentJson($seen[1]['options']))->toBe([
-        'image_url' => 'https://www.example.com/images/bronz-fonz.jpg',
-        'caption'   => 'Fruit candies',
+        'image_url' => SocialFixtures::INSTAGRAM_IMAGE_URL,
+        'caption'   => SocialFixtures::INSTAGRAM_CAPTION,
     ]);
 
     expect($seen[2]['method'])->toBe('POST')
@@ -96,13 +97,13 @@ it('names the video parameter the documentation names', function () {
     $seen = [];
 
     $adapter = instagramAdapter([
-        ['body' => '{"data":[{"quota_usage":0,"config":{"quota_total":50,"quota_duration":86400}}]}'],
-        ['body' => '{"id":"17900000000000001"}'],
+        ['body' => SocialFixtures::INSTAGRAM_QUOTA],
+        ['body' => SocialFixtures::INSTAGRAM_CONTAINER_RESPONSE],
         ['body' => '{"id":"17900000000000002"}'],
     ], $seen);
 
     $adapter->publish(new PublishRequest(
-        externalId: '17841405822304914',
+        externalId: SocialFixtures::INSTAGRAM_ACCOUNT_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
         body: 'A clip',
@@ -135,13 +136,13 @@ it('checks the publishing quota before it publishes', function () {
     ], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '17841405822304914',
+        externalId: SocialFixtures::INSTAGRAM_ACCOUNT_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
-        body: 'Fruit candies',
+        body: SocialFixtures::INSTAGRAM_CAPTION,
         media: new PublishMedia(
-            mimeType: 'image/jpeg',
-            publicUrl: 'https://www.example.com/images/bronz-fonz.jpg',
+            mimeType: SocialFixtures::MIME_JPEG,
+            publicUrl: SocialFixtures::INSTAGRAM_IMAGE_URL,
             filename: 'bronz-fonz.jpg',
         ),
     ));
@@ -158,7 +159,7 @@ it('refuses a post without media, because instagram has no text-only post', func
     $adapter = instagramAdapter([['body' => '{}']], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '17841405822304914',
+        externalId: SocialFixtures::INSTAGRAM_ACCOUNT_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
         body: 'Just words',
@@ -181,7 +182,7 @@ it('says that instagram cannot delete published media', function () {
     $adapter = instagramAdapter([['body' => '{}']], $seen);
 
     $result = $adapter->delete(new DeleteRequest(
-        externalId: '17900000000000002',
+        externalId: SocialFixtures::INSTAGRAM_MEDIA_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
     ));
@@ -196,18 +197,18 @@ it('reports the platform error when the container is refused', function () {
     $seen = [];
 
     $adapter = instagramAdapter([
-        ['body' => '{"data":[{"quota_usage":0,"config":{"quota_total":50,"quota_duration":86400}}]}'],
+        ['body' => SocialFixtures::INSTAGRAM_QUOTA],
         ['body' => '{"error":{"message":"Media is not ready","code":190}}', 'status' => 400],
     ], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '17841405822304914',
+        externalId: SocialFixtures::INSTAGRAM_ACCOUNT_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
-        body: 'Fruit candies',
+        body: SocialFixtures::INSTAGRAM_CAPTION,
         media: new PublishMedia(
-            mimeType: 'image/jpeg',
-            publicUrl: 'https://www.example.com/images/bronz-fonz.jpg',
+            mimeType: SocialFixtures::MIME_JPEG,
+            publicUrl: SocialFixtures::INSTAGRAM_IMAGE_URL,
             filename: 'bronz-fonz.jpg',
         ),
     ));
@@ -223,23 +224,23 @@ it('accepts the published status a container carries once it has gone out', func
     // container that has been published reads PUBLISHED, so only ERROR and
     // EXPIRED name a failure.
     $adapter = instagramAdapter([
-        ['body' => '{"data":[{"quota_usage":0,"config":{"quota_total":50,"quota_duration":86400}}]}'],
-        ['body' => '{"id":"17900000000000001"}'],
+        ['body' => SocialFixtures::INSTAGRAM_QUOTA],
+        ['body' => SocialFixtures::INSTAGRAM_CONTAINER_RESPONSE],
         ['body' => '{"id":"17900000000000002","status_code":"PUBLISHED"}'],
     ], $seen);
 
     $result = $adapter->publish(new PublishRequest(
-        externalId: '17841405822304914',
+        externalId: SocialFixtures::INSTAGRAM_ACCOUNT_ID,
         kind: SocialAccountKind::Business,
         accessToken: 'ACCESS_TOKEN',
-        body: 'Fruit candies',
+        body: SocialFixtures::INSTAGRAM_CAPTION,
         media: new PublishMedia(
-            mimeType: 'image/jpeg',
-            publicUrl: 'https://www.example.com/images/bronz-fonz.jpg',
+            mimeType: SocialFixtures::MIME_JPEG,
+            publicUrl: SocialFixtures::INSTAGRAM_IMAGE_URL,
             filename: 'bronz-fonz.jpg',
         ),
     ));
 
     expect($result->success)->toBeTrue()
-        ->and($result->externalId)->toBe('17900000000000002');
+        ->and($result->externalId)->toBe(SocialFixtures::INSTAGRAM_MEDIA_ID);
 });

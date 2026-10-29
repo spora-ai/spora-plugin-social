@@ -48,6 +48,8 @@ final class MetaProvider extends AbstractOAuthProvider
      */
     public const SCOPE_BUSINESS_MANAGEMENT = 'business_management';
 
+    private const BEARER = 'Bearer ';
+
     private readonly ApiVersions $versions;
 
     private readonly string $configId;
@@ -116,7 +118,7 @@ final class MetaProvider extends AbstractOAuthProvider
             'code'          => $code,
         ]);
 
-        $accessToken = $this->stringOrNull($body['access_token'] ?? null);
+        $accessToken = $this->exchange->stringOrNull($body['access_token'] ?? null);
         if ($accessToken === null) {
             throw SocialException::platform('Meta did not return an access token.', 'OAUTH_EXCHANGE_FAILED');
         }
@@ -134,7 +136,7 @@ final class MetaProvider extends AbstractOAuthProvider
             // are what the connection records; when it does not, the
             // connection's scopes stay unknown rather than empty-because-
             // none-were-granted.
-            scopes: $this->scopesOf($body),
+            scopes: $this->exchange->scopesOf($body, $this->getScopeSeparator()),
             extra: ['business_external_id' => $this->clientBusinessId($accessToken)],
         );
     }
@@ -181,10 +183,10 @@ final class MetaProvider extends AbstractOAuthProvider
         $body = $this->apiGet(
             $this->graphUrl('/me'),
             ['fields' => 'client_business_id'],
-            ['Authorization' => 'Bearer ' . $accessToken],
+            ['Authorization' => self::BEARER . $accessToken],
         );
 
-        return $this->stringOrNull($body['client_business_id'] ?? null);
+        return $this->exchange->stringOrNull($body['client_business_id'] ?? null);
     }
 
     /**
@@ -199,13 +201,13 @@ final class MetaProvider extends AbstractOAuthProvider
         $body = $this->apiGet(
             $this->graphUrl('/me/assigned_instagram_accounts'),
             ['fields' => 'id,username'],
-            ['Authorization' => 'Bearer ' . $accessToken],
+            ['Authorization' => self::BEARER . $accessToken],
         );
 
         $accounts = [];
 
         foreach ($this->rowsOf($body) as $row) {
-            $id = $this->stringOrNull($row['id'] ?? null);
+            $id = $this->exchange->stringOrNull($row['id'] ?? null);
             if ($id === null) {
                 continue;
             }
@@ -214,8 +216,8 @@ final class MetaProvider extends AbstractOAuthProvider
                 platform: SocialPlatform::Instagram,
                 externalId: $id,
                 kind: SocialAccountKind::Business,
-                displayName: $this->stringOrNull($row['name'] ?? null),
-                username: $this->stringOrNull($row['username'] ?? null),
+                displayName: $this->exchange->stringOrNull($row['name'] ?? null),
+                username: $this->exchange->stringOrNull($row['username'] ?? null),
                 extra: ['ig_user_id' => $id],
             );
         }
@@ -242,7 +244,7 @@ final class MetaProvider extends AbstractOAuthProvider
      */
     private function assignedPages(OAuthTokenSet $tokens): array
     {
-        $clientBusinessId = $this->stringOrNull($tokens->extra['business_external_id'] ?? null);
+        $clientBusinessId = $this->exchange->stringOrNull($tokens->extra['business_external_id'] ?? null);
         if ($clientBusinessId === null) {
             return [];
         }
@@ -251,7 +253,7 @@ final class MetaProvider extends AbstractOAuthProvider
             $body = $this->apiGet(
                 $this->graphUrl('/' . $clientBusinessId . '/owned_pages'),
                 ['fields' => 'id,name,username'],
-                ['Authorization' => 'Bearer ' . $tokens->accessToken],
+                ['Authorization' => self::BEARER . $tokens->accessToken],
             );
         } catch (SocialException) {
             // The token cannot list the pages — it does not carry
@@ -263,7 +265,7 @@ final class MetaProvider extends AbstractOAuthProvider
         $pages = [];
 
         foreach ($this->rowsOf($body) as $row) {
-            $id = $this->stringOrNull($row['id'] ?? null);
+            $id = $this->exchange->stringOrNull($row['id'] ?? null);
             if ($id === null) {
                 continue;
             }
@@ -272,8 +274,8 @@ final class MetaProvider extends AbstractOAuthProvider
                 platform: SocialPlatform::Facebook,
                 externalId: $id,
                 kind: SocialAccountKind::Page,
-                displayName: $this->stringOrNull($row['name'] ?? null),
-                username: $this->stringOrNull($row['username'] ?? null),
+                displayName: $this->exchange->stringOrNull($row['name'] ?? null),
+                username: $this->exchange->stringOrNull($row['username'] ?? null),
             );
         }
 

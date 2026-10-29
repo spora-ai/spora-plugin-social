@@ -8,6 +8,7 @@ use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostMedia;
 use Spora\Plugins\Social\Model\SocialPostMetric;
 use Spora\Plugins\Social\Model\SocialPostTarget;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
 /**
  * A post with one published target per entry, each with its own reading.
@@ -18,7 +19,7 @@ function postWithReadings(int $principalId, array $targets): SocialPost
 {
     $post = new SocialPost();
     $post->principal_id = $principalId;
-    $post->body = 'We shipped…';
+    $post->body = SocialFixtures::POST_BODY;
     $post->status = SocialPost::STATUS_PUBLISHED;
     $post->save();
 
@@ -61,7 +62,7 @@ it('gives the media row the asset url the host renders as an image', function ()
 
     $post = new SocialPost();
     $post->principal_id = $principalId;
-    $post->body = 'We shipped…';
+    $post->body = SocialFixtures::POST_BODY;
     $post->status = SocialPost::STATUS_DRAFT;
     $post->save();
 
@@ -84,7 +85,7 @@ it('leaves the asset url empty when the asset row is gone', function () {
 
     $post = new SocialPost();
     $post->principal_id = $principalId;
-    $post->body = 'We shipped…';
+    $post->body = SocialFixtures::POST_BODY;
     $post->status = SocialPost::STATUS_DRAFT;
     $post->save();
 
@@ -102,7 +103,7 @@ it('leaves the asset url empty when the asset row is gone', function () {
         ->and($payload['media'][0]['asset_url'])->toBeNull()
         ->and($payload['media'][0]['mime_type'])->toBeNull()
         ->and($payload['media'][0]['filename'])->toBeNull()
-        ->and($payload['body'])->toBe('We shipped…');
+        ->and($payload['body'])->toBe(SocialFixtures::POST_BODY);
 });
 
 it('leaves the aggregated reach empty when no target reported one', function () {

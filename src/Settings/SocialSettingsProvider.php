@@ -24,6 +24,15 @@ use Spora\Settings\SettingDefinition;
 final class SocialSettingsProvider implements PluginSettingsProviderInterface
 {
     /**
+     * The caveat the restricted LinkedIn permissions carry.
+     *
+     * Three of the permissions are granted to selected developers only, so
+     * asking for one the app does not hold refuses the whole authorization
+     * request — not only the part that needs the permission.
+     */
+    private const LINKEDIN_RESTRICTED_PERMISSION = 'LinkedIn grants it to selected developers only, and an app that asks for a permission it does not hold is refused the whole authorization request — so this is off unless your app has it.';
+
+    /**
      * The settings are read where the operator configures the app, so the
      * redirect URL the platform has to be given belongs in the description
      * of the setting it is registered on.
@@ -82,6 +91,26 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
     }
 
     /**
+     * A setting the operator turns on or off.
+     *
+     * The five LinkedIn permissions are all of the same shape, and a
+     * `SettingDefinition` written out five times is a shape that can
+     * drift.
+     */
+    private function toggle(string $group, string $key, string $label, string $description): SettingDefinition
+    {
+        return new SettingDefinition(
+            key: $key,
+            label: $label,
+            type: SettingDefinition::TYPE_TOGGLE,
+            default: false,
+            group: $group,
+            section: 'social',
+            description: $description,
+        );
+    }
+
+    /**
      * @return list<SettingDefinition>
      */
     public function settings(): array
@@ -108,58 +137,40 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 description: 'The client secret of your LinkedIn app. Stored encrypted.',
                 secret: true,
             ),
-            new SettingDefinition(
-                key: 'LINKEDIN_ORGANIZATION_SCOPE',
-                label: 'Ask LinkedIn for organisation pages',
-                type: SettingDefinition::TYPE_TOGGLE,
-                default: false,
-                group: $group,
-                section: 'social',
-                description: 'Ask for w_organization_social, the permission that posts on behalf of an organisation. '
+            $this->toggle(
+                $group,
+                'LINKEDIN_ORGANIZATION_SCOPE',
+                'Ask LinkedIn for organisation pages',
+                'Ask for w_organization_social, the permission that posts on behalf of an organisation. '
                     . 'Turn this on only once your app has the Community Management API approved. '
                     . 'Asking for a scope the app does not hold makes the whole authorization request fail.',
             ),
-            new SettingDefinition(
-                key: 'LINKEDIN_READ_ORG_ACLS',
-                label: 'Ask LinkedIn for the administered organisations',
-                type: SettingDefinition::TYPE_TOGGLE,
-                default: false,
-                group: $group,
-                section: 'social',
-                description: 'Ask for r_organization_admin, the permission that finds the organisations the member administers. '
-                    . 'LinkedIn grants it to selected developers only, and an app that asks for a permission it does not hold '
-                    . 'is refused the whole authorization request — so this is off unless your app has it.',
+            $this->toggle(
+                $group,
+                'LINKEDIN_READ_ORG_ACLS',
+                'Ask LinkedIn for the administered organisations',
+                'Ask for r_organization_admin, the permission that finds the organisations the member administers. '
+                    . self::LINKEDIN_RESTRICTED_PERMISSION,
             ),
-            new SettingDefinition(
-                key: 'LINKEDIN_READ_ORG_STATS',
-                label: 'Ask LinkedIn for the organisation statistics',
-                type: SettingDefinition::TYPE_TOGGLE,
-                default: false,
-                group: $group,
-                section: 'social',
-                description: 'Ask for rw_organization_admin, the permission that reads an organisation\'s share statistics. '
-                    . 'LinkedIn grants it to selected developers only, and an app that asks for a permission it does not hold '
-                    . 'is refused the whole authorization request — so this is off unless your app has it.',
+            $this->toggle(
+                $group,
+                'LINKEDIN_READ_ORG_STATS',
+                'Ask LinkedIn for the organisation statistics',
+                'Ask for rw_organization_admin, the permission that reads an organisation\'s share statistics. '
+                    . self::LINKEDIN_RESTRICTED_PERMISSION,
             ),
-            new SettingDefinition(
-                key: 'LINKEDIN_READ_MEMBER_FEED',
-                label: 'Ask LinkedIn for the member post reactions',
-                type: SettingDefinition::TYPE_TOGGLE,
-                default: false,
-                group: $group,
-                section: 'social',
-                description: 'Ask for r_member_social_feed, the permission that reads a member post\'s reactions. '
-                    . 'LinkedIn grants it to selected developers only, and an app that asks for a permission it does not hold '
-                    . 'is refused the whole authorization request — so this is off unless your app has it.',
+            $this->toggle(
+                $group,
+                'LINKEDIN_READ_MEMBER_FEED',
+                'Ask LinkedIn for the member post reactions',
+                'Ask for r_member_social_feed, the permission that reads a member post\'s reactions. '
+                    . self::LINKEDIN_RESTRICTED_PERMISSION,
             ),
-            new SettingDefinition(
-                key: 'LINKEDIN_READ_ORG_FEED',
-                label: 'Ask LinkedIn for the organisation post reactions',
-                type: SettingDefinition::TYPE_TOGGLE,
-                default: false,
-                group: $group,
-                section: 'social',
-                description: 'Ask for r_organization_social_feed, the permission that reads an organisation post\'s reactions. '
+            $this->toggle(
+                $group,
+                'LINKEDIN_READ_ORG_FEED',
+                'Ask LinkedIn for the organisation post reactions',
+                'Ask for r_organization_social_feed, the permission that reads an organisation post\'s reactions. '
                     . 'LinkedIn restricts it to members who administer the organisation, and an app that asks for a permission '
                     . 'it does not hold is refused the whole authorization request — so this is off unless your app has it.',
             ),

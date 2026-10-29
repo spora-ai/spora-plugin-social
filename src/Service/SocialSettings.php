@@ -187,59 +187,6 @@ final class SocialSettings
     }
 
     /**
-     * Whether LinkedIn is asked for the organisation scopes.
-     *
-     * `w_organization_social` needs Community Management API approval.
-     * Asking for a scope the app does not hold makes the whole
-     * authorization request fail — not just the organisation part — so it
-     * is only requested when the operator says their app has it.
-     */
-    public function linkedInOrganizationScopeEnabled(): bool
-    {
-        return $this->config->getBool(self::KEY_LINKEDIN_ORGANIZATION_SCOPE);
-    }
-
-    /**
-     * Whether LinkedIn is asked for `r_organization_admin`.
-     *
-     * The permission that finds the organisations the member administers.
-     */
-    public function linkedInReadOrganizationAclsEnabled(): bool
-    {
-        return $this->config->getBool(self::KEY_LINKEDIN_READ_ORG_ACLS);
-    }
-
-    /**
-     * Whether LinkedIn is asked for `rw_organization_admin`.
-     *
-     * The permission that reads an organisation's share statistics.
-     */
-    public function linkedInReadOrganizationStatsEnabled(): bool
-    {
-        return $this->config->getBool(self::KEY_LINKEDIN_READ_ORG_STATS);
-    }
-
-    /**
-     * Whether LinkedIn is asked for `r_member_social_feed`.
-     *
-     * The permission that reads a member post's reactions.
-     */
-    public function linkedInReadMemberFeedEnabled(): bool
-    {
-        return $this->config->getBool(self::KEY_LINKEDIN_READ_MEMBER_FEED);
-    }
-
-    /**
-     * Whether LinkedIn is asked for `r_organization_social_feed`.
-     *
-     * The permission that reads an organisation post's reactions.
-     */
-    public function linkedInReadOrganizationFeedEnabled(): bool
-    {
-        return $this->config->getBool(self::KEY_LINKEDIN_READ_ORG_FEED);
-    }
-
-    /**
      * The Graph API version every Meta endpoint carries.
      */
     public function graphApiVersion(): string

@@ -144,7 +144,27 @@ final class SocialDraftService
             ];
         }
 
+        return [
+            'title'    => is_string($decoded['title'] ?? null) ? $decoded['title'] : 'Draft',
+            'bodies'   => $this->bodiesOf($decoded, $platforms),
+            'hashtags' => $this->hashtagsOf($decoded),
+        ];
+    }
+
+    /**
+     * A body per platform.
+     *
+     * A platform the model did not write for falls back to the model's
+     * single body, and to nothing at all when there is none.
+     *
+     * @param  array<string, mixed> $decoded
+     * @param  list<string>         $platforms
+     * @return array<string, string>
+     */
+    private function bodiesOf(array $decoded, array $platforms): array
+    {
         $bodies = [];
+
         $rawBodies = $decoded['bodies'] ?? [];
         if (is_array($rawBodies)) {
             foreach ($rawBodies as $platform => $body) {
@@ -154,24 +174,34 @@ final class SocialDraftService
             }
         }
 
+        $fallback = is_string($decoded['body'] ?? null) ? $decoded['body'] : '';
+
         foreach ($platforms as $platform) {
             if (!isset($bodies[$platform])) {
-                $bodies[$platform] = is_string($decoded['body'] ?? null) ? $decoded['body'] : '';
+                $bodies[$platform] = $fallback;
             }
         }
 
+        return $bodies;
+    }
+
+    /**
+     * The hashtags the model named, without their hashes.
+     *
+     * @param  array<string, mixed> $decoded
+     * @return list<string>
+     */
+    private function hashtagsOf(array $decoded): array
+    {
         $hashtags = [];
+
         foreach ((array) ($decoded['hashtags'] ?? []) as $hashtag) {
             if (is_string($hashtag) && $hashtag !== '') {
                 $hashtags[] = ltrim($hashtag, '#');
             }
         }
 
-        return [
-            'title'    => is_string($decoded['title'] ?? null) ? $decoded['title'] : 'Draft',
-            'bodies'   => $bodies,
-            'hashtags' => $hashtags,
-        ];
+        return $hashtags;
     }
 
     /**
@@ -182,7 +212,7 @@ final class SocialDraftService
         $content = trim($content);
 
         if (str_starts_with($content, '```')) {
-            $content = (string) preg_replace('/^```[a-z]*\s*|\s*```$/i', '', $content);
+            $content = (string) preg_replace('/(?:^```[a-z]*\s*)|(?:\s*```$)/i', '', $content);
         }
 
         try {

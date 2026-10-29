@@ -13,6 +13,9 @@ use Spora\Plugins\Social\Model\SocialPlatform;
  * to the harness and not to the install: the plugin's own settings are
  * `SPORA_SOCIAL_*`, and the live suite must not read those — it runs beside
  * the install, not inside it.
+ *
+ * The names of the variables are {@see LiveVariableNames}' business; this
+ * class reads what they hold.
  */
 final class LiveCredentials
 {
@@ -45,24 +48,28 @@ final class LiveCredentials
 
     public const ENV_META_CONFIG_ID = 'SPORA_LIVE_META_CONFIG_ID';
 
+    public function __construct(
+        private readonly LiveVariableNames $names = new LiveVariableNames(),
+    ) {}
+
     public function clientId(SocialPlatform $platform): ?string
     {
-        return $this->value($this->name($platform, 'CLIENT_ID'));
+        return $this->value($this->names->clientIdName($platform));
     }
 
     public function clientSecret(SocialPlatform $platform): ?string
     {
-        return $this->value($this->name($platform, 'CLIENT_SECRET'));
+        return $this->value($this->names->clientSecretName($platform));
     }
 
     public function authorizationCode(SocialPlatform $platform): ?string
     {
-        return $this->value($this->name($platform, 'AUTHORIZATION_CODE'));
+        return $this->value($this->names->authorizationCodeName($platform));
     }
 
     public function pkceVerifier(SocialPlatform $platform): ?string
     {
-        return $this->value($this->name($platform, 'PKCE_VERIFIER'));
+        return $this->value($this->names->pkceVerifierName($platform));
     }
 
     public function appUrl(): ?string
@@ -119,17 +126,6 @@ final class LiveCredentials
     }
 
     /**
-     * The login a platform belongs to.
-     *
-     * Meta's one login covers Instagram and Facebook together, so the
-     * credentials are the provider's and not the network's.
-     */
-    public function providerOf(SocialPlatform $platform): string
-    {
-        return $platform === SocialPlatform::LinkedIn ? 'linkedin' : 'meta';
-    }
-
-    /**
      * The redirect URL of an earlier run, and the variable it came from.
      *
      * The provider's spelling is the one the harness documents, because the
@@ -141,7 +137,7 @@ final class LiveCredentials
      */
     public function redirectUrl(string $provider): array
     {
-        foreach ($this->redirectUrlNames($provider) as $name) {
+        foreach ($this->names->redirectUrlNames($provider) as $name) {
             $value = $this->value($name);
 
             if ($value !== null) {
@@ -150,47 +146,6 @@ final class LiveCredentials
         }
 
         return ['url' => null, 'variable' => null];
-    }
-
-    /**
-     * The variables that may hold the redirect URL, canonical first.
-     *
-     * @return list<string>
-     */
-    private function redirectUrlNames(string $provider): array
-    {
-        $names = ['SPORA_LIVE_' . strtoupper($provider) . '_REDIRECT_URL'];
-
-        foreach ($provider === 'meta' ? ['facebook', 'instagram'] : [$provider] as $platform) {
-            $names[] = 'SPORA_LIVE_' . strtoupper($platform) . '_REDIRECT_URL';
-        }
-
-        return $names;
-    }
-
-    public function clientIdName(SocialPlatform $platform): string
-    {
-        return $this->name($platform, 'CLIENT_ID');
-    }
-
-    public function clientSecretName(SocialPlatform $platform): string
-    {
-        return $this->name($platform, 'CLIENT_SECRET');
-    }
-
-    public function authorizationCodeName(SocialPlatform $platform): string
-    {
-        return $this->name($platform, 'AUTHORIZATION_CODE');
-    }
-
-    public function pkceVerifierName(SocialPlatform $platform): string
-    {
-        return $this->name($platform, 'PKCE_VERIFIER');
-    }
-
-    private function name(SocialPlatform $platform, string $suffix): string
-    {
-        return 'SPORA_LIVE_' . strtoupper($this->providerOf($platform)) . '_' . $suffix;
     }
 
     private function value(string $name): ?string

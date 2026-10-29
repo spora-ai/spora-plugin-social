@@ -75,9 +75,7 @@ final class DateTimeParser
         }
 
         try {
-            new DateTimeZone($timezone);
-
-            return true;
+            return (new DateTimeZone($timezone))->getName() !== '';
         } catch (Throwable) {
             return false;
         }

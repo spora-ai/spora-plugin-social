@@ -7,6 +7,7 @@ namespace Spora\Plugins\Social\OAuth;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\Service\ApiVersions;
+use Spora\Plugins\Social\Service\LinkedInPermissionSettings;
 use Spora\Plugins\Social\Service\SocialSettings;
 
 /**
@@ -20,6 +21,7 @@ final class OAuthProviderFactory implements OAuthProviderResolver
 {
     public function __construct(
         private readonly SocialSettings $settings,
+        private readonly LinkedInPermissionSettings $linkedIn,
         private readonly ApiVersions $versions,
     ) {}
 
@@ -51,12 +53,8 @@ final class OAuthProviderFactory implements OAuthProviderResolver
                 clientId: $clientId,
                 clientSecret: $clientSecret,
                 redirectUri: $redirectUri,
-                includeOrganizationScope: $this->settings->linkedInOrganizationScopeEnabled(),
+                permissions: $this->linkedIn->requested(),
                 versions: $this->versions,
-                readOrganizationAcls: $this->settings->linkedInReadOrganizationAclsEnabled(),
-                readOrganizationStats: $this->settings->linkedInReadOrganizationStatsEnabled(),
-                readMemberFeed: $this->settings->linkedInReadMemberFeedEnabled(),
-                readOrganizationFeed: $this->settings->linkedInReadOrganizationFeedEnabled(),
             ),
         };
     }

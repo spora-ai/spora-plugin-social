@@ -152,9 +152,17 @@ final class LiveGuzzleRecorder
 
             $form[$name] = in_array($name, self::SECRET_FIELDS, true)
                 ? '***redacted***'
-                : (is_string($value) ? $this->secrets->redact($value) : '');
+                : $this->redacted($value);
         }
 
         return $form;
+    }
+
+    /**
+     * The value as it may be shown.
+     */
+    private function redacted(mixed $value): string
+    {
+        return is_string($value) ? $this->secrets->redact($value) : '';
     }
 }

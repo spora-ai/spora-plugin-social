@@ -70,17 +70,19 @@ final class AccountReporting
      */
     public static function of(SocialAccount $account, array $grantedScopes): array
     {
-        $key = $account->platform . '|' . $account->kind;
+        $note = self::noteFor($account, $grantedScopes);
 
-        // A personal Instagram account has no insights at all: no scope
-        // gives it any.
-        if ($account->platform === SocialPlatform::Instagram->value
-            && $account->kind === SocialAccountKind::Member->value
-        ) {
-            return ['can_report' => false, 'report_note' => self::PERSONAL_INSTAGRAM_NOTE];
-        }
+        return ['can_report' => $note === null, 'report_note' => $note];
+    }
 
-        $scope = self::SCOPES[$key] ?? null;
+    /**
+     * Why the account cannot report, if it cannot.
+     *
+     * @param  list<string> $grantedScopes the connection's granted scopes
+     */
+    private static function noteFor(SocialAccount $account, array $grantedScopes): ?string
+    {
+        $scope = self::SCOPES[$account->platform . '|' . $account->kind] ?? null;
 
         // The scopes are only known when the platform reported them. An
         // empty list means "not known", not "not granted" — a Meta
@@ -88,16 +90,31 @@ final class AccountReporting
         // configuration, not through the token response — so a missing
         // scope is only a refusal when the platform named the scopes.
         if ($scope !== null && $grantedScopes !== [] && !in_array($scope, $grantedScopes, true)) {
-            return ['can_report' => false, 'report_note' => self::SCOPE_NOTES[$scope]];
+            return self::SCOPE_NOTES[$scope];
+        }
+
+        return self::platformNote($account);
+    }
+
+    /**
+     * The note the platform itself decides: no scope gives these accounts
+     * numbers.
+     */
+    private static function platformNote(SocialAccount $account): ?string
+    {
+        $isMember = $account->kind === SocialAccountKind::Member->value;
+
+        // A personal Instagram account has no insights at all: no scope
+        // gives it any.
+        if ($isMember && $account->platform === SocialPlatform::Instagram->value) {
+            return self::PERSONAL_INSTAGRAM_NOTE;
         }
 
         // A LinkedIn member post reports reactions and nothing else.
-        if ($account->platform === SocialPlatform::LinkedIn->value
-            && $account->kind === SocialAccountKind::Member->value
-        ) {
-            return ['can_report' => false, 'report_note' => self::MEMBER_NOTE];
+        if ($isMember && $account->platform === SocialPlatform::LinkedIn->value) {
+            return self::MEMBER_NOTE;
         }
 
-        return ['can_report' => true, 'report_note' => null];
+        return null;
     }
 }

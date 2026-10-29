@@ -13,7 +13,37 @@ use Spora\Plugins\Social\Tests\Live\Support\LiveCheck;
 use Spora\Plugins\Social\Tests\Live\Support\LiveContext;
 use Spora\Plugins\Social\Tests\Live\Support\LiveContract;
 use Spora\Plugins\Social\Tests\Live\Support\LiveTarget;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\HttpClient;
+
+/**
+ * The container call and the publish call of the run.
+ *
+ * Instagram creates the container in one call and publishes it in the next,
+ * so the two are told apart by the path they end in.
+ *
+ * @param  list<array{method: string, url: string, status: int, headers: array<string, string>, body: string, request: string}> $calls
+ * @return array{container: ?array<string, mixed>, publish: ?array<string, mixed>}
+ */
+function instagramMediaCalls(array $calls): array
+{
+    $container = null;
+    $publish = null;
+
+    foreach ($calls as $call) {
+        if ($call['method'] !== 'POST') {
+            continue;
+        }
+
+        if (str_ends_with($call['url'], '/media_publish')) {
+            $publish = $call;
+        } elseif (str_ends_with($call['url'], '/media')) {
+            $container = $call;
+        }
+    }
+
+    return ['container' => $container, 'publish' => $publish];
+}
 
 it('builds an authorization url with the unified login', function () {
     LiveContext::instance()
@@ -85,7 +115,7 @@ it('exchanges the code and reads the instagram account behind it', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $tokenCall['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/oauth/access_token',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/oauth/access_token',
                 ),
                 'the token was not exchanged on the graph host the unified login is served from',
             );
@@ -115,7 +145,7 @@ it('exchanges the code and reads the instagram account behind it', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $accountsCall['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/me/assigned_instagram_accounts',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/me/assigned_instagram_accounts',
                 ),
                 'the assigned instagram accounts were not read on the graph host the unified login is served from',
             );
@@ -208,20 +238,9 @@ it('creates a container and publishes it', function () {
                 'the external url is not the documented permalink',
             );
 
-            $container = null;
-            $publish = null;
-
-            foreach ($recorder->calls() as $call) {
-                if ($call['method'] !== 'POST') {
-                    continue;
-                }
-
-                if (str_ends_with($call['url'], '/media_publish')) {
-                    $publish = $call;
-                } elseif (str_ends_with($call['url'], '/media')) {
-                    $container = $call;
-                }
-            }
+            $calls = instagramMediaCalls($recorder->calls());
+            $container = $calls['container'];
+            $publish = $calls['publish'];
 
             LiveContract::holds($container !== null, 'no container was created');
             LiveContract::holds($publish !== null, 'the container was never published');
@@ -229,7 +248,7 @@ it('creates a container and publishes it', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $container['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/',
                 ),
                 'the container was not created on the graph host the unified login is served from',
             );
@@ -253,7 +272,7 @@ it('creates a container and publishes it', function () {
             LiveContract::holds(
                 str_starts_with(
                     (string) $publish['url'],
-                    'https://graph.facebook.com/' . $context->versions()->graph . '/',
+                    SocialFixtures::GRAPH_HOST . $context->versions()->graph . '/',
                 ),
                 'the container was not published on the graph host the unified login is served from',
             );

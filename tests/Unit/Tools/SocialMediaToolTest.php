@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Spora\Plugins\Social\Tools\SocialMediaTool;
 
 it('lists the media library of the principal', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $tool = new SocialMediaTool(mediaPipeline(), postService());
 
@@ -16,13 +17,13 @@ it('lists the media library of the principal', function () {
     expect($result->success)->toBeTrue()
         ->and($result->data['assets'])->toHaveCount(1)
         ->and($result->data['assets'][0]['id'])->toBe($asset->id)
-        ->and($result->data['assets'][0]['mime_type'])->toBe('image/png');
+        ->and($result->data['assets'][0]['mime_type'])->toBe(SocialFixtures::MIME_PNG);
 });
 
 it('checks an asset against a platform and names the remedy', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $tool = new SocialMediaTool(mediaPipeline(), postService());
 
@@ -41,7 +42,7 @@ it('checks an asset against a platform and names the remedy', function () {
 it('prepares an asset for instagram', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $tool = new SocialMediaTool(mediaPipeline(), postService());
 
@@ -61,13 +62,13 @@ it('attaches an asset to a post', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
-    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $service = postService();
     $tool = new SocialMediaTool(mediaPipeline(), $service);
 
     $created = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
     ]);
 
@@ -86,14 +87,14 @@ it('refuses a second attachment, because a post carries one', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
-    $first = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
-    $second = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $first = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
+    $second = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $service = postService();
     $tool = new SocialMediaTool(mediaPipeline(), $service);
 
     $created = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
         'media'       => [['media_asset_id' => $first->id, 'position' => 0]],
     ]);
@@ -114,13 +115,13 @@ it('detaches an asset from a post', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
-    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $service = postService();
     $tool = new SocialMediaTool(mediaPipeline(), $service);
 
     $created = $service->create($principalId, [
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
         'media'       => [['media_asset_id' => $asset->id, 'position' => 0]],
     ]);
@@ -139,7 +140,7 @@ it('answers with an error for an asset of another principal', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
     $otherId = createUserPrincipal(bootAuth(bootAuthLayer(), 'other@example.test'));
 
-    $asset = createMediaAsset($otherId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+    $asset = createMediaAsset($otherId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
 
     $tool = new SocialMediaTool(mediaPipeline(), postService());
 

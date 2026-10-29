@@ -118,3 +118,12 @@ it('answers with an error for an unknown action instead of throwing', function (
     expect($result->success)->toBeFalse()
         ->and($result->content)->toContain("Invalid action 'nonsense'");
 });
+
+it('names the action the operator is about to confirm', function () {
+    $tool = new SocialAnalyticsTool(metricsService([]));
+
+    expect($tool->describeAction(['action' => 'post_metrics', 'post_id' => 7]))
+        ->toBe('Social analytics: post #7')
+        ->and($tool->describeAction(['action' => 'top_posts']))
+        ->toBe('Social analytics: top_posts');
+});

@@ -26,9 +26,11 @@ use Spora\Plugins\Social\Publish\PublisherRegistry;
 use Spora\Plugins\Social\Scheduling\SocialDueWorkProvider;
 use Spora\Plugins\Social\Service\ApiVersions;
 use Spora\Plugins\Social\Service\ContainerReconciliation;
+use Spora\Plugins\Social\Service\LinkedInPermissionSettings;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
+use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialDraftService;
 use Spora\Plugins\Social\Service\SocialMetricsService;
 use Spora\Plugins\Social\Service\SocialPostService;
@@ -54,6 +56,8 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
     private const AUTH = [AuthMiddleware::class, CsrfMiddleware::class];
 
     private const BASE = '/api/v1/plugins/social';
+
+    private const POST = '/posts/{id}';
 
     public function getName(): string
     {
@@ -81,6 +85,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
     {
         $event->builder()->addDefinitions([
             SocialSettings::class            => \DI\autowire(),
+            LinkedInPermissionSettings::class => \DI\autowire(),
             ApiVersions::class               => \DI\factory(static function (SocialSettings $settings): ApiVersions {
                 return new ApiVersions($settings->graphApiVersion(), $settings->linkedInApiVersion());
             }),
@@ -94,6 +99,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             OAuthProviderFactory::class      => \DI\autowire(),
             OAuthProviderResolver::class     => \DI\autowire(OAuthProviderFactory::class),
             SocialConnectionService::class   => \DI\autowire(),
+            SocialConnectionTokens::class    => \DI\autowire(),
             SocialAppUrlProbe::class         => \DI\autowire(),
             MediaPipeline::class             => \DI\autowire(),
             PlatformHttpClient::class        => \DI\autowire(),
@@ -137,9 +143,9 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
         $routes->addRoute('GET', $base . '/posts', [SocialPostController::class, 'posts'], self::AUTH);
         $routes->addRoute('POST', $base . '/posts', [SocialPostController::class, 'createPost'], self::AUTH);
-        $routes->addRoute('GET', $base . '/posts/{id}', [SocialPostController::class, 'post'], self::AUTH);
-        $routes->addRoute('PATCH', $base . '/posts/{id}', [SocialPostController::class, 'updatePost'], self::AUTH);
-        $routes->addRoute('DELETE', $base . '/posts/{id}', [SocialPostController::class, 'deletePost'], self::AUTH);
+        $routes->addRoute('GET', $base . self::POST, [SocialPostController::class, 'post'], self::AUTH);
+        $routes->addRoute('PATCH', $base . self::POST, [SocialPostController::class, 'updatePost'], self::AUTH);
+        $routes->addRoute('DELETE', $base . self::POST, [SocialPostController::class, 'deletePost'], self::AUTH);
         $routes->addRoute('POST', $base . '/posts/{id}/publish', [SocialPostController::class, 'publishPost'], self::AUTH);
         $routes->addRoute('POST', $base . '/posts/{id}/retry', [SocialPostController::class, 'retryPost'], self::AUTH);
         $routes->addRoute('DELETE', $base . '/posts/{id}/published', [SocialPostController::class, 'deletePublished'], self::AUTH);

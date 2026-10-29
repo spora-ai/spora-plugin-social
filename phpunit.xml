@@ -16,4 +16,10 @@
             <directory suffix="Test.php">./tests/Live</directory>
         </testsuite>
     </testsuites>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
 </phpunit>

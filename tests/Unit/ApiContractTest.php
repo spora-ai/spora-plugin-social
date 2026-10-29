@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Spora\Plugins\Social\OAuth\LinkedInPermissions;
 use Spora\Plugins\Social\OAuth\LinkedInProvider;
 use Spora\Plugins\Social\OAuth\MetaProvider;
 use Spora\Plugins\Social\OAuth\OAuthTokenSet;
@@ -9,6 +10,7 @@ use Spora\Plugins\Social\Publish\InstagramAdapter;
 use Spora\Plugins\Social\Publish\PublishMedia;
 use Spora\Plugins\Social\Publish\PublishRequest;
 use Spora\Plugins\Social\Tests\Support\GuzzleRecorder;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -88,7 +90,7 @@ it('declares each read permission as its own setting, off by default', function 
 it('carries the plugin rules the frontend used to keep a copy of', function () {
     $rules = Spora\Plugins\Social\Service\PlatformFit::apiRules();
 
-    foreach ($rules as $platform => $rule) {
+    foreach ($rules as $rule) {
         // One attachment per post: the publish sends one file, so a second
         // is a file the operator believes is going out and is not.
         expect($rule['media_count'])->toBe(1);
@@ -103,21 +105,13 @@ it('carries the plugin rules the frontend used to keep a copy of', function () {
 
 it('sends the linkedin version header on every rest request', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider(
-        'client-id',
-        'client-secret',
-        'https://spora.test/callback',
-        false,
-        $recorder->client([
-            ['body' => '{"sub":"abc123","name":"Fabeat Person"}'],
-            [
-                'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}]}',
-            ],
-            ['body' => '{"localizedName":"Fabeat GmbH","id":2414183}'],
-        ]),
-        apiVersions(),
-        true,
-    );
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(readOrganizationAcls: true), $recorder->client([
+        ['body' => SocialFixtures::META_SUBJECT],
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}]}',
+        ],
+        ['body' => '{"localizedName":"Fabeat GmbH","id":2414183}'],
+    ]), apiVersions());
 
     // "All APIs require the request header Linkedin-Version: {Version in
     // YYYYMM format}. All APIs require the request header
@@ -159,14 +153,7 @@ it('sends the linkedin version header on every rest request', function () {
 
 it('does not send the linkedin version header to the oidc userinfo endpoint', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider(
-        'client-id',
-        'client-secret',
-        'https://spora.test/callback',
-        false,
-        $recorder->client([['body' => '{"sub":"abc123","name":"Fabeat Person"}']]),
-        apiVersions(),
-    );
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => SocialFixtures::META_SUBJECT]]), apiVersions());
 
     $provider->resolveAccounts(new OAuthTokenSet(accessToken: 'INSERT_TOKEN'));
 
@@ -180,25 +167,17 @@ it('does not send the linkedin version header to the oidc userinfo endpoint', fu
 
 it('reads the organisations from the documented acl response', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider(
-        'client-id',
-        'client-secret',
-        'https://spora.test/callback',
-        true,
-        $recorder->client([
-            [
-                'body' => '{"sub":"abc123","name":"Fabeat Person"}',
-            ],
-            [
-                'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}],"paging":{"count":10,"start":0,"links":[]}}',
-            ],
-            [
-                'body' => '{"localizedName":"Fabeat GmbH","id":2414183}',
-            ],
-        ]),
-        apiVersions(),
-        true,
-    );
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(readOrganizationAcls: true), $recorder->client([
+        [
+            'body' => SocialFixtures::META_SUBJECT,
+        ],
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}],"paging":{"count":10,"start":0,"links":[]}}',
+        ],
+        [
+            'body' => '{"localizedName":"Fabeat GmbH","id":2414183}',
+        ],
+    ]), apiVersions());
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
@@ -223,20 +202,12 @@ it('reads the organisations from the documented acl response', function () {
 
 it('leaves out an organisation whose role is only requested', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider(
-        'client-id',
-        'client-secret',
-        'https://spora.test/callback',
-        true,
-        $recorder->client([
-            ['body' => '{"sub":"abc123","name":"Fabeat Person"}'],
-            [
-                'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"REQUESTED"}],"paging":{"count":10,"start":0,"links":[]}}',
-            ],
-        ]),
-        apiVersions(),
-        true,
-    );
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(readOrganizationAcls: true), $recorder->client([
+        ['body' => SocialFixtures::META_SUBJECT],
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"REQUESTED"}],"paging":{"count":10,"start":0,"links":[]}}',
+        ],
+    ]), apiVersions());
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
@@ -250,28 +221,20 @@ it('leaves out an organisation whose role is only requested', function () {
 
 it('connects the organisation even when the name lookup is refused', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider(
-        'client-id',
-        'client-secret',
-        'https://spora.test/callback',
-        true,
-        $recorder->client([
-            ['body' => '{"sub":"abc123","name":"Fabeat Person"}'],
-            [
-                'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"},{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414184","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}]}',
-            ],
-            [
-                'body' => '{"message":"Viewer doesn\'t have permission to the ADMIN_ONLY VisibilityReduction","status":403}',
-                'status' => 403,
-            ],
-            [
-                'body' => '{"error":"ADMIN_ONLY","message":"Viewer doesn\'t have permission","status":403}',
-                'status' => 403,
-            ],
-        ]),
-        apiVersions(),
-        true,
-    );
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(readOrganizationAcls: true), $recorder->client([
+        ['body' => SocialFixtures::META_SUBJECT],
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"},{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414184","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}]}',
+        ],
+        [
+            'body' => '{"message":"Viewer doesn\'t have permission to the ADMIN_ONLY VisibilityReduction","status":403}',
+            'status' => 403,
+        ],
+        [
+            'body' => '{"error":"ADMIN_ONLY","message":"Viewer doesn\'t have permission","status":403}',
+            'status' => 403,
+        ],
+    ]), apiVersions());
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
@@ -294,7 +257,7 @@ it('asks linkedin for exactly the documented permissions', function () {
     // w_member_social, r_member_social.
     //
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api
-    $plain = new LinkedInProvider('id', 'secret', 'https://spora.test/cb', false, $recorder->client());
+    $plain = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(), $recorder->client());
     $scopes = scopeListOf($plain->authorizationUrl('state', str_repeat('a', 64)));
 
     expect($scopes)->toContain('openid')
@@ -304,7 +267,7 @@ it('asks linkedin for exactly the documented permissions', function () {
         ->and($scopes)->not->toContain('urn:li:organization:authorize')
         ->and($scopes)->not->toContain('w_organization_social');
 
-    $withOrganization = new LinkedInProvider('id', 'secret', 'https://spora.test/cb', true, $recorder->client());
+    $withOrganization = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(organizationScope: true), $recorder->client());
     $organizationScopes = scopeListOf($withOrganization->authorizationUrl('state', str_repeat('a', 64)));
 
     expect($organizationScopes)->toContain('w_organization_social');
@@ -320,15 +283,7 @@ it('asks linkedin for each read permission on its own', function () {
     //
     // r_organization_admin — the organisations the member administers.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role
-    $acls = new LinkedInProvider(
-        'id',
-        'secret',
-        'https://spora.test/cb',
-        false,
-        $recorder->client(),
-        apiVersions(),
-        readOrganizationAcls: true,
-    );
+    $acls = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readOrganizationAcls: true), $recorder->client(), apiVersions());
     $aclScopes = scopeListOf($acls->authorizationUrl('state', str_repeat('a', 64)));
 
     expect($aclScopes)->toContain('r_organization_admin')
@@ -337,15 +292,7 @@ it('asks linkedin for each read permission on its own', function () {
 
     // rw_organization_admin — the organisation's share statistics.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/share-statistics
-    $stats = new LinkedInProvider(
-        'id',
-        'secret',
-        'https://spora.test/cb',
-        false,
-        $recorder->client(),
-        apiVersions(),
-        readOrganizationStats: true,
-    );
+    $stats = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readOrganizationStats: true), $recorder->client(), apiVersions());
     $statsScopes = scopeListOf($stats->authorizationUrl('state', str_repeat('a', 64)));
 
     expect($statsScopes)->toContain('rw_organization_admin')
@@ -354,15 +301,7 @@ it('asks linkedin for each read permission on its own', function () {
 
     // r_member_social_feed — the reactions on a member post.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
-    $feed = new LinkedInProvider(
-        'id',
-        'secret',
-        'https://spora.test/cb',
-        false,
-        $recorder->client(),
-        apiVersions(),
-        readMemberFeed: true,
-    );
+    $feed = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readMemberFeed: true), $recorder->client(), apiVersions());
     $feedScopes = scopeListOf($feed->authorizationUrl('state', str_repeat('a', 64)));
 
     expect($feedScopes)->toContain('r_member_social_feed')
@@ -371,15 +310,7 @@ it('asks linkedin for each read permission on its own', function () {
 
     // r_organization_social_feed — the reactions on an organisation post.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
-    $organizationFeed = new LinkedInProvider(
-        'id',
-        'secret',
-        'https://spora.test/cb',
-        false,
-        $recorder->client(),
-        apiVersions(),
-        readOrganizationFeed: true,
-    );
+    $organizationFeed = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readOrganizationFeed: true), $recorder->client(), apiVersions());
     $organizationFeedScopes = scopeListOf($organizationFeed->authorizationUrl('state', str_repeat('a', 64)));
 
     expect($organizationFeedScopes)->toContain('r_organization_social_feed')
@@ -390,7 +321,7 @@ it('asks linkedin for each read permission on its own', function () {
 
 it('reads the linkedin organization scope from the post api, not the legacy one', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider('id', 'secret', 'https://spora.test/cb', true, $recorder->client());
+    $provider = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(organizationScope: true), $recorder->client());
 
     $url = $provider->authorizationUrl('state', str_repeat('a', 64));
 
@@ -433,7 +364,7 @@ it('exchanges the meta code at the configured graph version', function () {
     $provider = new MetaProvider(
         'client-id',
         'client-secret',
-        'https://spora.test/callback',
+        SocialFixtures::OAUTH_CALLBACK,
         'config-id',
         apiVersions(),
         $recorder->client([

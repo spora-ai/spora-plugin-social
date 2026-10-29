@@ -24,6 +24,8 @@ final class SocialStateCodec
 {
     private const SEPARATOR = '.';
 
+    private const DECODE_FAILED = 'The OAuth state could not be decoded.';
+
     public function __construct(
         private readonly SecurityManagerInterface $security,
     ) {}
@@ -59,17 +61,17 @@ final class SocialStateCodec
 
         $decoded = base64_decode(strtr($body, '-_', '+/'), true);
         if ($decoded === false) {
-            throw SocialException::forbidden('The OAuth state could not be decoded.');
+            throw SocialException::forbidden(self::DECODE_FAILED);
         }
 
         try {
             $payload = json_decode($decoded, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
-            throw SocialException::forbidden('The OAuth state could not be decoded.');
+            throw SocialException::forbidden(self::DECODE_FAILED);
         }
 
         if (!is_array($payload)) {
-            throw SocialException::forbidden('The OAuth state could not be decoded.');
+            throw SocialException::forbidden(self::DECODE_FAILED);
         }
 
         return $payload;

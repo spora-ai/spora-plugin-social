@@ -29,7 +29,7 @@ it('quotes the character limits the backend enforces', function () {
     foreach (SocialPlatform::cases() as $platform) {
         $limit = number_format(PlatformFit::characterLimit($platform));
 
-        foreach ($readers as $name => $prose) {
+        foreach ($readers as $prose) {
             expect($prose)->toContain($limit);
         }
     }

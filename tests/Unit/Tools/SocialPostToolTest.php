@@ -2,25 +2,48 @@
 
 declare(strict_types=1);
 
+use Spora\Plugins\Social\Service\SocialPublisher;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Spora\Plugins\Social\Tools\SocialPostTool;
+use Spora\Tools\ValueObjects\ToolResult;
+
+/**
+ * The post tool the tests publish with.
+ */
+function postTool(?SocialPublisher $publisher = null): SocialPostTool
+{
+    return new SocialPostTool(postService(), $publisher ?? postPublisher());
+}
+
+/**
+ * A draft the tool created.
+ */
+function createDraft(SocialPostTool $tool, int $principalId, int $accountId): ToolResult
+{
+    return $tool->execute([
+        'action'      => 'create',
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$accountId],
+    ], 1, null, principalContext($principalId));
+}
 
 it('creates a draft', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $result = $tool->execute([
         'action'      => 'create',
-        'title'       => 'Q4 release',
-        'body'        => 'We shipped…',
+        'title'       => SocialFixtures::POST_TITLE,
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
     ], 1, null, principalContext($principalId));
 
     expect($result->success)->toBeTrue()
         ->and($result->data['post']['status'])->toBe('draft')
-        ->and($result->data['post']['title'])->toBe('Q4 release')
+        ->and($result->data['post']['title'])->toBe(SocialFixtures::POST_TITLE)
         ->and($result->data['post']['targets'])->toHaveCount(1);
 });
 
@@ -29,11 +52,11 @@ it('schedules a post', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $result = $tool->execute([
         'action'        => 'schedule',
-        'body'          => 'We shipped…',
+        'body'          => SocialFixtures::POST_BODY,
         'account_ids'   => [$account->id],
         'scheduled_for' => '2026-11-02T09:00:00+00:00',
     ], 1, null, principalContext($principalId));
@@ -50,13 +73,9 @@ it('publishes a post and reports the per-account outcome', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), $service);
+    $tool = postTool($service);
 
-    $created = $tool->execute([
-        'action'      => 'create',
-        'body'        => 'We shipped…',
-        'account_ids' => [$account->id],
-    ], 1, null, principalContext($principalId));
+    $created = createDraft($tool, $principalId, $account->id);
 
     $postId = $created->data['post']['id'];
 
@@ -79,13 +98,9 @@ it('takes a published post back down', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), $service);
+    $tool = postTool($service);
 
-    $created = $tool->execute([
-        'action'      => 'create',
-        'body'        => 'We shipped…',
-        'account_ids' => [$account->id],
-    ], 1, null, principalContext($principalId));
+    $created = createDraft($tool, $principalId, $account->id);
 
     $postId = $created->data['post']['id'];
 
@@ -103,11 +118,11 @@ it('lists the posts of the principal', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $tool->execute([
         'action'      => 'create',
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
     ], 1, null, principalContext($principalId));
 
@@ -123,13 +138,9 @@ it('inspects one post', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
-    $created = $tool->execute([
-        'action'      => 'create',
-        'body'        => 'We shipped…',
-        'account_ids' => [$account->id],
-    ], 1, null, principalContext($principalId));
+    $created = createDraft($tool, $principalId, $account->id);
 
     $result = $tool->execute(
         ['action' => 'inspect', 'post_id' => $created->data['post']['id']],
@@ -139,7 +150,7 @@ it('inspects one post', function () {
     );
 
     expect($result->success)->toBeTrue()
-        ->and($result->data['post']['body'])->toBe('We shipped…');
+        ->and($result->data['post']['body'])->toBe(SocialFixtures::POST_BODY);
 });
 
 it('updates a post', function () {
@@ -147,13 +158,9 @@ it('updates a post', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
-    $created = $tool->execute([
-        'action'      => 'create',
-        'body'        => 'We shipped…',
-        'account_ids' => [$account->id],
-    ], 1, null, principalContext($principalId));
+    $created = createDraft($tool, $principalId, $account->id);
 
     $result = $tool->execute([
         'action'  => 'update',
@@ -176,11 +183,11 @@ it('retries the failed targets of a post', function () {
     $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
     $facebook = publishableAccount($principalId, 'facebook', 'page');
 
-    $tool = new SocialPostTool(postService(), $service);
+    $tool = postTool($service);
 
     $created = $tool->execute([
         'action'      => 'create',
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id, $facebook->id],
     ], 1, null, principalContext($principalId));
 
@@ -197,7 +204,7 @@ it('retries the failed targets of a post', function () {
 it('answers with an error when a post id is missing', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $result = $tool->execute(['action' => 'publish'], 1, null, principalContext($principalId));
 
@@ -208,7 +215,7 @@ it('answers with an error when a post id is missing', function () {
 it('answers with an error for an unknown action instead of throwing', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $result = $tool->execute(['action' => 'nonsense'], 1, null, principalContext($principalId));
 
@@ -221,12 +228,12 @@ it('marks the posts it writes as written by an agent', function () {
 
     $account = publishableAccount($principalId, 'linkedin', 'organization');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $result = $tool->execute([
         'action'      => 'create',
-        'title'       => 'Q4 release',
-        'body'        => 'We shipped…',
+        'title'       => SocialFixtures::POST_TITLE,
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
     ], 1, null, principalContext($principalId));
 
@@ -240,11 +247,11 @@ it('filters the list by the account the post goes to', function () {
     $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
     $facebook = publishableAccount($principalId, 'facebook', 'page');
 
-    $tool = new SocialPostTool(postService(), postPublisher());
+    $tool = postTool();
 
     $tool->execute([
         'action'      => 'create',
-        'body'        => 'We shipped…',
+        'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$linkedIn->id],
     ], 1, null, principalContext($principalId));
 
@@ -263,5 +270,36 @@ it('filters the list by the account the post goes to', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->data['total'])->toBe(1)
-        ->and($result->data['items'][0]['body'])->toBe('We shipped…');
+        ->and($result->data['items'][0]['body'])->toBe(SocialFixtures::POST_BODY);
+});
+
+it('names the action the operator is about to confirm', function () {
+    $tool = new SocialPostTool(postService(), postPublisher());
+
+    expect($tool->describeAction(['action' => 'publish', 'post_id' => 7]))
+        ->toBe('Social post publish: #7')
+        ->and($tool->describeAction(['action' => 'schedule', 'scheduled_for' => SocialFixtures::CALENDAR_MOMENT]))
+        ->toBe('Social post schedule: ' . SocialFixtures::CALENDAR_MOMENT)
+        ->and($tool->describeAction(['action' => 'list']))
+        ->toBe('Social post list');
+});
+
+it('attaches the media assets the agent names', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/jpeg', 'payload' => jpegBytes()]);
+
+    $tool = new SocialPostTool(postService(), postPublisher());
+
+    $result = $tool->execute([
+        'action'         => 'create',
+        'body'           => SocialFixtures::POST_BODY,
+        'account_ids'    => [$account->id],
+        'media_asset_ids' => [$asset->id],
+    ], 1, null, principalContext($principalId));
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['post']['media'])->toHaveCount(1);
 });

@@ -46,7 +46,7 @@ final class SocialConnectionController extends AbstractSocialController
      * refuses the publish. A copy in the frontend warns about a number that
      * is no longer enforced.
      */
-    public function config(Request $request): JsonResponse
+    public function config(): JsonResponse
     {
         return $this->run(function (): JsonResponse {
             $providers = [];

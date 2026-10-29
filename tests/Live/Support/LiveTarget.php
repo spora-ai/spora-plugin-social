@@ -31,7 +31,6 @@ final class LiveTarget
         SocialAccountKind $kind,
         string $externalId,
         string $accessToken,
-        ?string $pageToken = null,
     ): SocialPostTarget {
         $account = new SocialAccount();
         $account->principal_id = $principalId;

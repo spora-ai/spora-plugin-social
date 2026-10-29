@@ -72,10 +72,14 @@ it('refuses a meta provider that has an app id and a secret but no configuration
         $settings,
         new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
         new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()),
-        securityManager(),
         new Spora\Plugins\Social\Service\SocialAppUrlProbe(new Symfony\Component\HttpClient\MockHttpClient([
             new Symfony\Component\HttpClient\Response\MockResponse('', ['http_code' => 200]),
         ])),
+        new Spora\Plugins\Social\Service\SocialConnectionTokens(
+            $settings,
+            new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
+            securityManager(),
+        ),
     );
 
     expect($settings->needsSetup(Spora\Plugins\Social\Model\SocialProvider::Meta))->toBeTrue()
@@ -94,10 +98,14 @@ it('refuses to connect with the setup sentence, not a technical one', function (
         new SocialSettings(new Config([])),
         new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
         new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()),
-        securityManager(),
         new Spora\Plugins\Social\Service\SocialAppUrlProbe(new Symfony\Component\HttpClient\MockHttpClient([
             new Symfony\Component\HttpClient\Response\MockResponse('', ['http_code' => 200]),
         ])),
+        new Spora\Plugins\Social\Service\SocialConnectionTokens(
+            new SocialSettings(new Config([])),
+            new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
+            securityManager(),
+        ),
     );
 
     expect(fn() => $service->startConnect(1, Spora\Plugins\Social\Model\SocialProvider::Meta))

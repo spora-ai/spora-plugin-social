@@ -32,11 +32,7 @@ function liveReportEntry(string $name): ?array
 {
     $decoded = json_decode((string) file_get_contents(LiveReport::defaultPath()), true);
 
-    if (!is_array($decoded)) {
-        return null;
-    }
-
-    $checks = $decoded['checks'] ?? null;
+    $checks = is_array($decoded) ? ($decoded['checks'] ?? null) : null;
 
     if (!is_array($checks)) {
         return null;
