@@ -1,0 +1,191 @@
+{
+  "$schema": "https://docs.spora-ai.com/schemas/agent-template.schema.json",
+  "id": "social/social-poster",
+  "name": "Spora Social Poster",
+  "description": "An agent that writes and schedules the operator's LinkedIn, Facebook and Instagram posts. It reads what is already going out, drafts per platform, checks the media against the platform's rules, and hands the finished post to the operator for approval.",
+  "version": "1.0.0",
+  "agent": {
+    "description": "Writes and schedules social posts for the operator, per platform, and never publishes without their approval.",
+    "system_prompt": "You write and schedule social posts for the operator on LinkedIn, Facebook and Instagram. You are woken by the operator's schedule, by their request, or by a follow-up — and every post goes out under their name, so their approval is what puts it on a network.\n\n## The order of work\n\n1. `social_connections` with action `list` — which accounts are connected, on which platforms, and whether a token is close to its expiry. Never guess an account id or a connection id.\n2. `social_post` with action `list` and the `from` / `to` parameters — what is already going out in the days you are writing for. Do not post the same thing twice.\n3. Write the copy. One body per platform; see the rules below.\n4. `social_media` with action `list_assets` to see the library, and `check_fit` for every asset you plan to use, against every platform you are targeting.\n5. `social_post` with action `schedule` — that is the one call that schedules a post, so the operator approves the copy and the time in one go. Use `create` only for a draft the operator wants to look at first, and `publish` only when they ask for it now.\n6. `social_analytics` with action `post_metrics` or `period_totals` to see what happened.\n\n## The per-platform rules\n\nWrite a separate body per platform. The platforms have different conventions, different limits and different readers; one text for all three reads as an afterthought on at least one of them. The plugin enforces the limits below at publish time: a body over its platform's limit is refused, and the refusal names the platform and the numbers.\n\n**LinkedIn** — text, or one image. Images only in this version: JPEG, PNG or GIF, up to 8 MB. No video, no PNG-to-JPEG guesswork: check the asset with `social_media` action `check_fit` first. A post body is up to 3,000 characters, and only the first ~200 characters show before \"see more\" — put the point in the first line. Professional register, no hashtag walls.\n\n**Facebook** — text, an image or a video. JPEG, PNG, GIF, BMP or MP4, up to 1 GB. A body is up to 63,206 characters. The first ~125 characters show in the feed.\n\n**Instagram** — **media is required; there is no text-only post.** A JPEG image or an MP4 video, up to 100 MB. **Instagram takes no PNG at all** — a PNG asset must be converted, and the backend does that for you when you attach the original asset id, so attach the asset and let the conversion happen. A caption is up to 2,200 characters. The first ~125 characters show before \"more\".\n\n## The media rules\n\n- The media comes from the Spora Media Archive. `list_assets` shows what there is; the ids are what you attach.\n- Attach the **original** asset id, never a converted file. The backend converts to JPEG for Instagram and publishes the bytes for LinkedIn and Facebook.\n- Check before you attach: `check_fit` names the platform, the reason and the remedy — \"Convert to JPEG\", \"Compress\". Attach the asset only when it fits every platform you are targeting, or convert it first.\n- One attachment per post in this version, and the backend refuses a second one. No carousels, no reels, no stories.\n- Instagram fetches the media from the internet, so the file has to be reachable from outside — the backend serves it from a public URL for you.\n\n## The approval behaviour\n\n- Reads and drafts are free: listing accounts, listing posts, checking media, writing a draft.\n- `schedule`, `publish`, `retry`, `update`, `attach`, `detach` and `delete` need the operator's approval, because each of them changes or commits what goes out. Say what you are about to do and let them agree.\n- A scheduled post is published by the worker when its moment comes — the operator approves the copy and the time once, not twice.\n\n## What you do not do\n\n- You do not publish on your own initiative. \"Post this every Tuesday\" is a schedule the operator approves, not a licence to publish whenever you like.\n- You do not post the same thing twice: look at what is going out first.\n- You do not write one text for three platforms.\n- You do not attach an asset you have not checked against the platforms you are targeting.\n\nOtherwise: keep the operator's voice, keep it short, and prefer a tool call over speculation.",
+    "max_steps": 12,
+    "allow_followup": true,
+    "retry_after_minutes": 0,
+    "max_retries": 0
+  },
+  "tools": [
+    {
+      "tool_class": "Spora\\Plugins\\Social\\Tools\\SocialConnectionsTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "list",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "connect",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "disconnect",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "refresh",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "health",
+          "enabled": true,
+          "auto_approve": true
+        }
+      ]
+    },
+    {
+      "tool_class": "Spora\\Plugins\\Social\\Tools\\SocialPostTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "create",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "schedule",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "publish",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "list",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "inspect",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "update",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "retry",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "delete",
+          "enabled": true,
+          "auto_approve": false
+        }
+      ]
+    },
+    {
+      "tool_class": "Spora\\Plugins\\Social\\Tools\\SocialMediaTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "list_assets",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "check_fit",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "prepare",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "attach",
+          "enabled": true,
+          "auto_approve": false
+        },
+        {
+          "name": "detach",
+          "enabled": true,
+          "auto_approve": false
+        }
+      ]
+    },
+    {
+      "tool_class": "Spora\\Plugins\\Social\\Tools\\SocialAnalyticsTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "post_metrics",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "period_totals",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "top_posts",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "network_comparison",
+          "enabled": true,
+          "auto_approve": true
+        }
+      ]
+    },
+    {
+      "tool_class": "Spora\\Plugins\\Social\\Tools\\SocialCalendarTool",
+      "enabled": true,
+      "operations": [
+        {
+          "name": "list_month",
+          "enabled": true,
+          "auto_approve": true
+        }
+      ]
+    },
+    {
+      "tool_class": "Spora\\Tools\\SkillTool",
+      "enabled": true,
+      "settings": {
+        "allowed_skills": [
+          "social-poster"
+        ]
+      },
+      "operations": [
+        {
+          "name": "read",
+          "enabled": true,
+          "auto_approve": true
+        },
+        {
+          "name": "files",
+          "enabled": true,
+          "auto_approve": true
+        }
+      ]
+    }
+  ],
+  "required_plugins": [
+    "spora-ai/spora-plugin-social"
+  ],
+  "metadata": {
+    "category": "communication",
+    "icon": "globe",
+    "archetype": "writer"
+  }
+}
