@@ -36,7 +36,12 @@ jobs:
           tools: composer
 
       - name: Composer update spora-core
-        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — the lock cannot be generated until spora-ai/spora-core >= 0.32.0 and spora-ai/spora-plugin-social-frontend are published; it is committed at release, like every other package in the house
+        # A full `update`, not the partial `update spora-ai/spora-core` the
+        # other plugin workflows use: a partial update needs a lock file, and
+        # this package cannot have one until spora-ai/spora-core >= 0.32.0 and
+        # spora-ai/spora-plugin-social-frontend are published. The lock is
+        # committed at release, like every other package in the house.
+        run: composer update --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — floating versions are the point: this job must resolve the declared floors against what Packagist actually serves, and there is no lock to replay
 
       - name: Run Pest
         # The live suite needs credentials and the network, so it is not part of CI.
@@ -57,7 +62,12 @@ jobs:
           tools: composer
 
       - name: Composer update spora-core
-        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — the lock cannot be generated until spora-ai/spora-core >= 0.32.0 and spora-ai/spora-plugin-social-frontend are published; it is committed at release, like every other package in the house
+        # A full `update`, not the partial `update spora-ai/spora-core` the
+        # other plugin workflows use: a partial update needs a lock file, and
+        # this package cannot have one until spora-ai/spora-core >= 0.32.0 and
+        # spora-ai/spora-plugin-social-frontend are published. The lock is
+        # committed at release, like every other package in the house.
+        run: composer update --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — floating versions are the point: this job must resolve the declared floors against what Packagist actually serves, and there is no lock to replay
 
       - name: Run PHPStan
         run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
@@ -77,7 +87,12 @@ jobs:
           tools: composer
 
       - name: Composer update spora-core
-        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — the lock cannot be generated until spora-ai/spora-core >= 0.32.0 and spora-ai/spora-plugin-social-frontend are published; it is committed at release, like every other package in the house
+        # A full `update`, not the partial `update spora-ai/spora-core` the
+        # other plugin workflows use: a partial update needs a lock file, and
+        # this package cannot have one until spora-ai/spora-core >= 0.32.0 and
+        # spora-ai/spora-plugin-social-frontend are published. The lock is
+        # committed at release, like every other package in the house.
+        run: composer update --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — floating versions are the point: this job must resolve the declared floors against what Packagist actually serves, and there is no lock to replay
 
       - name: Check code style
         # Same ruleset as spora-core's .php-cs-fixer.php so plugin style matches host.
@@ -99,7 +114,12 @@ jobs:
           tools: composer
 
       - name: Composer update spora-core
-        run: composer update spora-ai/spora-core --with-all-dependencies --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — the lock cannot be generated until spora-ai/spora-core >= 0.32.0 and spora-ai/spora-plugin-social-frontend are published; it is committed at release, like every other package in the house
+        # A full `update`, not the partial `update spora-ai/spora-core` the
+        # other plugin workflows use: a partial update needs a lock file, and
+        # this package cannot have one until spora-ai/spora-core >= 0.32.0 and
+        # spora-ai/spora-plugin-social-frontend are published. The lock is
+        # committed at release, like every other package in the house.
+        run: composer update --no-interaction --prefer-dist # NOSONAR githubactions:S8546 — floating versions are the point: this job must resolve the declared floors against what Packagist actually serves, and there is no lock to replay
 
       - name: Run Pest with coverage
         run: XDEBUG_MODE=coverage ./vendor/bin/pest --coverage-clover=coverage.xml --parallel --processes=auto --max-batch-size=50 --exclude-testsuite=Live
@@ -142,13 +162,15 @@ jobs:
 
       - name: SonarCloud Scan
         # v6.0.0, as in every other plugin workflow in the house. It bundles
-        # scanner CLI 7.2.0, which does not refuse a CI analysis while
-        # SonarCloud's Automatic Analysis is on for the project — scanner
-        # 8.1.0 (shipped with the v8 action) aborts with "You are running CI
-        # analysis while Automatic Analysis is enabled", and the org's quality
-        # gate has a `new_coverage` condition that Automatic Analysis cannot
-        # evaluate. The organization and project key come from
-        # sonar-project.properties.
+        # scanner CLI 7.2.0, which refuses a CI analysis while SonarCloud's
+        # Automatic Analysis is on for the project — the same refusal the
+        # v8 action's scanner 8.1.0 makes, so the action version is not what
+        # decides it. Automatic Analysis has to be switched off in the
+        # project settings, and it has to stay off: Automatic Analysis cannot
+        # run the test suite, so it never uploads a coverage report, and the
+        # org's quality gate carries a `new_coverage` condition that is
+        # therefore never evaluated. The organization and project key come
+        # from sonar-project.properties.
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
