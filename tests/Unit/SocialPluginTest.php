@@ -160,9 +160,15 @@ it('names the due work provider and the settings provider', function () {
 
 it('points at the migrations and counts them', function () {
     $plugin = new SocialPlugin();
+    $path = (string) $plugin->migrationsPath();
 
-    expect(realpath((string) $plugin->migrationsPath()))->toBe(realpath(dirname(__DIR__, 2) . '/database/migrations'))
-        ->and($plugin->schemaVersion())->toBe(4);
+    // The version is the count, not a number someone remembers: core skips a
+    // component whose stored version is not below the declared one, so a
+    // migration added without a bump is silently skipped forever.
+    $migrations = glob($path . '/*.php') ?: [];
+
+    expect(realpath($path))->toBe(realpath(dirname(__DIR__, 2) . '/database/migrations'))
+        ->and($plugin->schemaVersion())->toBe(count($migrations));
 });
 
 it('ships a locale catalogue', function () {

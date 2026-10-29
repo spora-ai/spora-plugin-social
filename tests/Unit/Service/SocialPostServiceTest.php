@@ -282,7 +282,7 @@ it('refuses a body over the platform limit', function () {
 
     expect($target?->status)->toBe('failed')
         ->and($target?->error)->toContain('Over the limit')
-        ->and($target?->error)->toContain('3,000')
+        ->and($target?->error)->toContain('3000')
         ->and($target?->error)->toContain('LinkedIn');
 });
 
@@ -311,6 +311,6 @@ it('judges every platform against its own body and its own limit', function () {
 
     expect($targets[0]->status)->toBe('published')
         ->and($targets[1]->status)->toBe('failed')
-        ->and($targets[1]->error)->toContain('2,200')
+        ->and($targets[1]->error)->toContain('2200')
         ->and($targets[1]->error)->toContain('Instagram');
 });

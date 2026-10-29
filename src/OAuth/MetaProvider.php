@@ -105,8 +105,8 @@ final class MetaProvider extends AbstractOAuthProvider
      *
      * `GET https://graph.facebook.com/{version}/oauth/access_token?client_id=…&client_secret=…&code=…`
      *
-     * The client business id comes with it: the token management API needs
-     * it, and the connection stores it.
+     * The client business id does not come with it: the token management
+     * API needs it, so it is a second call, and the connection stores it.
      */
     public function exchangeCode(string $code, string $pkceVerifier): OAuthTokenSet
     {

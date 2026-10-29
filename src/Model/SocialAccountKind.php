@@ -9,8 +9,8 @@ namespace Spora\Plugins\Social\Model;
  *
  * The kind decides what the account can report: an organisation page has
  * impressions, a LinkedIn member post does not, and an Instagram personal
- * account has no media insights at all. The account grid says so before the
- * operator wonders why the numbers are empty.
+ * account has no media insights at all. The account's own note says so
+ * before the operator wonders why the numbers are empty.
  */
 enum SocialAccountKind: string
 {

@@ -23,9 +23,11 @@ use Throwable;
 /**
  * Sending a post to the networks.
  *
- * A post's status is derived from its targets, never set on its own: a
- * post-level status that could be written independently would be able to
- * claim a publish that did not happen.
+ * A post's outcome is derived from its targets: `published` when every
+ * target published, `partial` when some did. The status column itself is
+ * written — `publishing` while the post goes out — but only the outcome is
+ * derived, so a post-level status can never claim a publish that did not
+ * happen.
  *
  * One target failing does not stop the others — the whole point of the
  * per-target rows is that a post can succeed on one network and fail on
@@ -251,6 +253,14 @@ final class SocialPublisher
                 accessToken: $this->connections->tokenFor($account),
                 body: $body,
                 media: $this->prepareMedia($post, $account, $platform),
+                // The container is written down as soon as the platform has
+                // one, because the target is in `publishing` until the
+                // publish is done — and a publish that dies here leaves a
+                // container behind that only the reconciliation can resolve.
+                onContainer: function (string $containerId) use ($target): void {
+                    $target->container_id = $containerId;
+                    $target->save();
+                },
             ));
 
             $this->recordResult($target, $result);
@@ -264,8 +274,9 @@ final class SocialPublisher
     private function recordResult(SocialPostTarget $target, PublishResult $result): void
     {
         // The container id is kept whether the publish worked or not: a
-        // publish that half-finished leaves a container behind, and the
-        // reconciliation asks the container how it went.
+        // publish that half-finished leaves a container behind, and
+        // {@see \Spora\Plugins\Social\Service\ContainerReconciliation} asks
+        // the container how it went.
         if ($result->containerId !== null) {
             $target->container_id = $result->containerId;
         }

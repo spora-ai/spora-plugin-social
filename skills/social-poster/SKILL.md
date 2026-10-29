@@ -61,8 +61,10 @@ operator's voice, with the operator's approval.
   accounts, its media.
 - `delete` takes a **published** post back down, one network at a time.
   LinkedIn and Facebook can delete a published post. **Instagram cannot** —
-  its API has no delete for published media under Instagram Login — so
-  that target stays published and the result says so.
+  the delete endpoint exists only under Instagram's *Facebook Login*, and
+  this plugin speaks the *Unified Login*, so the API has no delete for
+  published media there — so that target stays published and the result
+  says so.
 
 ## The per-platform rules
 
@@ -77,7 +79,7 @@ afterthought on at least one of them.
 | Instagram | **required** | JPEG (image), MP4 (video) | 100 MB | up to 2,200 characters, ~125 shown before "more" |
 
 A body over the limit does not go out. The publish fails with the same
-wording the composer shows: "Over the limit: 5,000 / 2,200 characters for
+wording the composer shows: "Over the limit: 5000 / 2200 characters for
 Instagram."
 
 **LinkedIn publishes images only in this version.** No video, no carousels,

@@ -112,7 +112,7 @@ jobs:
           if-no-files-found: error
 
   sonar:
-    name: SonarQube
+    name: SonarCloud scan
     needs: [coverage]
     # `always()` so a failed coverage job still feeds SonarCloud a baseline. Fork PRs
     # are skipped: no secrets there.
@@ -140,12 +140,15 @@ jobs:
           name: coverage-clover
           path: .
 
-      - name: SonarQube scan
-        # Same pin as spora-plugin-memories / spora-frontend, green run there.
-        uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
+      - name: SonarCloud Scan
+        # v6.0.0, as in every other plugin workflow in the house. It bundles
+        # scanner CLI 7.2.0, which does not refuse a CI analysis while
+        # SonarCloud's Automatic Analysis is on for the project — scanner
+        # 8.1.0 (shipped with the v8 action) aborts with "You are running CI
+        # analysis while Automatic Analysis is enabled", and the org's quality
+        # gate has a `new_coverage` condition that Automatic Analysis cannot
+        # evaluate. The organization and project key come from
+        # sonar-project.properties.
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.organization=spora-ai
-            -Dsonar.projectKey=spora-ai_spora-plugin-social

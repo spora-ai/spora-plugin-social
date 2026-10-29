@@ -12,8 +12,8 @@ use Illuminate\Database\Schema\Blueprint;
  * `social_accounts` and `social_account_tokens` are split because the token
  * row is the one that holds secrets: it is written encrypted and never
  * selected into a list response. A row per account is the unit of
- * connection — one Facebook login can carry several pages, but each page
- * publishes under its own Page token, so each page is its own account row.
+ * connection — one Facebook login can carry several pages, so each page is
+ * its own account row.
  *
  * `platform` and `kind` are plain strings rather than enums so a fourth
  * network is an additive migration and not a data rewrite.

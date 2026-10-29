@@ -9,8 +9,9 @@ use Spora\Scheduling\DueWork;
 
 /**
  * @param array<string, list<array{body: string, status?: int}>> $answers
+ * @param list<array{body: string, status?: int}>             $containers the answers of the container status reads
  */
-function dueWorkProvider(array $answers = []): SocialDueWorkProvider
+function dueWorkProvider(array $answers = [], array $containers = []): SocialDueWorkProvider
 {
     return new SocialDueWorkProvider(
         new Spora\Plugins\Social\Service\SocialMetricsService(
@@ -33,7 +34,49 @@ function dueWorkProvider(array $answers = []): SocialDueWorkProvider
             apiVersions(),
         ),
         postPublisher($answers),
+        new Spora\Plugins\Social\Service\ContainerReconciliation(
+            connectionService(),
+            platformApi(new Symfony\Component\HttpClient\MockHttpClient(array_map(
+                static fn(array $response): Symfony\Component\HttpClient\Response\MockResponse
+                    => new Symfony\Component\HttpClient\Response\MockResponse(
+                        $response['body'],
+                        ['http_code' => $response['status'] ?? 200],
+                    ),
+                $containers !== [] ? $containers : [['body' => '{}']],
+            ))),
+        ),
     );
+}
+
+/**
+ * A publish that started and never finished: the container was created and
+ * nobody knows what became of it.
+ */
+function halfFinishedTarget(int $principalId, string $containerId): SocialPostTarget
+{
+    $account = publishableAccount($principalId, 'instagram', 'business');
+
+    $post = new Spora\Plugins\Social\Model\SocialPost();
+    $post->principal_id = $principalId;
+    $post->body = 'We shipped…';
+    $post->status = Spora\Plugins\Social\Model\SocialPost::STATUS_PUBLISHING;
+    $post->save();
+
+    $target = new SocialPostTarget();
+    $target->post_id = $post->id;
+    $target->account_id = $account->id;
+    $target->platform = 'instagram';
+    $target->status = SocialPostTarget::STATUS_PUBLISHING;
+    $target->container_id = $containerId;
+    $target->save();
+
+    // The container was created a while ago: the reconciliation does not
+    // ask about a container that was made a moment ago.
+    SocialPostTarget::query()
+        ->where('id', $target->id)
+        ->update(['updated_at' => gmdate('Y-m-d H:i:s', time() - 3600)]);
+
+    return $target;
 }
 
 /**
@@ -203,4 +246,140 @@ it('leaves a scheduled post with no targets out of publishing', function () {
     expect($after?->status)->not->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_SCHEDULED)
         ->and($after?->status)->not->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_PUBLISHING)
         ->and($after?->status)->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_DRAFT);
+});
+
+it('answers with the publish that half-finished, so the container can be asked', function () {
+    $provider = dueWorkProvider();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = halfFinishedTarget($principalId, 'container-1');
+
+    $work = $provider->dueWork([$principalId]);
+
+    $unit = null;
+    foreach ($work as $item) {
+        if ($item->payload['kind'] === SocialDueWorkProvider::KIND_CONTAINER) {
+            $unit = $item;
+        }
+    }
+
+    expect($unit)->not->toBeNull()
+        ->and($unit?->payload['target_id'])->toBe($target->id)
+        ->and($unit?->principalId)->toBe($principalId);
+});
+
+it('leaves a container that was made a moment ago alone', function () {
+    $provider = dueWorkProvider();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'instagram', 'business');
+
+    $post = new Spora\Plugins\Social\Model\SocialPost();
+    $post->principal_id = $principalId;
+    $post->status = Spora\Plugins\Social\Model\SocialPost::STATUS_PUBLISHING;
+    $post->save();
+
+    $target = new SocialPostTarget();
+    $target->post_id = $post->id;
+    $target->account_id = $account->id;
+    $target->platform = 'instagram';
+    $target->status = SocialPostTarget::STATUS_PUBLISHING;
+    $target->container_id = 'container-fresh';
+    $target->save();
+
+    $work = $provider->dueWork([$principalId]);
+
+    $kinds = array_map(static fn($item): string => (string) $item->payload['kind'], $work);
+
+    expect($kinds)->not->toContain(SocialDueWorkProvider::KIND_CONTAINER);
+});
+
+it('publishes the target whose container went out', function () {
+    $provider = dueWorkProvider([], [['body' => '{"status_code":"PUBLISHED"}']]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = halfFinishedTarget($principalId, 'container-1');
+
+    $work = $provider->dueWork([$principalId]);
+
+    foreach ($work as $item) {
+        if ($item->payload['kind'] === SocialDueWorkProvider::KIND_CONTAINER) {
+            $provider->execute($item);
+        }
+    }
+
+    $target->refresh();
+
+    expect($target->status)->toBe(SocialPostTarget::STATUS_PUBLISHED)
+        ->and($target->external_id)->toBe('container-1')
+        ->and($target->external_url)->toBe('https://www.instagram.com/p/container-1')
+        ->and($target->post?->status)->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_PUBLISHED);
+});
+
+it('fails the target whose container expired', function () {
+    $provider = dueWorkProvider([], [['body' => '{"status_code":"EXPIRED"}']]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = halfFinishedTarget($principalId, 'container-1');
+
+    $work = $provider->dueWork([$principalId]);
+
+    foreach ($work as $item) {
+        if ($item->payload['kind'] === SocialDueWorkProvider::KIND_CONTAINER) {
+            $provider->execute($item);
+        }
+    }
+
+    $target->refresh();
+
+    expect($target->status)->toBe(SocialPostTarget::STATUS_FAILED)
+        ->and($target->error)->toContain('EXPIRED')
+        ->and($target->post?->status)->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_FAILED);
+});
+
+it('leaves the target alone while the container is still working', function () {
+    $provider = dueWorkProvider([], [['body' => '{"status_code":"IN_PROGRESS"}']]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = halfFinishedTarget($principalId, 'container-1');
+
+    $work = $provider->dueWork([$principalId]);
+
+    foreach ($work as $item) {
+        if ($item->payload['kind'] === SocialDueWorkProvider::KIND_CONTAINER) {
+            $provider->execute($item);
+        }
+    }
+
+    $target->refresh();
+
+    expect($target->status)->toBe(SocialPostTarget::STATUS_PUBLISHING)
+        ->and($target->external_id)->toBeNull();
+});
+
+it('resolves a container once, whatever two workers ask at the same time', function () {
+    $provider = dueWorkProvider([], [['body' => '{"status_code":"PUBLISHED"}']]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = halfFinishedTarget($principalId, 'container-1');
+
+    $work = $provider->dueWork([$principalId]);
+
+    foreach ($work as $item) {
+        if ($item->payload['kind'] === SocialDueWorkProvider::KIND_CONTAINER) {
+            $provider->execute($item);
+            $provider->execute($item);
+        }
+    }
+
+    $target->refresh();
+
+    expect($target->status)->toBe(SocialPostTarget::STATUS_PUBLISHED)
+        ->and($target->external_id)->toBe('container-1');
 });

@@ -13,3 +13,9 @@
 /:memory:
 
 /tmp/
+
+# The lock cannot be generated until this package's two dependencies are
+# published: spora-ai/spora-core >=0.32.0 and spora-ai/spora-plugin-social-frontend.
+# Until they are, any lock would pin a local checkout or an untagged branch.
+# It is committed at release, like every other package in the house.
+/composer.lock

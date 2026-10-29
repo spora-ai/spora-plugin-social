@@ -47,26 +47,10 @@
   },
   "repositories": [
     {
-      "type": "path",
-      "url": "../spora-plugin-social-frontend",
-      "options": {
-        "symlink": true,
-        "versions": {
-          "spora-ai/spora-plugin-social-frontend": "0.1.0"
-        }
-      }
-    },
-    {
-      "type": "path",
-      "url": "../spora-core",
-      "options": {
-        "symlink": true,
-        "versions": {
-          "spora-ai/spora-core": "0.32.0"
-        }
-      }
+      "type": "vcs",
+      "url": "https://github.com/spora-ai/spora-plugin-social-frontend.git"
     }
   ],
-  "minimum-stability": "stable",
+  "minimum-stability": "dev",
   "prefer-stable": true
 }

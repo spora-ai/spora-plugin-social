@@ -41,7 +41,7 @@ final class PlatformFit
      *
      * The frontend's own wording, so the operator reads one thing and not
      * two: the pill says "Over the limit" and the counter reads
-     * "5,000 / 2,200".
+     * "5000 / 2200".
      */
     public const OVER_THE_LIMIT = 'Over the limit';
 
@@ -237,10 +237,10 @@ final class PlatformFit
         return [
             'fits'    => false,
             'reasons' => [sprintf(
-                '%s: %s / %s characters for %s.',
+                '%s: %d / %d characters for %s.',
                 self::OVER_THE_LIMIT,
-                number_format($length),
-                number_format($limit),
+                $length,
+                $limit,
                 $rule['label'],
             )],
             'remedy' => self::REMEDY_SHORTEN,

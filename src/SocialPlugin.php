@@ -25,6 +25,7 @@ use Spora\Plugins\Social\Publish\PlatformHttpClient;
 use Spora\Plugins\Social\Publish\PublisherRegistry;
 use Spora\Plugins\Social\Scheduling\SocialDueWorkProvider;
 use Spora\Plugins\Social\Service\ApiVersions;
+use Spora\Plugins\Social\Service\ContainerReconciliation;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
@@ -102,6 +103,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             PublisherRegistry::class         => \DI\autowire(),
             SocialPostService::class         => \DI\autowire(),
             SocialPublisher::class            => \DI\autowire(),
+            ContainerReconciliation::class    => \DI\autowire(),
             SocialMetricsService::class      => \DI\autowire(),
             SocialDraftService::class        => \DI\autowire(),
             SocialDueWorkProvider::class     => \DI\autowire(),
@@ -182,8 +184,8 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
     }
 
     /**
-     * The plugin's own due work: the slots that have come round, and the
-     * readings that are due.
+     * The plugin's own due work: the posts whose time has come, the
+     * readings that are due, and the publishes that half-finished.
      *
      * @return list<class-string<\Spora\Scheduling\DueWorkProviderInterface>>
      */
@@ -204,7 +206,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
     public function schemaVersion(): int
     {
-        return 4;
+        return 6;
     }
 
     /**

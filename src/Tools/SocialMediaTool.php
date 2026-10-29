@@ -179,17 +179,21 @@ final class SocialMediaTool extends AbstractSocialTool
         );
     }
 
+    /**
+     * The asset is prepared for Instagram.
+     *
+     * The operation is Instagram's: Facebook and LinkedIn take the bytes
+     * as they are, and Instagram needs a JPEG behind a public URL. There
+     * is no platform to choose, so there is none to read.
+     */
     private function prepare(int $principalId, array $arguments): ToolResult
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $platform = SocialPlatform::tryFromName((string) ($arguments['platform'] ?? 'instagram'))
-            ?? SocialPlatform::Instagram;
-
-        $prepared = $this->media->prepare($asset, $platform);
+        $prepared = $this->media->prepare($asset, SocialPlatform::Instagram);
 
         return ToolResult::ok(
-            'Prepared the asset for ' . $platform->value . '.',
+            'Prepared the asset for Instagram.',
             [
                 'media_asset_id' => $prepared->mediaAssetId,
                 'format'         => $prepared->derivativeFormat ?? $prepared->mimeType,

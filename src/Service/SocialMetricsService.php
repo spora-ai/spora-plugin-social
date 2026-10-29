@@ -98,7 +98,7 @@ final class SocialMetricsService
     /**
      * The summary the analytics view renders.
      *
-     * @return array{totals: array<string, int>, by_network: list<array<string, mixed>>, series: list<array<string, mixed>>, top_posts: list<array<string, mixed>>, notes: list<string>}
+     * @return array{totals: array<string, int|null>, by_network: list<array<string, mixed>>, series: list<array<string, mixed>>, top_posts: list<array<string, mixed>>, notes: list<string>}
      */
     public function summary(int $principalId, int $days = 30): array
     {

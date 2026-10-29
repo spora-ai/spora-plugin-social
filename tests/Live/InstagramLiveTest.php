@@ -15,9 +15,9 @@ use Spora\Plugins\Social\Tests\Live\Support\LiveContract;
 use Spora\Plugins\Social\Tests\Live\Support\LiveTarget;
 use Symfony\Component\HttpClient\HttpClient;
 
-it('builds an authorization url with the instagram login scopes', function () {
+it('builds an authorization url with the unified login', function () {
     LiveContext::instance()
-        ->check(SocialPlatform::Instagram, 'the authorization url carries the instagram login scopes')
+        ->check(SocialPlatform::Instagram, 'the authorization url carries the unified login')
         ->run(function () {
             $context = LiveContext::instance();
             $provider = $context->provider(SocialPlatform::Instagram);
@@ -28,19 +28,23 @@ it('builds an authorization url with the instagram login scopes', function () {
             $query = [];
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
-            $scopes = array_filter(array_map('trim', explode(',', (string) ($query['scope'] ?? ''))));
-
             LiveContract::holds(
-                parse_url($url, PHP_URL_HOST) === 'www.instagram.com',
-                'the authorization url is not on www.instagram.com',
+                parse_url($url, PHP_URL_HOST) === 'www.facebook.com',
+                'the authorization url is not on www.facebook.com, which is the host the facebook login for '
+                . 'business dialog is served from',
             );
             LiveContract::holds(
-                parse_url($url, PHP_URL_PATH) === '/oauth/authorize',
-                'the authorization url is not on the /oauth/authorize path',
+                parse_url($url, PHP_URL_PATH) === '/' . $context->versions()->graph . '/dialog/oauth',
+                'the authorization url is not on the versioned /dialog/oauth path',
             );
             LiveContract::holds(
                 ($query['client_id'] ?? null) === $context->credentials->clientId(SocialPlatform::Instagram),
                 'the authorization url does not carry the configured client id',
+            );
+            LiveContract::holds(
+                ($query['config_id'] ?? null) === $context->credentials->metaConfigId(),
+                'the authorization url does not carry the configuration id, which is what carries the permissions '
+                . 'and the assets',
             );
             LiveContract::holds(
                 ($query['redirect_uri'] ?? null) === $context->redirectUri(SocialPlatform::Instagram),
@@ -51,20 +55,9 @@ it('builds an authorization url with the instagram login scopes', function () {
                 'the authorization url does not ask for an authorization code',
             );
             LiveContract::holds(
-                ($query['code_challenge_method'] ?? null) === 'S256',
-                'the authorization url does not ask for the S256 pkce challenge',
-            );
-            LiveContract::holds(
-                ($query['code_challenge'] ?? null) === LiveContract::pkceChallenge($verifier),
-                'the pkce challenge is not the challenge of the verifier the exchange will present',
-            );
-            LiveContract::holds(
-                in_array('instagram_business_basic', $scopes, true),
-                'the authorization url does not ask for instagram_business_basic, which is how the account is read',
-            );
-            LiveContract::holds(
-                in_array('instagram_business_content_publish', $scopes, true),
-                'the authorization url does not ask for instagram_business_content_publish, which is how a post goes out',
+                !isset($query['scope']),
+                'the authorization url asks for a scope, which the unified login does not use — the configuration '
+                . 'carries the permissions',
             );
         });
 });
@@ -73,7 +66,7 @@ it('exchanges the code and reads the instagram account behind it', function () {
     LiveContext::instance()
         ->check(
             SocialPlatform::Instagram,
-            'the code buys a token and the profile read gives an instagram id',
+            'the code buys a token and the assigned accounts give an instagram id',
             LiveCheck::CREDENTIALS | LiveCheck::AUTHORIZATION,
         )
         ->run(function () {
@@ -81,51 +74,57 @@ it('exchanges the code and reads the instagram account behind it', function () {
             $tokens = $context->exchange(SocialPlatform::Instagram);
 
             LiveContract::holds($tokens->accessToken !== '', 'the token exchange returned no access token');
-            LiveContract::holds($tokens->expiresAt !== null, 'the token exchange returned no expiry');
             LiveContract::holds(
-                $tokens->expiresAt !== null && $tokens->expiresAt->getTimestamp() > time(),
-                'the token is already expired',
-            );
-            LiveContract::holds(
-                $tokens->refreshToken !== null && $tokens->refreshToken !== '',
-                'instagram handed out no refresh token',
+                $tokens->expiresAt === null || $tokens->expiresAt->getTimestamp() > time(),
+                'the expiry the platform sent has already passed',
             );
 
-            $tokenCall = $context->oauthRecorder(SocialPlatform::Instagram)->last('POST', '/oauth/access_token');
+            $tokenCall = $context->oauthRecorder(SocialPlatform::Instagram)->last('GET', '/oauth/access_token');
 
             LiveContract::holds($tokenCall !== null, 'the token was not exchanged at the token endpoint');
             LiveContract::holds(
-                str_starts_with((string) $tokenCall['url'], 'https://api.instagram.com/'),
-                'the token was not exchanged on api.instagram.com',
+                str_starts_with(
+                    (string) $tokenCall['url'],
+                    'https://graph.facebook.com/' . $context->versions()->graph . '/oauth/access_token',
+                ),
+                'the token was not exchanged on the graph host the unified login is served from',
             );
             LiveContract::holds(
                 $tokenCall['status'] >= 200 && $tokenCall['status'] < 300,
                 'the token endpoint answered with http ' . $tokenCall['status'],
             );
+            LiveContract::holds(
+                !str_contains((string) $tokenCall['body'], 'refresh_token'),
+                'the token response carries a refresh grant, which the system-user token of the unified login does '
+                . 'not hand out',
+            );
 
             $accounts = $context->accounts(SocialPlatform::Instagram);
             $account = $accounts[0] ?? null;
 
-            LiveContract::holds($account !== null, 'the profile read returned no account');
+            LiveContract::holds($account !== null, 'the assigned instagram accounts read returned no account');
             LiveContract::holds(
                 preg_match('/^\d+$/', $account->externalId) === 1,
                 'the instagram account carries no numeric instagram user id',
             );
 
-            $profileCall = $context->oauthRecorder(SocialPlatform::Instagram)->last('GET', '/me');
+            $accountsCall = $context->oauthRecorder(SocialPlatform::Instagram)
+                ->last('GET', '/me/assigned_instagram_accounts');
 
-            LiveContract::holds($profileCall !== null, 'the profile read did not happen');
+            LiveContract::holds($accountsCall !== null, 'the assigned instagram accounts were never read');
             LiveContract::holds(
-                str_starts_with((string) $profileCall['url'], 'https://graph.instagram.com/'),
-                'the profile read did not go to graph.instagram.com, which is the host the instagram api with '
-                . 'instagram login is served from',
+                str_starts_with(
+                    (string) $accountsCall['url'],
+                    'https://graph.facebook.com/' . $context->versions()->graph . '/me/assigned_instagram_accounts',
+                ),
+                'the assigned instagram accounts were not read on the graph host the unified login is served from',
             );
             LiveContract::holds(
-                $profileCall['status'] >= 200 && $profileCall['status'] < 300,
-                'the profile endpoint answered with http ' . $profileCall['status'],
+                $accountsCall['status'] >= 200 && $accountsCall['status'] < 300,
+                'the assigned instagram accounts endpoint answered with http ' . $accountsCall['status'],
             );
             LiveContract::holds(
-                str_contains($profileCall['body'], $account->externalId),
+                str_contains((string) $accountsCall['body'], $account->externalId),
                 'the account id the plugin derived is not the id the platform answered with',
             );
         });
@@ -188,7 +187,7 @@ it('creates a container and publishes it', function () {
                 externalId: $account->externalId,
                 kind: SocialAccountKind::Business,
                 accessToken: $context->tokens(SocialPlatform::Instagram)->accessToken,
-                body: 'Live check from Spora — the api cannot take this post down again.',
+                body: 'Live check from Spora — this post cannot be taken down again.',
                 media: new PublishMedia(
                     mimeType: 'image/jpeg',
                     publicUrl: (string) $context->credentials->publicImageUrl(),
@@ -228,9 +227,11 @@ it('creates a container and publishes it', function () {
             LiveContract::holds($publish !== null, 'the container was never published');
 
             LiveContract::holds(
-                str_starts_with((string) $container['url'], 'https://graph.instagram.com/'),
-                'the container was not created on graph.instagram.com, which is the host the instagram api with '
-                . 'instagram login is served from',
+                str_starts_with(
+                    (string) $container['url'],
+                    'https://graph.facebook.com/' . $context->versions()->graph . '/',
+                ),
+                'the container was not created on the graph host the unified login is served from',
             );
             LiveContract::holds(
                 $container['status'] >= 200 && $container['status'] < 300,
@@ -250,8 +251,11 @@ it('creates a container and publishes it', function () {
             );
 
             LiveContract::holds(
-                str_starts_with((string) $publish['url'], 'https://graph.instagram.com/'),
-                'the container was not published on graph.instagram.com',
+                str_starts_with(
+                    (string) $publish['url'],
+                    'https://graph.facebook.com/' . $context->versions()->graph . '/',
+                ),
+                'the container was not published on the graph host the unified login is served from',
             );
             LiveContract::holds(
                 str_ends_with((string) $publish['url'], '/' . $account->externalId . '/media_publish'),

@@ -13,9 +13,13 @@ owned the tokens, the scheduling and the publishing.
   both networks: the *Instagram API with Unified Login*, built on Facebook
   Login for Business. The client picks a business portfolio, the Instagram
   professional account and the Facebook Page, and the app gets one
-  **system-user token** that covers every asset they shared and never
-  expires. **LinkedIn** keeps its own flow: PKCE, OpenID Connect, and one
-  token that covers the member and the organisations they administer.
+  **system-user token** that covers every asset they shared. It has no
+  refresh grant, so it is reconnected rather than renewed, and whether it
+  expires at all is the configuration's decision — a Meta token *can* carry
+  an expiry, and the expiry the platform sends is the expiry the
+  connection keeps. **LinkedIn** keeps its own flow: PKCE, OpenID Connect,
+  and one token that covers the member and the organisations they
+  administer.
   One Instagram caveat the plugin cannot check for you: an account
   connected to a Page that *requires* Page Publishing Authorization cannot
   be published to until PPA is completed, and Meta says there is no way
@@ -25,8 +29,10 @@ owned the tokens, the scheduling and the publishing.
   `partial`, not `failed`.
 - **Take down.** A published post can be pulled back down, one network at a
   time. LinkedIn and Facebook can delete a published post; **Instagram
-  cannot** — its API has no delete for published media under Instagram
-  Login — so that target stays published and says why.
+  cannot** — the delete endpoint exists only under Instagram's *Facebook
+  Login*, and this plugin speaks the *Unified Login*, so the API has no
+  delete for published media there — so that target stays published and
+  says why.
 - **Schedule.** The agent writes the copy, the operator approves the copy
   and the time, and the worker publishes it when the moment comes. The
   agent-driven mode is the headline: it is the reason the plugin exists.
@@ -160,18 +166,21 @@ numbers simply stay empty.
    The app must be owned by a business portfolio you control.
 2. Copy the **App ID** and the **App Secret**.
 3. Add the **Facebook Login for Business** product.
-4. Open *Facebook Login for Business → Configurations* and create one:
+4. Add the **Manage messaging & content on Instagram** use case. It is what
+   brings up the *API setup with Unified login* tab, and that tab is where
+   the configuration and the permissions live.
+5. Open *Facebook Login for Business → Configurations* and create one:
    the **system-user access token** type, the **Instagram professional
    account** and the **Facebook Page** as the assets, and the permissions
    below. Copy the **Configuration ID** into `SPORA_SOCIAL_META_CONFIG_ID`.
-5. Register the redirect URL
+6. Register the redirect URL
    `https://<your-spora>/api/v1/plugins/social/oauth/meta/callback`
    under the configuration.
-6. Request the permissions: `instagram_basic`, `instagram_content_publish`
+7. Request the permissions: `instagram_basic`, `instagram_content_publish`
    and `instagram_manage_insights` for Instagram, `pages_show_list`,
    `pages_manage_posts`, `pages_read_engagement` and `read_insights` for
    the Pages.
-7. **To list the Pages** — the client shares them, and the plugin needs
+8. **To list the Pages** — the client shares them, and the plugin needs
    their ids — add `business_management` to the configuration. It grants
    the whole business portfolio and needs its own review, so the plugin
    does not ask for it: without it the connection covers the Instagram
@@ -196,8 +205,8 @@ reach, and it has to be a JPEG. Put one on any public host and set
 ### What it leaves behind
 
 The LinkedIn post is deleted again, and the Facebook post too where the
-platform allows it. **The Instagram post stays** — the api cannot delete a
-published media, so the live check leaves one post on your Instagram
+platform allows it. **The Instagram post stays** — the API cannot delete a
+published post, so the live check leaves one post on your Instagram
 account. The run says so in its report.
 
 ## The tools
@@ -248,7 +257,7 @@ LinkedIn 3,000 · Facebook 63,206 · Instagram 2,200 characters. Each target
 is judged against its own platform's limit and its own body
 (`platform_bodies[platform]`, or the shared `body`), so a post aimed at
 Instagram and Facebook with one body is checked twice. The refusal reads
-the way the composer reads: *"Over the limit: 5,000 / 2,200 characters for
+the way the composer reads: *"Over the limit: 5000 / 2200 characters for
 Instagram."*
 
 ## Times and timezones
@@ -340,6 +349,24 @@ composer test:parallel    # Pest
 composer live             # the live check against the real platforms
 composer format           # php-cs-fixer
 ```
+
+### The local checkouts
+
+The two dependencies this package needs — `spora-ai/spora-core` and
+`spora-ai/spora-plugin-social-frontend` — are resolved from **Packagist**, so
+the repository carries no machine-specific path. To work against the local
+checkouts, add them as path repositories **on your machine**:
+
+```bash
+composer config --global repositories.spora-core-local '{"type":"path","url":"../spora-core","options":{"symlink":true,"versions":{"spora-ai/spora-core":"0.32.0"}}}'
+composer config --global repositories.spora-frontend-local '{"type":"path","url":"../spora-plugin-social-frontend","options":{"symlink":true,"versions":{"spora-ai/spora-plugin-social-frontend":"0.1.0"}}}'
+```
+
+**`composer.lock` is not committed until both dependencies are published.**
+A lock generated now could only pin a local checkout or an untagged branch,
+and it would be committed by accident on the next machine that ran
+`composer install`. It is committed at release, like every other package in
+the house.
 
 The documentation for this plugin lives at
 [docs.spora-ai.com/develop/plugins/reference/social](https://docs.spora-ai.com/develop/plugins/reference/social);

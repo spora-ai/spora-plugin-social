@@ -22,7 +22,7 @@ use Spora\Plugins\Social\Model\SocialPlatform;
  *   report insights.
  *
  * The note is computed here, once, because the scopes live on the
- * connection and the account grid is not the only reader.
+ * connection and the connections grid is not the only reader.
  */
 final class AccountReporting
 {

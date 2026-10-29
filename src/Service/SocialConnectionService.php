@@ -46,8 +46,8 @@ final class SocialConnectionService
 
     /**
      * A token inside this window is renewed before it is used. The plan
-     * calls it ten days, and the account grid flags the same window so the
-     * operator can see a token that is about to move.
+     * calls it ten days, and the connection's own health flags the same
+     * window so the operator can see a token that is about to move.
      */
     public const REFRESH_WINDOW_DAYS = 10;
 
@@ -364,21 +364,6 @@ final class SocialConnectionService
         }
 
         return array_values(array_filter(array_map('trim', explode(' ', $connection->scopes))));
-    }
-
-    /**
-     * The accounts of a principal.
-     *
-     * @return list<SocialAccount>
-     */
-    public function accountsForPrincipal(int $principalId): array
-    {
-        return SocialAccount::query()
-            ->forPrincipal($principalId)
-            ->orderBy('platform')
-            ->orderBy('id')
-            ->get()
-            ->all();
     }
 
     public function findAccount(int $accountId, int $principalId): SocialAccount

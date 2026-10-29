@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Scheduling;
 
+use Illuminate\Support\Carbon;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
+use Spora\Plugins\Social\Service\ContainerReconciliation;
 use Spora\Plugins\Social\Service\DateTimeParser;
 use Spora\Plugins\Social\Service\SocialMetricsService;
 use Spora\Plugins\Social\Service\SocialPublisher;
@@ -16,8 +18,8 @@ use Spora\Scheduling\DueWorkProviderInterface;
 use Throwable;
 
 /**
- * The plugin's due work: the posts whose time has come, and the readings
- * that are due.
+ * The plugin's due work: the posts whose time has come, the readings that
+ * are due, and the publishes that half-finished.
  *
  * There is no slot kind any more. The fixed slot published the same words
  * every week — a template mechanism with no varying template — and the
@@ -32,10 +34,11 @@ use Throwable;
 final class SocialDueWorkProvider implements DueWorkProviderInterface
 {
     /**
-     * The two kinds of work this provider produces.
+     * The three kinds of work this provider produces.
      */
     public const KIND_POST = 'post';
     public const KIND_METRIC = 'metric';
+    public const KIND_CONTAINER = 'container';
 
     /**
      * How long after a publish the first reading happens, and how often
@@ -49,6 +52,7 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
     public function __construct(
         private readonly SocialMetricsService $metrics,
         private readonly SocialPublisher $publisher,
+        private readonly ContainerReconciliation $reconciliation,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
@@ -82,6 +86,16 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
             );
         }
 
+        foreach ($this->reconciliation->dueTargets($principalIds) as $target) {
+            $post = $target->post;
+
+            $work[] = $this->unit(
+                $post instanceof SocialPost ? (int) $post->principal_id : 0,
+                gmdate(self::DB_DATETIME_FORMAT),
+                ['kind' => self::KIND_CONTAINER, 'target_id' => (int) $target->id],
+            );
+        }
+
         return $work;
     }
 
@@ -91,9 +105,10 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
 
         try {
             match ($kind) {
-                self::KIND_POST   => $this->runPost((int) ($work->payload['post_id'] ?? 0)),
-                self::KIND_METRIC => $this->runMetric((int) ($work->payload['target_id'] ?? 0)),
-                default           => null,
+                self::KIND_POST     => $this->runPost((int) ($work->payload['post_id'] ?? 0)),
+                self::KIND_METRIC   => $this->runMetric((int) ($work->payload['target_id'] ?? 0)),
+                self::KIND_CONTAINER => $this->runContainer((int) ($work->payload['target_id'] ?? 0)),
+                default             => null,
             };
         } catch (Throwable $e) {
             // One item failing must not stop the rest of the work list.
@@ -146,6 +161,41 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
         }
 
         $this->metrics->collect($target);
+    }
+
+    /**
+     * Ask the container how the publish went.
+     *
+     * The post's own status is derived from its targets, so a target that
+     * resolved moves the post with it.
+     */
+    private function runContainer(int $targetId): void
+    {
+        if ($targetId <= 0) {
+            return;
+        }
+
+        $target = SocialPostTarget::query()->with('post')->find($targetId);
+        if ($target === null) {
+            return;
+        }
+
+        if (!$this->reconciliation->resolve($target)) {
+            return;
+        }
+
+        $post = $target->post;
+        if (!$post instanceof SocialPost) {
+            return;
+        }
+
+        $post->status = $this->publisher->deriveStatus($post);
+
+        if ($post->status === SocialPost::STATUS_PUBLISHED || $post->status === SocialPost::STATUS_PARTIAL) {
+            $post->published_at = Carbon::now();
+        }
+
+        $post->save();
     }
 
     /**

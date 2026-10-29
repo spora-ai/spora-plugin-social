@@ -108,7 +108,7 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
     {
         $refreshToken = $tokens->refreshToken;
         if ($refreshToken === null || $refreshToken === '') {
-            throw SocialException::platform('This account has no refresh token, so it cannot be renewed.', 'TOKEN_NOT_REFRESHABLE');
+            throw SocialException::platform('This connection has no refresh token, so it cannot be renewed.', 'TOKEN_NOT_REFRESHABLE');
         }
 
         // A refresh is not a PKCE exchange; leaving the verifier in place

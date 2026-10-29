@@ -33,10 +33,6 @@ use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 /*
-|--------------------------------------------------------------------------
-| Pest Bootstrap
-|--------------------------------------------------------------------------
-|
 | Duplicates core's `bootAuth` / `jsonRequest` / `simulateLoggedInSession` so
 | this suite is self-contained against the symlinked spora-core.
 */
@@ -614,9 +610,7 @@ function createMediaAsset(int $principalId, array $overrides = []): Spora\Models
 }
 
 /*
-|--------------------------------------------------------------------------
-| Test lifecycle
-|--------------------------------------------------------------------------
+| The lifecycle every test in the suite runs under.
 */
 
 uses()

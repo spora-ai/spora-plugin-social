@@ -216,8 +216,8 @@ final class SocialPostService
      *
      * One attachment per post: the publish sends one file, so a second
      * would be a file the operator believes is going out and is not. The
-     * composer says so before the file is picked, and this refuses it
-     * after.
+     * composer shows the limit in the preview, after the file is picked,
+     * and this refuses the second attachment.
      */
     public function attachMedia(int $postId, int $principalId, string $assetId, int $position = 0): SocialPost
     {

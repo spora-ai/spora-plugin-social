@@ -75,6 +75,13 @@ final class InstagramAdapter implements PublisherInterface
             );
         }
 
+        // The container exists now. The caller is told, so a publish that
+        // dies before the container is published leaves an id behind that
+        // the reconciliation can ask about.
+        if ($request->onContainer !== null) {
+            ($request->onContainer)($container['id']);
+        }
+
         $published = $this->api->http->postJson(
             $this->api->versions->graphUrl(ApiVersions::GRAPH_HOST, '/' . $request->externalId . '/media_publish'),
             ['creation_id' => $container['id']],

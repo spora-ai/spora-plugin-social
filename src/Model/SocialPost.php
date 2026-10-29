@@ -12,9 +12,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * A post — one piece of copy, aimed at a set of accounts.
  *
- * The `status` column is derived from the post's targets and never written
- * on its own: a post-level status that could be set independently would be
- * able to claim a publish that did not happen.
+ * The `status` column is written by the plugin: `draft` and `scheduled`
+ * when the post is made, `publishing` while it goes out, `failed` when it
+ * could not be published at all. The *outcome* of a publish that ran is
+ * derived from the targets — `published` when every target published,
+ * `partial` when some did — so a post-level status can never claim a
+ * publish that did not happen.
  *
  * @property int $id
  * @property int $principal_id

@@ -67,6 +67,9 @@ final class SocialPostTarget extends Model
         return $this->belongsTo(SocialAccount::class, 'account_id');
     }
 
+    /**
+     * @return BelongsTo<SocialPost, $this>
+     */
     public function post(): BelongsTo
     {
         return $this->belongsTo(SocialPost::class, 'post_id');
