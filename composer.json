@@ -2,6 +2,16 @@
   "name": "spora-ai/spora-plugin-social",
   "description": "Native social publishing for LinkedIn, Facebook and Instagram \u2014 connect accounts, write and schedule posts with an agent, and read the numbers back.",
   "type": "spora-plugin",
+  "keywords": [
+    "spora-plugin",
+    "spora",
+    "social",
+    "social-publishing",
+    "linkedin",
+    "facebook",
+    "instagram",
+    "scheduling"
+  ],
   "license": "MIT",
   "require": {
     "php": "^8.4.1",
