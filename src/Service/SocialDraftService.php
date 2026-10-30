@@ -212,7 +212,7 @@ final class SocialDraftService
         $content = trim($content);
 
         if (str_starts_with($content, '```')) {
-            $content = (string) preg_replace('/(?:^```[a-z]*\s*)|(?:\s*```$)/i', '', $content);
+            $content = (string) preg_replace('/^```[a-z]*\s*|\s*```$/i', '', $content);
         }
 
         try {
