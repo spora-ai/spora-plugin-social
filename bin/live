@@ -1,0 +1,448 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Spora\Core\SecurityManager;
+use Spora\Plugins\Social\Model\SocialPlatform;
+use Spora\Plugins\Social\OAuth\SocialStateCodec;
+use Spora\Plugins\Social\Tests\Live\Support\LiveContext;
+use Spora\Plugins\Social\Tests\Live\Support\LiveCredentials;
+use Spora\Plugins\Social\Tests\Live\Support\LiveReport;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$root = dirname(__DIR__);
+
+chdir($root);
+
+$context = LiveContext::instance();
+$credentials = $context->credentials;
+
+$urlsOnly = in_array('--urls', $argv, true);
+
+$stateKeyPath = $root . '/build/live/state.key';
+$stateCodec = new SocialStateCodec(new SecurityManager(liveStateKey($stateKeyPath)));
+
+echo "\n";
+echo "  Spora social — live check against the real platforms\n";
+echo "\n";
+echo "  This run talks to LinkedIn, Facebook and Instagram for real. It publishes\n";
+echo "  a post on every account it can reach and takes it down again where the\n";
+echo "  platform allows it. An Instagram post stays: the api cannot delete one.\n";
+echo "\n";
+
+if ($credentials->appUrl() === null) {
+    echo '  ' . LiveCredentials::ENV_REDIRECT_URI . " is not set, so the redirect URIs below are\n";
+    echo "  not the address a platform can be given. Set it to the public address of\n";
+    echo "  your install before you sign in.\n\n";
+}
+
+echo "  Register these redirect URIs in the apps before you sign in:\n";
+echo "\n";
+
+$configuredProviders = 0;
+$seenProviders = [];
+
+foreach (SocialPlatform::cases() as $platform) {
+    $provider = $context->names->providerOf($platform);
+
+    // One login per provider: the Meta callback is registered once and
+    // covers both networks, so it is printed once.
+    if (isset($seenProviders[$provider])) {
+        continue;
+    }
+
+    $seenProviders[$provider] = true;
+
+    $configured = $credentials->clientId($platform) !== null && $credentials->clientSecret($platform) !== null;
+
+    if ($configured) {
+        $configuredProviders++;
+    }
+
+    printf(
+        "    %-10s %s%s\n",
+        $provider,
+        $context->redirectUri($platform),
+        $configured ? '' : '   (no credentials in the environment yet)',
+    );
+}
+
+echo "\n";
+
+if (isset($seenProviders['meta'])) {
+    echo "  The Meta callback is registered once and covers Instagram and Facebook — one login,\n";
+    echo "  one token, both networks.\n\n";
+}
+
+if ($configuredProviders === 0) {
+    echo "  No credentials in the environment, so there is nothing to check. Set them and\n";
+    echo "  run this again:\n\n";
+    echo "    SPORA_LIVE_LINKEDIN_CLIENT_ID / SPORA_LIVE_LINKEDIN_CLIENT_SECRET\n";
+    echo "    SPORA_LIVE_META_CLIENT_ID / SPORA_LIVE_META_CLIENT_SECRET\n";
+    echo "    SPORA_LIVE_META_CONFIG_ID\n";
+    echo '    ' . LiveCredentials::ENV_REDIRECT_URI . "\n\n";
+}
+
+/**
+ * The master key of the signed state, kept between runs.
+ *
+ * The state carries the pkce verifier, so a redirect url the operator
+ * collected in an earlier run can still be redeemed in this one. The key
+ * never leaves the machine and is not a credential of any platform.
+ */
+function liveStateKey(string $path): string
+{
+    if (is_file($path)) {
+        $key = (string) file_get_contents($path);
+
+        if (strlen($key) === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            return $key;
+        }
+    }
+
+    $directory = dirname($path);
+
+    if (!is_dir($directory)) {
+        mkdir($directory, 0o775, true);
+    }
+
+    $key = random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+    file_put_contents($path, $key);
+    chmod($path, 0o600);
+
+    return $key;
+}
+
+/**
+ * A pkce verifier, in the shape the plugin builds.
+ */
+function liveVerifier(): string
+{
+    return rtrim(strtr(base64_encode(random_bytes(64)), '+/', '-_'), '=');
+}
+
+/**
+ * The redirect url the operator hands back, read without echoing it.
+ *
+ * The url carries the authorization code, and the code is a credential: it
+ * buys a token. Echoing it would put it in the terminal's scrollback.
+ */
+function liveReadRedirectUrl(string $prompt): ?string
+{
+    fwrite(STDOUT, $prompt);
+
+    $tty = stream_isatty(STDIN);
+
+    if ($tty) {
+        @shell_exec('stty -echo');
+    }
+
+    $line = fgets(STDIN);
+
+    if ($tty) {
+        @shell_exec('stty echo');
+        fwrite(STDOUT, "\n");
+    }
+
+    if ($line === false) {
+        return null;
+    }
+
+    $trimmed = trim($line);
+
+    return $trimmed === '' ? null : $trimmed;
+}
+
+/**
+ * The code and the state of a redirect url.
+ *
+ * @return array{code: ?string, state: ?string}
+ */
+function liveParseRedirect(string $redirect): array
+{
+    $query = [];
+    parse_str((string) parse_url($redirect, PHP_URL_QUERY), $query);
+
+    $code = isset($query['code']) && is_string($query['code']) ? $query['code'] : null;
+    $state = isset($query['state']) && is_string($query['state']) ? $query['state'] : null;
+
+    if ($code === null && !str_contains($redirect, '?')) {
+        $code = $redirect;
+    }
+
+    return ['code' => $code, 'state' => $state];
+}
+
+$signed = [];
+
+foreach (SocialPlatform::cases() as $platform) {
+    $provider = $context->names->providerOf($platform);
+
+    // One login per provider: the Meta login is one dialog and one token
+    // for both networks, so it is walked once.
+    if (isset($signed[$provider])) {
+        continue;
+    }
+
+    $signed[$provider] = true;
+
+    if ($credentials->clientId($platform) === null || $credentials->clientSecret($platform) === null) {
+        continue;
+    }
+
+    $verifier = liveVerifier();
+
+    $state = $stateCodec->encode([
+        'principal_id' => 1,
+        'provider'     => $provider,
+        'nonce'        => bin2hex(random_bytes(16)),
+        'pkce'         => $verifier,
+        'expires_at'   => time() + 86400,
+    ]);
+
+    $authorizeUrl = $context->provider($platform)->authorizationUrl($state, $verifier);
+
+    printf(
+        "  %s — open this url, sign in, and copy the url you land on:\n\n",
+        $provider === 'meta' ? 'meta (Instagram and Facebook)' : $provider,
+    );
+    printf("    %s\n\n", $authorizeUrl);
+
+    if ($urlsOnly) {
+        continue;
+    }
+
+    $fromEnvironment = $credentials->redirectUrl($provider);
+
+    if ($fromEnvironment['url'] !== null) {
+        echo '  using the redirect url from ' . $fromEnvironment['variable'] . "\n";
+    }
+
+    $redirect = $fromEnvironment['url'] ?? liveReadRedirectUrl("  paste the url you landed on (or the code on its own): ");
+
+    if ($redirect === null) {
+        echo "  nothing pasted — the checks that need a token will be skipped.\n\n";
+
+        continue;
+    }
+
+    $parsed = liveParseRedirect($redirect);
+
+    if ($parsed['code'] === null) {
+        echo "  no authorization code in what was pasted — the checks that need a token will be skipped.\n\n";
+
+        continue;
+    }
+
+    if ($parsed['state'] !== null && $parsed['state'] !== $state) {
+        // The state was signed in an earlier run, so its own verifier is the
+        // one the code belongs to.
+        try {
+            $payload = $stateCodec->decode($parsed['state']);
+            $carried = $payload['pkce'] ?? null;
+
+            if (is_string($carried) && $carried !== '') {
+                $verifier = $carried;
+            }
+        } catch (Throwable $e) {
+            echo '  the state in the pasted url could not be read: ' . $e->getMessage() . "\n";
+            echo "  the checks that need a token will be skipped.\n\n";
+
+            continue;
+        }
+    }
+
+    // The harness reads the provider's names, so the code is handed over
+    // under the provider's names.
+    putenv('SPORA_LIVE_' . strtoupper($provider) . '_AUTHORIZATION_CODE=' . $parsed['code']);
+    putenv('SPORA_LIVE_' . strtoupper($provider) . '_PKCE_VERIFIER=' . $verifier);
+
+    echo "  the code was taken — the token exchange will run.\n\n";
+}
+
+if ($urlsOnly) {
+    echo "  The urls above carry a signed state. Authorize in the browser, then run the\n";
+    echo "  live check again with SPORA_LIVE_<PROVIDER>_REDIRECT_URL set to the url you\n";
+    echo "  landed on — SPORA_LIVE_META_REDIRECT_URL or SPORA_LIVE_LINKEDIN_REDIRECT_URL.\n\n";
+
+    exit(0);
+}
+
+$reportPath = LiveReport::defaultPath();
+
+if (is_file($reportPath)) {
+    unlink($reportPath);
+}
+
+echo "  running the live suite…\n\n";
+
+$command = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($root . '/vendor/bin/pest') . ' --testsuite=Live';
+
+passthru($command, $exitCode);
+
+echo "\n";
+
+livePrintVerdict($reportPath);
+
+exit(liveExitCode($reportPath, $context));
+
+/**
+ * The verdict per platform, and how many checks were skipped.
+ */
+function livePrintVerdict(string $reportPath): void
+{
+    $report = json_decode((string) @file_get_contents($reportPath), true);
+
+    if (!is_array($report)) {
+        echo "  NO REPORT — the live suite did not run.\n\n";
+
+        return;
+    }
+
+    $checks = is_array($report['checks'] ?? null) ? $report['checks'] : [];
+    $notes = is_array($report['notes'] ?? null) ? $report['notes'] : [];
+
+    $counts = [];
+    $reasons = [];
+
+    foreach ($checks as $check) {
+        if (!is_array($check)) {
+            continue;
+        }
+
+        $platform = (string) ($check['platform'] ?? 'unknown');
+        $outcome = (string) ($check['outcome'] ?? 'unknown');
+
+        $counts[$platform][$outcome] = ($counts[$platform][$outcome] ?? 0) + 1;
+
+        if ($outcome === 'skipped') {
+            $reasons[$platform][(string) ($check['detail'] ?? '')] = true;
+        }
+    }
+
+    $totalSkipped = 0;
+    $totalPassed = 0;
+    $totalFailed = 0;
+
+    foreach ($counts as $platform => $outcomes) {
+        $passed = (int) ($outcomes['passed'] ?? 0);
+        $failed = (int) ($outcomes['failed'] ?? 0);
+        $skipped = (int) ($outcomes['skipped'] ?? 0);
+
+        if ($platform === 'harness-proof') {
+            printf(
+                "  %-10s %-8s %d passed, %d failed, %d skipped — the failures in it are the harness proving itself\n",
+                $platform,
+                'PROOF',
+                $passed,
+                $failed,
+                $skipped,
+            );
+
+            continue;
+        }
+
+        $totalPassed += $passed;
+        $totalFailed += $failed;
+        $totalSkipped += $skipped;
+
+        $verdict = $failed > 0 ? 'FAILED' : ($passed > 0 ? 'PASSED' : 'SKIPPED');
+
+        printf("  %-10s %-8s %d passed, %d failed, %d skipped\n", $platform, $verdict, $passed, $failed, $skipped);
+
+        foreach (array_keys($reasons[$platform] ?? []) as $reason) {
+            printf("             skipped: %s\n", $reason);
+        }
+    }
+
+    if ($counts === []) {
+        echo "  NOTHING WAS CHECKED — the live suite recorded no checks at all.\n\n";
+    }
+
+    foreach ($notes as $note) {
+        if (!is_array($note)) {
+            continue;
+        }
+
+        printf("  note [%s]: %s\n", (string) ($note['platform'] ?? 'unknown'), (string) ($note['text'] ?? ''));
+    }
+
+    printf("\n  checks: %d passed, %d failed, %d skipped.\n", $totalPassed, $totalFailed, $totalSkipped);
+
+    echo "\n";
+}
+
+/**
+ * The exit code of the run.
+ *
+ * Zero only when every platform the operator asked for was really checked
+ * and nothing failed. A run that skipped everything is not a pass: it is
+ * the failure mode this harness exists to prevent, so it leaves a non-zero
+ * code behind.
+ */
+function liveExitCode(string $reportPath, LiveContext $context): int
+{
+    $report = json_decode((string) @file_get_contents($reportPath), true);
+
+    if (!is_array($report)) {
+        return 2;
+    }
+
+    $checks = is_array($report['checks'] ?? null) ? $report['checks'] : [];
+
+    $passed = [];
+    $failed = 0;
+
+    foreach ($checks as $check) {
+        if (!is_array($check)) {
+            continue;
+        }
+
+        $platform = (string) ($check['platform'] ?? 'unknown');
+        $outcome = (string) ($check['outcome'] ?? '');
+
+        if ($outcome === 'passed') {
+            $passed[$platform] = true;
+        }
+
+        if ($outcome === 'failed' && $platform !== 'harness-proof') {
+            $failed++;
+        }
+    }
+
+    if ($failed > 0) {
+        return 1;
+    }
+
+    $configured = 0;
+    $verified = 0;
+
+    foreach (SocialPlatform::cases() as $platform) {
+        $hasCredentials = $context->credentials->clientId($platform) !== null
+            && $context->credentials->clientSecret($platform) !== null;
+
+        if (!$hasCredentials) {
+            continue;
+        }
+
+        $configured++;
+
+        if (isset($passed[$platform->value])) {
+            $verified++;
+
+            continue;
+        }
+
+        echo '  NOTHING WAS VERIFIED FOR ' . strtoupper($platform->value) . " — every check on it was skipped.\n";
+    }
+
+    if ($configured === 0) {
+        echo "  NO CREDENTIALS — there was no platform to check.\n";
+    }
+
+    echo "\n";
+
+    return $configured > 0 && $verified === $configured ? 0 : 2;
+}

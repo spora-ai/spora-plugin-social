@@ -1,0 +1,14 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/phpstan/phpstan-mockery/extension.neon
+
+parameters:
+    paths:
+        - src
+        - tests
+        - compat
+    level: 5
+    excludePaths:
+        - vendor
+    bootstrapFiles:
+        - phpstan-bootstrap.php

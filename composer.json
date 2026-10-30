@@ -1,0 +1,66 @@
+{
+  "name": "spora-ai/spora-plugin-social",
+  "description": "Native social publishing for LinkedIn, Facebook and Instagram \u2014 connect accounts, write and schedule posts with an agent, and read the numbers back.",
+  "type": "spora-plugin",
+  "keywords": [
+    "spora-plugin",
+    "spora",
+    "social",
+    "social-publishing",
+    "linkedin",
+    "facebook",
+    "instagram",
+    "scheduling"
+  ],
+  "license": "MIT",
+  "require": {
+    "php": "^8.4.1",
+    "league/oauth2-client": "^2.9",
+    "spora-ai/spora-core": ">=0.32.0 <2.0.0",
+    "spora-ai/spora-plugin-social-frontend": ">=0.1.0 <2.0.0",
+    "symfony/http-client": "^8.0"
+  },
+  "require-dev": {
+    "friendsofphp/php-cs-fixer": "^3.94",
+    "larastan/larastan": "^3.9",
+    "mockery/mockery": "^1.6",
+    "pestphp/pest": "^5.0",
+    "phpstan/phpstan": "^2.1",
+    "phpstan/phpstan-mockery": "^2.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Spora\\Plugins\\Social\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Spora\\Plugins\\Social\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "pest --exclude-testsuite=Live",
+    "test:parallel": "pest --parallel --processes=auto --max-batch-size=50 --exclude-testsuite=Live",
+    "test:coverage:clover": "XDEBUG_MODE=coverage pest --coverage-clover=coverage.xml --parallel --processes=auto --max-batch-size=50 --exclude-testsuite=Live",
+    "live": "@php bin/live",
+    "analyse": "phpstan analyse --no-progress --memory-limit=512M",
+    "lint": "php-cs-fixer fix --dry-run --diff --no-interaction",
+    "format": "php-cs-fixer fix --no-interaction"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true,
+    "allow-plugins": {
+      "pestphp/pest-plugin": true,
+      "spora-ai/installer": true
+    }
+  },
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/spora-ai/spora-plugin-social-frontend.git"
+    }
+  ],
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
