@@ -169,6 +169,23 @@ it('lists the connections of the principal', function () {
         ->and($result->data['connections'])->toHaveCount(1);
 });
 
+it('lists the account ids a post can go to', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $connection = createSocialConnection($principalId, 'linkedin', ['access_token' => 'the-token']);
+    $account = createSocialAccount($principalId, 'linkedin', 'organization', ['connection' => $connection]);
+
+    $tool = new SocialConnectionsTool(connectionService());
+
+    $result = $tool->execute(['action' => 'list'], 1, null, principalContext($principalId));
+
+    // The account id is what `social_post` takes, and the model reads
+    // the content — not the data — so it has to be in the answer.
+    expect($result->success)->toBeTrue()
+        ->and($result->content)->toContain('connection ' . $connection->id)
+        ->and($result->content)->toContain('account ' . $account->id);
+});
+
 it('says that no account is connected', function () {
     $fixture = aPrincipalWithTheTool();
 

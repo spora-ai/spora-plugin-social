@@ -99,14 +99,21 @@ final class SocialMediaController extends AbstractSocialController
             $fits = true;
 
             foreach ($platforms as $platform) {
-                $fit = PlatformFit::check($platform, $asset->mime_type, $asset->byte_size);
+                // The media as the platform receives it: the backend
+                // converts a PNG for Instagram before it publishes, so
+                // judging the original would warn about a post that goes
+                // out.
+                $prepared = $this->media->prepareForFit($asset, $platform);
+
+                $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
                 $fits = $fits && $fit['fits'];
 
                 $perPlatform[] = [
-                    'platform' => $platform->value,
-                    'fits'     => $fit['fits'],
-                    'reasons'  => $fit['reasons'],
-                    'remedy'   => $fit['remedy'],
+                    'platform'  => $platform->value,
+                    'fits'      => $fit['fits'],
+                    'reasons'   => $fit['reasons'],
+                    'remedy'    => $fit['remedy'],
+                    'mime_type' => $prepared->mimeType,
                 ];
             }
 

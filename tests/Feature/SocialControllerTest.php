@@ -333,11 +333,32 @@ it('lists the media of the principal with the url the host renders as an image',
         ->and($body['data'][0]['asset_url'])->toStartWith('/api/v1/assets/');
 });
 
-it('checks the fit of an asset and names the remedy', function () {
+it('checks the fit of an asset as the platform receives it', function () {
     $auth = bootAuthLayer();
     $principalId = createUserPrincipal(bootAuth($auth));
 
     $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+
+    $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
+        'principal_id'   => $principalId,
+        'media_asset_id' => $asset->id,
+        'platforms'      => ['instagram'],
+    ]));
+
+    expect($response->getStatusCode())->toBe(200);
+
+    // Instagram takes no PNG, but the backend converts one before it
+    // publishes — so the asset fits there, as the publish will find it.
+    $body = decode($response);
+    expect($body['data']['fits'])->toBeTrue()
+        ->and($body['data']['per_platform'][0]['mime_type'])->toBe('image/jpeg');
+});
+
+it('names the remedy for a media Instagram cannot take at all', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'text/markdown', 'payload' => '# hello']);
 
     $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
         'principal_id'   => $principalId,

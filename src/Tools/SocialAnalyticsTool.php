@@ -109,7 +109,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $analytics = $this->metrics->postAnalytics($postId, $principalId);
 
         return ToolResult::ok(
-            'The numbers of post #' . $postId . '.',
+            SocialToolPresenter::postMetrics($postId, $analytics),
             $analytics,
         );
     }
@@ -119,7 +119,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            'The totals of the last ' . $days . ' days. The combined figure is a rough one — the platforms count reach differently.',
+            SocialToolPresenter::totals($days, $summary['totals'], $summary['notes']),
             ['totals' => $summary['totals'], 'notes' => $summary['notes']],
         );
     }
@@ -129,7 +129,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            'The top posts of the last ' . $days . ' days.',
+            SocialToolPresenter::topPosts($days, $summary['top_posts']),
             ['top_posts' => $summary['top_posts']],
         );
     }
@@ -139,7 +139,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            'One row per network for the last ' . $days . ' days.',
+            SocialToolPresenter::networks($days, $summary['by_network'], $summary['notes']),
             ['by_network' => $summary['by_network'], 'series' => $summary['series'], 'notes' => $summary['notes']],
         );
     }

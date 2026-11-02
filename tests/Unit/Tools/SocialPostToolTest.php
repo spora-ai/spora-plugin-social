@@ -83,7 +83,10 @@ it('publishes a post and reports the per-account outcome', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->data['post']['status'])->toBe('published')
-        ->and($result->data['post']['targets'][0]['external_id'])->toBe('urn:li:share:9');
+        ->and($result->data['post']['targets'][0]['external_id'])->toBe('urn:li:share:9')
+        // Which network published and which one refused is the answer
+        // the agent needs — and the model reads the content.
+        ->and($result->content)->toContain('linkedin — account ' . $account->id . ' — published');
 });
 
 it('takes a published post back down', function () {
@@ -120,7 +123,7 @@ it('lists the posts of the principal', function () {
 
     $tool = postTool();
 
-    $tool->execute([
+    $created = $tool->execute([
         'action'      => 'create',
         'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
@@ -130,7 +133,12 @@ it('lists the posts of the principal', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->data['total'])->toBe(1)
-        ->and($result->data['items'])->toHaveCount(1);
+        ->and($result->data['items'])->toHaveCount(1)
+        // The post id is what a follow-up call takes, and the model
+        // reads the content — not the data — so it has to be in the
+        // answer.
+        ->and($result->content)->toContain('#' . $created->data['post']['id'])
+        ->and($result->content)->toContain(SocialFixtures::POST_BODY);
 });
 
 it('inspects one post', function () {
@@ -150,7 +158,11 @@ it('inspects one post', function () {
     );
 
     expect($result->success)->toBeTrue()
-        ->and($result->data['post']['body'])->toBe(SocialFixtures::POST_BODY);
+        ->and($result->data['post']['body'])->toBe(SocialFixtures::POST_BODY)
+        // The copy and the accounts are in the answer, not only in the
+        // data: the model reads the answer.
+        ->and($result->content)->toContain('body: ' . SocialFixtures::POST_BODY)
+        ->and($result->content)->toContain('account ' . $account->id);
 });
 
 it('updates a post', function () {

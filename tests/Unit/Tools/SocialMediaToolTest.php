@@ -17,10 +17,55 @@ it('lists the media library of the principal', function () {
     expect($result->success)->toBeTrue()
         ->and($result->data['assets'])->toHaveCount(1)
         ->and($result->data['assets'][0]['id'])->toBe($asset->id)
-        ->and($result->data['assets'][0]['mime_type'])->toBe(SocialFixtures::MIME_PNG);
+        ->and($result->data['assets'][0]['mime_type'])->toBe(SocialFixtures::MIME_PNG)
+        // The model reads the content, not the data — so the id it has
+        // to attach has to be in the answer.
+        ->and($result->content)->toContain($asset->id);
 });
 
-it('checks an asset against a platform and names the remedy', function () {
+it('lists only the kind of media that was asked for', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $image = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
+    $document = createMediaAsset($principalId, [
+        'mime_type'  => 'text/markdown',
+        'filename'   => 'notes.md',
+        'media_type' => 'document',
+        'payload'    => '# hello',
+    ]);
+
+    $tool = new SocialMediaTool(mediaPipeline(), postService());
+
+    $result = $tool->execute(
+        ['action' => 'list_assets', 'media_kind' => 'image'],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['assets'])->toHaveCount(1)
+        ->and($result->data['assets'][0]['id'])->toBe($image->id)
+        ->and($result->content)->not->toContain($document->id);
+});
+
+it('refuses a media kind it does not know', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = new SocialMediaTool(mediaPipeline(), postService());
+
+    $result = $tool->execute(
+        ['action' => 'list_assets', 'media_kind' => 'picture'],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('media_kind must be image, video, audio or document');
+});
+
+it('judges an asset by what the platform receives, not by its own mime', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
     $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
@@ -33,10 +78,34 @@ it('checks an asset against a platform and names the remedy', function () {
         'platforms'      => ['instagram'],
     ], 1, null, principalContext($principalId));
 
+    // Instagram takes no PNG, but the backend converts one before it
+    // publishes. A check that judged the original would refuse a post
+    // that goes out.
+    expect($result->success)->toBeTrue()
+        ->and($result->data['fits'])->toBeTrue()
+        ->and($result->data['per_platform'][0]['platform'])->toBe('instagram')
+        ->and($result->data['per_platform'][0]['mime_type'])->toBe(SocialFixtures::MIME_JPEG)
+        ->and($result->data['per_platform'][0]['converted_from'])->toBe(SocialFixtures::MIME_PNG)
+        ->and($result->content)->toContain('is converted to image/jpeg for instagram');
+});
+
+it('names the remedy for a media the platform cannot take at all', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'text/markdown', 'payload' => '# hello']);
+
+    $tool = new SocialMediaTool(mediaPipeline(), postService());
+
+    $result = $tool->execute([
+        'action'         => 'check_fit',
+        'media_asset_id' => $asset->id,
+        'platforms'      => ['instagram'],
+    ], 1, null, principalContext($principalId));
+
     expect($result->success)->toBeTrue()
         ->and($result->data['fits'])->toBeFalse()
-        ->and($result->data['per_platform'][0]['platform'])->toBe('instagram')
-        ->and($result->data['per_platform'][0]['remedy'])->toBe('Convert to JPEG');
+        ->and($result->data['per_platform'][0]['remedy'])->toBe('Convert to JPEG')
+        ->and($result->content)->toContain('does not fit');
 });
 
 it('prepares an asset for instagram', function () {
@@ -55,7 +124,12 @@ it('prepares an asset for instagram', function () {
     expect($result->success)->toBeTrue()
         ->and($result->data['format'])->toBe('format-jpeg')
         ->and($result->data['mime_type'])->toBe('image/jpeg')
-        ->and($result->data['url'])->toStartWith('https://spora.test/api/v1/public/media/');
+        ->and($result->data['url'])->toStartWith('https://spora.test/api/v1/public/media/')
+        // The derivative's id and the URL it is served under are what
+        // the agent has to know, and the model reads the content.
+        ->and($result->content)->toContain((string) $result->data['media_asset_id'])
+        ->and($result->content)->toContain((string) $result->data['url'])
+        ->and($result->content)->toContain($asset->id);
 });
 
 it('attaches an asset to a post', function () {

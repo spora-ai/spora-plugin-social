@@ -27,7 +27,9 @@ operator's voice, with the operator's approval.
 > "Post something about the release next Tuesday morning."
 
 1. **Know the accounts.** `social_connections` with action `list`. Which
-   accounts are connected, on which platforms. A connection whose token is
+   accounts are connected, on which platforms — the answer carries the
+   account id of each one, and that id is what `social_post` takes. A
+   connection whose token is
    close to its expiry (`needs_reconnect`) is flagged there — renew it with
    action `refresh` and the connection's `connection_id` before you plan a
    post around it. A Meta connection is not renewed: it has no refresh
@@ -94,7 +96,8 @@ no reels, no stories.
 takes no PNG at all** — a PNG asset has to be converted. You do not convert
 it yourself: attach the original asset id and the backend converts it to
 JPEG when it publishes. Use `social_media` action `prepare` to see what
-Instagram will get — the JPEG derivative and the public URL it will fetch.
+Instagram will get — the JPEG derivative, its asset id and the public URL
+it will fetch.
 
 The character limits are the platforms' limits, and the plugin **enforces
 them at publish time**: a body over its platform's limit is refused, and the
@@ -115,7 +118,9 @@ a hashtag wall is not a voice.
   publishes the bytes for LinkedIn and Facebook.
 - **Check before you attach.** `check_fit` answers per platform and names
   the remedy: "Convert to JPEG", "Compress", "Convert the file to MP4".
-  Attach an asset only when it fits every platform you are targeting.
+  It judges the asset as the platform receives it, so a PNG fits Instagram:
+  the backend converts it to a JPEG before it publishes. Attach an asset
+  only when it fits every platform you are targeting.
 - One attachment per post in this version, and the backend refuses a second
   one.
 - **Instagram fetches the media from the internet**, so the file has to be

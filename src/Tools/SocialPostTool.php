@@ -187,10 +187,7 @@ final class SocialPostTool extends AbstractSocialTool
     {
         $post = $this->publisher->publish($this->postId($arguments), $principalId);
 
-        return ToolResult::ok(
-            'Published post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.',
-            ['post' => SocialPostResource::toArray($post)],
-        );
+        return $this->answer($post, 'Published post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.');
     }
 
     private function list(int $principalId, array $arguments): ToolResult
@@ -210,7 +207,7 @@ final class SocialPostTool extends AbstractSocialTool
         );
 
         return ToolResult::ok(
-            $result['total'] . ' post(s) for this principal.',
+            SocialToolPresenter::posts($items, (int) $result['total']),
             ['items' => $items, 'total' => $result['total']],
         );
     }
@@ -219,10 +216,7 @@ final class SocialPostTool extends AbstractSocialTool
     {
         $post = $this->posts->find($this->postId($arguments), $principalId);
 
-        return ToolResult::ok(
-            'Post #' . $post->id . ' is ' . $post->status . '.',
-            ['post' => SocialPostResource::toArray($post)],
-        );
+        return $this->answer($post, 'Post #' . $post->id . ' is ' . $post->status . '.');
     }
 
     private function update(int $principalId, array $arguments): ToolResult
@@ -239,19 +233,30 @@ final class SocialPostTool extends AbstractSocialTool
     {
         $post = $this->publisher->retry($this->postId($arguments), $principalId);
 
-        return ToolResult::ok(
-            'Retried the failed accounts of post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.',
-            ['post' => SocialPostResource::toArray($post)],
-        );
+        return $this->answer($post, 'Retried the failed accounts of post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.');
     }
 
     private function delete(int $principalId, array $arguments): ToolResult
     {
         $post = $this->publisher->delete($this->postId($arguments), $principalId);
 
+        return $this->answer($post, 'Took down post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.');
+    }
+
+    /**
+     * The post, with what happened to it.
+     *
+     * The outcome per account is the answer the agent needs — which
+     * network published and which one refused — and it was in the data,
+     * which the model never reads.
+     */
+    private function answer(SocialPost $post, string $headline): ToolResult
+    {
+        $resource = SocialPostResource::toArray($post);
+
         return ToolResult::ok(
-            'Took down post #' . $post->id . self::STATUS_SUFFIX . $post->status . '.',
-            ['post' => SocialPostResource::toArray($post)],
+            $headline . "\n" . SocialToolPresenter::postDetails($resource),
+            ['post' => $resource],
         );
     }
 

@@ -229,6 +229,15 @@ it, so there is no separate `create` first. `social_post` with action
 `list` takes a `from` / `to` window, which is how an agent sees what is
 already going out.
 
+Every read answers with the rows, not with a count: the account ids a
+post can go to, the asset ids that can be attached, the post ids and the
+days they are due. A model that cannot see an id has to guess it, and a
+guessed account id is a post that goes nowhere.
+
+`social_media` with action `check_fit` judges an asset as the platform
+**receives** it: the backend converts a PNG to a JPEG for Instagram
+before it publishes, so a PNG fits Instagram and the answer says so.
+
 Publishing needs the operator's approval: it cannot be undone on the
 network, and the copy goes out under the account's name. A **scheduled**
 post needs it too — it commits the copy to go out later without asking

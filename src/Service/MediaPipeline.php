@@ -10,6 +10,7 @@ use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetReader;
 use Spora\Services\MediaArchive\MediaDerivativeService;
+use Throwable;
 
 /**
  * From a Media Archive asset to something a platform can publish.
@@ -58,10 +59,61 @@ final class MediaPipeline
     public function prepare(MediaAsset $asset, SocialPlatform $platform): PreparedMedia
     {
         if ($platform === SocialPlatform::Instagram) {
-            return $this->prepareForInstagram($asset);
+            $source = $this->instagramSource($asset);
+
+            return new PreparedMedia(
+                mediaAssetId: (string) $source['asset']->id,
+                mimeType: (string) $source['asset']->mime_type,
+                sizeBytes: (int) ($source['asset']->byte_size ?? 0),
+                filename: (string) ($source['asset']->filename ?? 'media'),
+                publicUrl: $this->mintPublicUrl($source['asset']),
+                derivativeFormat: $source['format'],
+            );
         }
 
         return $this->prepareWithBytes($asset);
+    }
+
+    /**
+     * The media as the platform receives it: its mime type and its size.
+     *
+     * The publish path checks the prepared media, not the original —
+     * Instagram takes no PNG, but the pipeline converts one first — so a
+     * fit check that judged the original would refuse a post that goes
+     * out.
+     *
+     * The bytes are not read: a fit check asks about a mime type and a
+     * size, and LinkedIn and Facebook receive the asset as it is.
+     *
+     * A conversion that cannot be made — the archive has no producer for
+     * an SVG — leaves the asset as it is: that is then what the platform
+     * would receive, and the fit check says so. {@see prepare()} asks
+     * for the conversion itself and refuses instead.
+     */
+    public function prepareForFit(MediaAsset $asset, SocialPlatform $platform): PreparedMedia
+    {
+        if ($platform === SocialPlatform::Instagram) {
+            try {
+                $source = $this->instagramSource($asset);
+            } catch (Throwable) {
+                $source = ['asset' => $asset, 'format' => null];
+            }
+
+            return new PreparedMedia(
+                mediaAssetId: (string) $source['asset']->id,
+                mimeType: (string) $source['asset']->mime_type,
+                sizeBytes: (int) ($source['asset']->byte_size ?? 0),
+                filename: (string) ($source['asset']->filename ?? 'media'),
+                derivativeFormat: $source['format'],
+            );
+        }
+
+        return new PreparedMedia(
+            mediaAssetId: (string) $asset->id,
+            mimeType: (string) $asset->mime_type,
+            sizeBytes: (int) ($asset->byte_size ?? 0),
+            filename: (string) ($asset->filename ?? 'media'),
+        );
     }
 
     /**
@@ -69,26 +121,21 @@ final class MediaPipeline
      *
      * A PNG is converted by core's producer; the derivative is what gets
      * published, so the original stays untouched.
+     *
+     * @return array{asset: MediaAsset, format: ?string}
      */
-    private function prepareForInstagram(MediaAsset $asset): PreparedMedia
+    private function instagramSource(MediaAsset $asset): array
     {
-        $source = $asset;
-        $derivativeFormat = null;
         $mime = strtolower((string) $asset->mime_type);
 
         if (str_starts_with($mime, 'image/') && $mime !== 'image/jpeg') {
-            $source = $this->derivatives->createFromRequest($asset, self::JPEG_FORMAT);
-            $derivativeFormat = self::JPEG_FORMAT;
+            return [
+                'asset'  => $this->derivatives->createFromRequest($asset, self::JPEG_FORMAT),
+                'format' => self::JPEG_FORMAT,
+            ];
         }
 
-        return new PreparedMedia(
-            mediaAssetId: (string) $source->id,
-            mimeType: (string) $source->mime_type,
-            sizeBytes: (int) ($source->byte_size ?? 0),
-            filename: (string) ($source->filename ?? 'media'),
-            publicUrl: $this->mintPublicUrl($source),
-            derivativeFormat: $derivativeFormat,
-        );
+        return ['asset' => $asset, 'format' => null];
     }
 
     private function prepareWithBytes(MediaAsset $asset): PreparedMedia
