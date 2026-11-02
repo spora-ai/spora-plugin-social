@@ -1,5 +1,5 @@
 {
-  "A draft needs a brief to write from.": "Ein Entwurf braucht eine Vorgabe.",
+  "A post needs a message or media.": "Ein Beitrag braucht eine Nachricht oder Medien.",
   "A post needs at least one account to publish to.": "Ein Beitrag braucht mindestens ein Konto.",
   "Add the app id, the app secret and the configuration id in Settings → Plugins.": "App-ID, App-Secret und Konfigurations-ID unter Settings → Plugins eintragen.",
   "Add the client id, the client secret and the requested permissions in Settings → Plugins.": "Client-ID, Client-Secret und die angeforderten Berechtigungen unter Settings → Plugins eintragen.",
@@ -9,7 +9,6 @@
   "LinkedIn v1 publishes images only.": "LinkedIn veröffentlicht in Version 1 nur Bilder.",
   "Meta integration needs setup": "Die Meta-Integration braucht Einrichtung",
   "Meta integration needs setup — add the app id, the app secret and the configuration id in Settings → Plugins.": "Die Meta-Integration braucht Einrichtung — App-ID, App-Secret und Konfigurations-ID unter Settings → Plugins eintragen.",
-  "No language model is configured for this principal. Set a preferred configuration, or a global default.": "Für diesen Principal ist kein Sprachmodell konfiguriert. Legen Sie eine bevorzugte Konfiguration oder einen globalen Standard fest.",
   "No social account is connected for this principal.": "Für diesen Principal ist kein Social-Konto verbunden.",
   "Publish to LinkedIn, Facebook and Instagram.": "Auf LinkedIn, Facebook und Instagram veröffentlichen.",
   "Request body must be valid JSON.": "Der Request-Body muss gültiges JSON sein.",
@@ -39,5 +38,5 @@
   "principal_id is required.": "principal_id ist erforderlich.",
   "provider must be meta or linkedin.": "provider muss meta oder linkedin sein.",
   "scheduled_for is not a valid date.": "scheduled_for ist kein gültiges Datum.",
-  "Publish to LinkedIn, Facebook and Instagram from Spora. Connect your own accounts, write one post per network, let an agent schedule them, and see how each one did.": "Auf LinkedIn, Facebook und Instagram veröffentlichen. Eigene Konten verbinden, je Netzwerk einen Beitrag schreiben, eine Planung wiederholen lassen und sehen, wie er angekommen ist."
+  "Publish to LinkedIn, Facebook and Instagram from Spora. Connect your own accounts, write one post for every network, let an agent schedule them, and see how each one did.": "Auf LinkedIn, Facebook und Instagram veröffentlichen. Eigene Konten verbinden, einen Beitrag für alle Netzwerke schreiben, eine Planung wiederholen lassen und sehen, wie er angekommen ist."
 }

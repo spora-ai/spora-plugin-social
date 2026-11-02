@@ -99,7 +99,6 @@ it('registers every route of the api contract under the plugin path', function (
         '/api/v1/plugins/social/media/prepare',
         '/api/v1/plugins/social/media/attach',
         '/api/v1/plugins/social/media/detach',
-        '/api/v1/plugins/social/drafts/generate',
         '/api/v1/plugins/social/analytics/summary',
         '/api/v1/plugins/social/analytics/posts/{postId}',
         '/api/v1/plugins/social/oauth/{platform}/callback',

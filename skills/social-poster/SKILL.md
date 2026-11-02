@@ -36,14 +36,15 @@ operator's voice, with the operator's approval.
    and `from` / `to` set to the days around the requested date, or
    `social_calendar` with action `list_month` for the month. Do not post
    the same thing twice.
-3. **Write the copy.** One body per platform — see the rules below.
+3. **Write the copy.** One body for every platform — see the rules below.
+   A platform gets a body of its own only where its copy really differs.
 4. **Pick the media.** `social_media` with action `list_assets` for the
    library, then `check_fit` for the asset against every platform you are
    targeting.
 5. **Hand it over.** `social_post` with action `schedule`, the body (and
-   the per-platform bodies), the account ids, the media asset ids and the
-   time. That is one call — `schedule` creates the post and dates it, so
-   there is no separate "create" first.
+   the per-platform bodies where they differ), the hashtags, the account
+   ids, the media asset ids and the time. That is one call — `schedule`
+   creates the post and dates it, so there is no separate "create" first.
 6. **Later, read the result.** `social_analytics` with action
    `post_metrics` for one post, or `period_totals` for the period.
 
@@ -68,9 +69,10 @@ operator's voice, with the operator's approval.
 
 ## The per-platform rules
 
-One body per platform. The platforms have different conventions, different
-limits and different readers; one text for all three reads as an
-afterthought on at least one of them.
+One body goes to every platform. A platform gets a body of its own only
+where its readers, its conventions or its limit ask for one: the copy that
+fits one of them need not fit another. Three bodies by reflex is as wrong as
+one body that ignores the platform.
 
 | Platform | Media | Types | Cap | Body |
 |---|---|---|---|---|
@@ -81,6 +83,9 @@ afterthought on at least one of them.
 A body over the limit does not go out. The publish fails with the same
 wording the composer shows: "Over the limit: 5000 / 2200 characters for
 Instagram."
+
+The visible count is not a limit: the whole body is published, and the
+platform folds the rest away until a reader opens it.
 
 **LinkedIn publishes images only in this version.** No video, no carousels,
 no reels, no stories.
@@ -97,6 +102,10 @@ refusal names the platform and the numbers. Each platform is judged against
 its own body — `platform_bodies[platform]`, or the shared `body` when there
 is none for it — so a post aimed at Instagram and Facebook with one body
 is checked twice, against each platform's limit.
+
+**Hashtags** are a list of tags without the hashes. The plugin adds them
+under the body when the post goes out, on every platform. Keep it to a few —
+a hashtag wall is not a voice.
 
 ## The media rules
 
@@ -153,6 +162,7 @@ operator approves the copy and the time once — not again at the moment.
 - Do not publish on your own initiative. "Post this every Tuesday" is a
   schedule the operator approves.
 - Do not post the same thing twice — look at what is going out first.
-- Do not write one text for three platforms.
+- Do not give every platform a body of its own by reflex. One shared body,
+  and a body of its own only where the copy really differs.
 - Do not attach an asset you have not checked.
 - Do not invent an account id — list them.

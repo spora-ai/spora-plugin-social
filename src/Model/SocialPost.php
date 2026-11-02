@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $title Internal label, never published.
  * @property string|null $body
  * @property array<string, string>|null $platform_bodies
+ * @property list<string>|null $hashtags
  * @property string $status
  * @property string $source
  * @property \Carbon\Carbon|null $scheduled_for
@@ -62,6 +63,7 @@ final class SocialPost extends Model
         'title',
         'body',
         'platform_bodies',
+        'hashtags',
         'source',
         'scheduled_for',
         'timezone',
@@ -71,6 +73,7 @@ final class SocialPost extends Model
     protected $casts = [
         'principal_id'  => 'integer',
         'platform_bodies' => 'array',
+        'hashtags'      => 'array',
         'scheduled_for' => 'datetime',
         'published_at'  => 'datetime',
     ];

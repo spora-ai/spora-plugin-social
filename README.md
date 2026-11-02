@@ -2,7 +2,7 @@
 
 Native social publishing for **LinkedIn**, **Facebook** and **Instagram**.
 
-Connect your own accounts, write one post per network, let an agent
+Connect your own accounts, write one post for every network, let an agent
 schedule it, and see how each one did. This plugin replaces
 `spora-plugin-zernio`, which was a thin proxy to a third-party service that
 owned the tokens, the scheduling and the publishing.
@@ -27,6 +27,9 @@ owned the tokens, the scheduling and the publishing.
 - **Publish.** One post, aimed at several accounts. The outcome is recorded
   **per account**, so a post that reached LinkedIn and not Instagram is
   `partial`, not `failed`.
+- **Write.** The composer's *Draft with AI* button hands the request to an
+  agent, which writes the post with the `social_post` tool and saves it as a
+  draft the operator can edit in the panel.
 - **Take down.** A published post can be pulled back down, one network at a
   time. LinkedIn and Facebook can delete a published post; **Instagram
   cannot** — the delete endpoint exists only under Instagram's *Facebook
@@ -252,6 +255,10 @@ serves them from a public URL for it; LinkedIn and Facebook take the bytes.
 Instagram takes no PNG at all, so the plugin converts it through core's own
 image producer before publishing.
 
+A post carries **one** body, and every platform publishes it. A platform
+gets a body of its own only where its readers, its conventions or its limit
+ask for one, and that copy goes in `platform_bodies`.
+
 The **body** has a limit too, and the plugin enforces it at publish time:
 LinkedIn 3,000 · Facebook 63,206 · Instagram 2,200 characters. Each target
 is judged against its own platform's limit and its own body
@@ -259,6 +266,13 @@ is judged against its own platform's limit and its own body
 Instagram and Facebook with one body is checked twice. The refusal reads
 the way the composer reads: *"Over the limit: 5000 / 2200 characters for
 Instagram."*
+
+Each platform shows part of the body before it folds the rest away:
+LinkedIn 200 characters before "see more", Facebook 125 in the feed,
+Instagram 125 before "more". The whole body is published either way.
+
+**Hashtags** are a list of tags without the hashes. The plugin adds them
+under the body when the post goes out, on every platform.
 
 ## Times and timezones
 

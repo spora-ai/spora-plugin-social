@@ -260,9 +260,11 @@ final class SocialPublisher
 
             $body = $this->bodyFor($post, $platform);
 
-            // The body is judged against the platform it is going to, with
-            // that platform's own text: one post aimed at Instagram and
-            // Facebook carries two bodies, and each has its own limit.
+            // The text is judged against the platform it is going to, with
+            // that platform's own body: one post aimed at Instagram and
+            // Facebook carries two bodies, and each has its own limit. The
+            // hashtags are part of the text that goes out, so they are
+            // counted against the limit as well.
             $bodyFit = PlatformFit::checkBody($platform, $body);
             if (!$bodyFit['fits']) {
                 throw SocialException::validation(trim(
@@ -424,13 +426,15 @@ final class SocialPublisher
     {
         $bodies = $post->platform_bodies;
 
+        $body = (string) $post->body;
+
         if (is_array($bodies)) {
             $specific = $bodies[$platform->value] ?? null;
             if (is_string($specific) && $specific !== '') {
-                return $specific;
+                $body = $specific;
             }
         }
 
-        return (string) $post->body;
+        return PlatformFit::composeText($body, is_array($post->hashtags) ? $post->hashtags : []);
     }
 }

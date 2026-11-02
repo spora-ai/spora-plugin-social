@@ -303,3 +303,21 @@ it('attaches the media assets the agent names', function () {
     expect($result->success)->toBeTrue()
         ->and($result->data['post']['media'])->toHaveCount(1);
 });
+
+it('writes the hashtags the agent names', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $tool = postTool();
+
+    $result = $tool->execute([
+        'action'      => 'create',
+        'body'        => SocialFixtures::POST_BODY,
+        'hashtags'    => ['#launch', 'shipit'],
+        'account_ids' => [$account->id],
+    ], 1, null, principalContext($principalId));
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['post']['hashtags'])->toBe(['launch', 'shipit']);
+});

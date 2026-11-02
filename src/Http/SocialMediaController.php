@@ -11,7 +11,6 @@ use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\PlatformFit;
-use Spora\Plugins\Social\Service\SocialDraftService;
 use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Services\PrincipalResolver;
 use Spora\Services\PrincipalService;
@@ -19,7 +18,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * The attachments and the drafts.
+ * The attachments.
  */
 final class SocialMediaController extends AbstractSocialController
 {
@@ -29,7 +28,6 @@ final class SocialMediaController extends AbstractSocialController
         PrincipalService $principalService,
         private readonly MediaPipeline $media,
         private readonly SocialPostService $posts,
-        private readonly SocialDraftService $drafts,
     ) {
         parent::__construct($auth, $principals, $principalService);
     }
@@ -180,65 +178,6 @@ final class SocialMediaController extends AbstractSocialController
 
             return $this->ok(SocialPostResource::toArray($post));
         });
-    }
-
-    /**
-     * A draft with a body per platform.
-     */
-    public function generateDraft(Request $request): JsonResponse
-    {
-        return $this->run(function () use ($request): JsonResponse {
-            $principalId = $this->writablePrincipalId($request);
-            $body = $this->body($request);
-
-            $draft = $this->drafts->generate(
-                $principalId,
-                (string) ($body['brief'] ?? ''),
-                $this->platformNames($body),
-                $this->accountIds($body),
-            );
-
-            return $this->ok($draft);
-        });
-    }
-
-    /**
-     * The platforms the draft is written for.
-     *
-     * @param  array<string, mixed> $body
-     * @return list<string>
-     */
-    private function platformNames(array $body): array
-    {
-        $names = [];
-
-        foreach (is_array($body['platforms'] ?? null) ? $body['platforms'] : [] as $name) {
-            $platform = is_string($name) ? SocialPlatform::tryFromName($name) : null;
-            if ($platform !== null) {
-                $names[] = $platform->value;
-            }
-        }
-
-        return $names;
-    }
-
-    /**
-     * The accounts the draft is written for.
-     *
-     * @param  array<string, mixed> $body
-     * @return list<int>
-     */
-    private function accountIds(array $body): array
-    {
-        $ids = [];
-
-        foreach (is_array($body['account_ids'] ?? null) ? $body['account_ids'] : [] as $value) {
-            if (is_numeric($value)) {
-                $ids[] = (int) $value;
-            }
-        }
-
-        return $ids;
     }
 
     /**

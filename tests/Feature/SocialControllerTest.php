@@ -84,15 +84,6 @@ function mediaController(AuthService $auth): SocialMediaController
         new PrincipalService($resolver),
         mediaPipeline(),
         postService(),
-        new Spora\Plugins\Social\Service\SocialDraftService(
-            new Spora\Services\LLMConfigPreferences(),
-            new Spora\Drivers\DriverFactory(
-                new Monolog\Logger('test'),
-                new Spora\Services\LLMConfigService(
-                    new Spora\Core\SecurityManager(str_repeat('k', SODIUM_CRYPTO_SECRETBOX_KEYBYTES)),
-                ),
-            ),
-        ),
     );
 }
 
@@ -774,22 +765,6 @@ it('refuses an attachment without an asset', function () {
 
     expect($response->getStatusCode())->toBe(422)
         ->and(decode($response)['error']['message'])->toContain('media_asset_id is required');
-});
-
-it('asks the model for a draft', function () {
-    $auth = bootAuthLayer();
-    $principalId = createUserPrincipal(bootAuth($auth));
-
-    $response = mediaController($auth)->generateDraft(jsonRequest('POST', '/api/v1/plugins/social/drafts/generate', [
-        'principal_id' => $principalId,
-        'brief'        => 'We shipped',
-        'platforms'    => ['linkedin'],
-    ]));
-
-    // The model is not configured in the test suite, and the refusal is
-    // the endpoint's answer all the same.
-    expect($response->getStatusCode())->toBe(422)
-        ->and(decode($response)['error']['message'])->toContain('No language model is configured');
 });
 
 it('answers with the calendar of a month', function () {

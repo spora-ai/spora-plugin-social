@@ -38,6 +38,7 @@ final class SocialPostService
         $post->title = $fields->title();
         $post->body = $fields->body();
         $post->platform_bodies = $fields->platformBodies();
+        $post->hashtags = $fields->hashtags();
         $post->source = $fields->source();
         $timezone = $fields->timezone();
         $post->timezone = $timezone;
@@ -45,6 +46,11 @@ final class SocialPostService
         $post->status = $post->scheduled_for !== null
             ? SocialPost::STATUS_SCHEDULED
             : SocialPost::STATUS_DRAFT;
+
+        $media = $this->mediaEntries($input);
+
+        $this->assertHasCopy($post, $media !== []);
+
         $post->save();
 
         foreach ($accounts as $account) {
@@ -56,7 +62,7 @@ final class SocialPostService
             $target->save();
         }
 
-        $this->writeMedia($post, $input);
+        $this->writeMedia($post, $media);
 
         return $post->fresh() ?? $post;
     }
@@ -199,6 +205,9 @@ final class SocialPostService
         if ($fields->has('platform_bodies')) {
             $post->platform_bodies = $fields->platformBodies();
         }
+        if ($fields->has('hashtags')) {
+            $post->hashtags = $fields->hashtags();
+        }
 
         // The zone first: a wall-clock time is read in the post's zone, so
         // the zone has to be settled before the time is parsed.
@@ -206,10 +215,16 @@ final class SocialPostService
 
         if ($fields->has('scheduled_for')) {
             $post->scheduled_for = $fields->scheduledFor($timezone);
+            $this->reschedule($post);
         }
         if ($fields->has('timezone')) {
             $post->timezone = $timezone;
         }
+
+        $media = $this->mediaEntries($input);
+        $hasMedia = $fields->has('media') ? $media !== [] : $post->media()->exists();
+
+        $this->assertHasCopy($post, $hasMedia);
 
         $post->save();
 
@@ -218,7 +233,7 @@ final class SocialPostService
         }
 
         if ($fields->has('media')) {
-            $this->replaceMedia($post, $input);
+            $this->replaceMedia($post, $media);
         }
 
         return $post->fresh() ?? $post;
@@ -291,16 +306,21 @@ final class SocialPostService
     }
 
     /**
-     * @param array<string, mixed> $input
+     * The attachments a request asks for.
+     *
+     * @param  array<string, mixed> $input
+     * @return list<array{media_asset_id: string, position: int}>
      */
-    private function writeMedia(SocialPost $post, array $input): void
+    private function mediaEntries(array $input): array
     {
         $media = $input['media'] ?? [];
         if (!is_array($media)) {
-            return;
+            return [];
         }
 
+        $entries = [];
         $position = 0;
+
         foreach ($media as $entry) {
             if (!is_array($entry)) {
                 continue;
@@ -311,23 +331,83 @@ final class SocialPostService
                 continue;
             }
 
-            $attachment = new SocialPostMedia();
-            $attachment->post_id = $post->id;
-            $attachment->media_asset_id = $assetId;
-            $attachment->position = is_numeric($entry['position'] ?? null) ? (int) $entry['position'] : $position;
-            $attachment->save();
+            $entries[] = [
+                'media_asset_id' => $assetId,
+                'position'      => is_numeric($entry['position'] ?? null) ? (int) $entry['position'] : $position,
+            ];
 
             $position++;
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @param list<array{media_asset_id: string, position: int}> $media
+     */
+    private function writeMedia(SocialPost $post, array $media): void
+    {
+        foreach ($media as $entry) {
+            $attachment = new SocialPostMedia();
+            $attachment->post_id = $post->id;
+            $attachment->media_asset_id = $entry['media_asset_id'];
+            $attachment->position = $entry['position'];
+            $attachment->save();
         }
     }
 
     /**
-     * @param array<string, mixed> $input
+     * @param list<array{media_asset_id: string, position: int}> $media
      */
-    private function replaceMedia(SocialPost $post, array $input): void
+    private function replaceMedia(SocialPost $post, array $media): void
     {
         $post->media()->delete();
-        $this->writeMedia($post, $input);
+        $this->writeMedia($post, $media);
+    }
+
+    /**
+     * A post has to say something or carry something.
+     *
+     * The post is judged as it ends up, not as it was asked for: an edit
+     * that empties the body of a post that has media still leaves a post
+     * that can go out, and an edit that empties a post that has nothing
+     * else leaves a post that cannot.
+     */
+    private function assertHasCopy(SocialPost $post, bool $hasMedia): void
+    {
+        if (trim((string) $post->body) !== '') {
+            return;
+        }
+
+        foreach ((array) $post->platform_bodies as $body) {
+            if (trim($body) !== '') {
+                return;
+            }
+        }
+
+        if ($hasMedia) {
+            return;
+        }
+
+        throw SocialException::validation('A post needs a message or media.');
+    }
+
+    /**
+     * The status a scheduled date implies.
+     *
+     * Only a post that has not gone out yet follows the date: one that is
+     * publishing, published, partial, failed or cancelled has been through
+     * the networks, and an edit must not undo that.
+     */
+    private function reschedule(SocialPost $post): void
+    {
+        if (!in_array($post->status, [SocialPost::STATUS_DRAFT, SocialPost::STATUS_SCHEDULED], true)) {
+            return;
+        }
+
+        $post->status = $post->scheduled_for !== null
+            ? SocialPost::STATUS_SCHEDULED
+            : SocialPost::STATUS_DRAFT;
     }
 
     /**

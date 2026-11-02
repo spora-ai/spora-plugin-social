@@ -31,7 +31,6 @@ use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialConnectionTokens;
-use Spora\Plugins\Social\Service\SocialDraftService;
 use Spora\Plugins\Social\Service\SocialMetricsService;
 use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
@@ -111,7 +110,6 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             SocialPublisher::class            => \DI\autowire(),
             ContainerReconciliation::class    => \DI\autowire(),
             SocialMetricsService::class      => \DI\autowire(),
-            SocialDraftService::class        => \DI\autowire(),
             SocialDueWorkProvider::class     => \DI\autowire(),
             SocialSettingsProvider::class    => \DI\autowire(),
             SocialConnectionController::class => \DI\autowire(),
@@ -156,8 +154,6 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
         $routes->addRoute('POST', $base . '/media/prepare', [SocialMediaController::class, 'prepareMedia'], self::AUTH);
         $routes->addRoute('POST', $base . '/media/attach', [SocialMediaController::class, 'attachMedia'], self::AUTH);
         $routes->addRoute('POST', $base . '/media/detach', [SocialMediaController::class, 'detachMedia'], self::AUTH);
-
-        $routes->addRoute('POST', $base . '/drafts/generate', [SocialMediaController::class, 'generateDraft'], self::AUTH);
 
         $routes->addRoute('GET', $base . '/analytics/summary', [SocialPostController::class, 'analyticsSummary'], self::AUTH);
         $routes->addRoute('GET', $base . '/analytics/posts/{postId}', [SocialPostController::class, 'postAnalytics'], self::AUTH);
@@ -212,7 +208,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
     public function schemaVersion(): int
     {
-        return 6;
+        return 7;
     }
 
     /**

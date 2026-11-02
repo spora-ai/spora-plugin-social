@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Service;
 
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
+use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 
 /**
@@ -38,7 +39,12 @@ final class PostInput
     }
 
     /**
-     * A body per platform.
+     * A platform's own body, for the platforms whose copy differs.
+     *
+     * The key is normalised through the platform's own name, because the
+     * publisher looks a body up by that name: a key spelled `LinkedIn`
+     * would be stored and then never found, and the shared body would go
+     * out instead of the one the caller wrote.
      *
      * @return array<string, string>|null
      */
@@ -51,12 +57,55 @@ final class PostInput
 
         $bodies = [];
         foreach ($raw as $platform => $body) {
-            if (is_string($platform) && is_string($body)) {
-                $bodies[$platform] = $body;
+            if (!is_string($platform) || !is_string($body)) {
+                continue;
             }
+
+            $name = SocialPlatform::tryFromName($platform);
+            if ($name === null) {
+                continue;
+            }
+
+            $bodies[$name->value] = $body;
         }
 
         return $bodies !== [] ? $bodies : null;
+    }
+
+    /**
+     * The hashtags the post carries, without their hashes.
+     *
+     * The hashes are added when the post is composed for a platform, so
+     * one post carries them once and every platform gets them the same.
+     *
+     * @return list<string>|null
+     */
+    public function hashtags(): ?array
+    {
+        $raw = $this->input['hashtags'] ?? null;
+        if (!is_array($raw)) {
+            return null;
+        }
+
+        $hashtags = [];
+        foreach ($raw as $hashtag) {
+            if (!is_string($hashtag)) {
+                continue;
+            }
+
+            $tag = trim($hashtag);
+            if (str_starts_with($tag, '#')) {
+                $tag = trim(substr($tag, 1));
+            }
+
+            if ($tag === '' || in_array($tag, $hashtags, true)) {
+                continue;
+            }
+
+            $hashtags[] = $tag;
+        }
+
+        return $hashtags !== [] ? $hashtags : null;
     }
 
     public function source(): string
