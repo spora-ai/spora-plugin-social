@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Spora\Plugins\Social\Service;
 
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialPost;
@@ -22,7 +21,7 @@ use Spora\Plugins\Social\Model\SocialPostTarget;
 final class SocialPostService
 {
     public function __construct(
-        private readonly SocialConnectionService $connections,
+        private readonly SocialPostAccounts $accounts,
     ) {}
 
     /**
@@ -39,7 +38,7 @@ final class SocialPostService
         // platforms, and a draft has not been sent anywhere yet. A
         // scheduled post commits the copy to go out, so it has to know
         // where to.
-        $accounts = $this->resolveAccounts($principalId, $fields->accountIds(), $scheduledFor !== null);
+        $accounts = $this->accounts->resolve($principalId, $fields->accountIds(), $scheduledFor !== null);
 
         $post = new SocialPost();
         $post->principal_id = $principalId;
@@ -230,13 +229,13 @@ final class SocialPostService
         if ($fields->has('account_ids')) {
             $goesOut = $post->status !== SocialPost::STATUS_DRAFT || $scheduledFor !== null;
 
-            $accounts = $this->resolveAccounts($principalId, $fields->accountIds(), $goesOut);
+            $accounts = $this->accounts->resolve($principalId, $fields->accountIds(), $goesOut);
         }
 
         // A post that goes out needs an account, whether the update names
         // one or the post already carries it.
-        if ($accounts === null && $this->goesOut($post, $scheduledFor) && !$post->targets()->exists()) {
-            throw $this->noAccount($principalId);
+        if ($accounts === null && $this->accounts->goesOut($post, $scheduledFor) && !$post->targets()->exists()) {
+            throw $this->accounts->noAccount($principalId);
         }
 
         if ($fields->has('scheduled_for')) {
@@ -312,59 +311,6 @@ final class SocialPostService
         $post->media()->where('media_asset_id', $assetId)->delete();
 
         return $post->fresh() ?? $post;
-    }
-    /**
-     * The accounts a post goes to.
-     *
-     * A draft may have none: the accounts name the platforms, and a
-     * draft has not been sent anywhere yet. A post that goes out needs
-     * at least one, or it has no platform to go to.
-     *
-     * @param  list<int> $accountIds
-     * @return list<SocialAccount>
-     */
-    private function resolveAccounts(int $principalId, array $accountIds, bool $required): array
-    {
-        if ($accountIds === []) {
-            if ($required) {
-                throw $this->noAccount($principalId);
-            }
-
-            return [];
-        }
-
-        $accounts = [];
-        foreach ($accountIds as $accountId) {
-            $accounts[] = $this->connections->findAccount($accountId, $principalId);
-        }
-
-        return $accounts;
-    }
-
-    /**
-     * Whether the post goes out, after an update.
-     *
-     * A draft that the update dates goes out; a post that is already
-     * scheduled or published does whatever it does.
-     */
-    private function goesOut(SocialPost $post, ?Carbon $scheduledFor): bool
-    {
-        return $post->status !== SocialPost::STATUS_DRAFT || $scheduledFor !== null;
-    }
-
-    /**
-     * The refusal, and the way out of it.
-     *
-     * Two cases, and the way out differs: a principal with no account
-     * has to connect one, and a principal with accounts has to name one.
-     */
-    private function noAccount(int $principalId): SocialException
-    {
-        if (!SocialAccount::query()->forPrincipal($principalId)->exists()) {
-            return SocialException::validation('No social account is connected for this principal. Connect one first: `social_connections` with action `connect` returns the URL for the operator to open.');
-        }
-
-        return SocialException::validation('A post needs at least one account to publish to.');
     }
 
     /**

@@ -21,6 +21,7 @@ use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialMetricsService;
+use Spora\Plugins\Social\Service\SocialPostAccounts;
 use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
 use Spora\Plugins\Social\Service\SocialSettings;
@@ -490,7 +491,7 @@ function postPublisher(array $answers = []): SocialPublisher
         new SocialSettings(socialConfig()),
     );
 
-    $posts = new SocialPostService($connections);
+    $posts = new SocialPostService(new SocialPostAccounts($connections));
 
     return new SocialPublisher(
         $posts,
@@ -510,7 +511,7 @@ function postPublisher(array $answers = []): SocialPublisher
  */
 function postService(): SocialPostService
 {
-    return new SocialPostService(connectionService());
+    return new SocialPostService(new SocialPostAccounts(connectionService()));
 }
 
 /**

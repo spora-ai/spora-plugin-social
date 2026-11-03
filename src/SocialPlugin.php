@@ -32,6 +32,7 @@ use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialMetricsService;
+use Spora\Plugins\Social\Service\SocialPostAccounts;
 use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
 use Spora\Plugins\Social\Service\SocialSettings;
@@ -107,6 +108,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             InstagramAdapter::class          => \DI\autowire(),
             PublisherRegistry::class         => \DI\autowire(),
             SocialPostService::class         => \DI\autowire(),
+            SocialPostAccounts::class        => \DI\autowire(),
             SocialPublisher::class            => \DI\autowire(),
             ContainerReconciliation::class    => \DI\autowire(),
             SocialMetricsService::class      => \DI\autowire(),
