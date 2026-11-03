@@ -237,7 +237,11 @@ it('refuses to connect when the app url is not publicly reachable', function () 
     );
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
-        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'publicly reachable');
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'publicly reachable')
+        // The refusal says where the address is set. The global settings
+        // list SPORA_APP_URL read-only, so an operator who looks for it
+        // there finds no editor and no sentence about the files.
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, '.env or config.php');
 });
 
 it('refuses to connect Meta without a configuration id', function () {

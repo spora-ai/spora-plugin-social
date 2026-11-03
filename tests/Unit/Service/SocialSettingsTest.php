@@ -71,7 +71,10 @@ it('refuses to connect when the instance has no public address', function () {
     ])), new SocialConnectionTokens($settings, new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]), securityManager()));
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
-        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'no public address');
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'no public address')
+        // The refusal names the file the address is set in, because the
+        // global settings list the setting read-only.
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, '.env or config.php');
 });
 
 it('reads the LinkedIn permissions the operator asked for', function () {
