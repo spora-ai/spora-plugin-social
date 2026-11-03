@@ -109,7 +109,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $analytics = $this->metrics->postAnalytics($postId, $principalId);
 
         return ToolResult::ok(
-            SocialToolPresenter::postMetrics($postId, $analytics),
+            SocialAnalyticsPresenter::postMetrics($postId, $analytics),
             $analytics,
         );
     }
@@ -119,7 +119,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            SocialToolPresenter::totals($days, $summary['totals'], $summary['notes']),
+            SocialAnalyticsPresenter::totals($days, $summary['totals'], $summary['notes']),
             ['totals' => $summary['totals'], 'notes' => $summary['notes']],
         );
     }
@@ -129,7 +129,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            SocialToolPresenter::topPosts($days, $summary['top_posts']),
+            SocialAnalyticsPresenter::topPosts($days, $summary['top_posts']),
             ['top_posts' => $summary['top_posts']],
         );
     }
@@ -139,7 +139,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            SocialToolPresenter::networks($days, $summary['by_network'], $summary['notes']),
+            SocialAnalyticsPresenter::networks($days, $summary['by_network'], $summary['notes']),
             ['by_network' => $summary['by_network'], 'series' => $summary['series'], 'notes' => $summary['notes']],
         );
     }

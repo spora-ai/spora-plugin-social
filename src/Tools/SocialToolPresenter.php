@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
-use Spora\Plugins\Social\Service\MetricSnapshot;
 use Spora\Plugins\Social\Service\PreparedMedia;
 
 /**
- * What the social tools answer, written out for the model.
+ * What the social tools answer about the social record, written out for
+ * the model.
  *
  * `ToolResult::$data` never reaches the model: it is stored in
  * `tool_calls.result_data` for the operator's UI and the audit trail.
@@ -23,6 +23,10 @@ use Spora\Plugins\Social\Service\PreparedMedia;
  * The lines are what the model acts on, so they carry the handles:
  * the asset id, the account id, the post id. A line without a handle
  * is a count with extra words.
+ *
+ * The numbers live in {@see SocialAnalyticsPresenter}: the record and
+ * the numbers are two questions, and one class that answers both grows
+ * past the twenty methods a class may have.
  */
 final class SocialToolPresenter
 {
@@ -230,94 +234,6 @@ final class SocialToolPresenter
     }
 
     /**
-     * One post's numbers, per account it went to.
-     *
-     * @param array<string, mixed> $analytics
-     */
-    public static function postMetrics(int $postId, array $analytics): string
-    {
-        $lines = ['The numbers of post #' . $postId . ' — ' . (string) ($analytics['status'] ?? 'unknown') . ':'];
-
-        foreach ((array) ($analytics['targets'] ?? []) as $target) {
-            $lines[] = '- ' . self::measuredTarget($target);
-        }
-
-        $lines = array_merge($lines, self::notes((array) ($analytics['notes'] ?? [])));
-
-        return implode("\n", $lines);
-    }
-
-    /**
-     * The totals of a period.
-     *
-     * @param array<string, int|null> $totals
-     * @param list<string>            $notes
-     */
-    public static function totals(int $days, array $totals, array $notes): string
-    {
-        $counters = self::counters($totals);
-
-        $lines = [
-            'The totals of the last ' . $days . ' days. The combined figure is a rough one — the platforms count reach differently.',
-            $counters !== '' ? $counters : 'No numbers were reported in that period.',
-        ];
-
-        return implode("\n", array_merge($lines, self::notes($notes)));
-    }
-
-    /**
-     * The posts that reached the most people.
-     *
-     * @param list<array<string, mixed>> $posts
-     */
-    public static function topPosts(int $days, array $posts): string
-    {
-        if ($posts === []) {
-            return 'No post of the last ' . $days . ' days reached anybody.';
-        }
-
-        $lines = ['The top posts of the last ' . $days . ' days:'];
-
-        foreach ($posts as $post) {
-            $counters = self::counters($post);
-
-            $lines[] = sprintf(
-                '- #%d (%s) — %s%s',
-                (int) ($post['post_id'] ?? 0),
-                (string) ($post['platform'] ?? ''),
-                $counters !== '' ? $counters : 'no numbers reported',
-                self::titled($post['title'] ?? null),
-            );
-        }
-
-        return implode("\n", $lines);
-    }
-
-    /**
-     * One row per network.
-     *
-     * @param list<array<string, mixed>> $byNetwork
-     * @param list<string>               $notes
-     */
-    public static function networks(int $days, array $byNetwork, array $notes): string
-    {
-        $lines = ['One row per network for the last ' . $days . ' days:'];
-
-        foreach ($byNetwork as $network) {
-            $counters = self::counters((array) $network);
-
-            $lines[] = sprintf(
-                '- %s — %s — %s post(s)',
-                (string) ($network['platform'] ?? ''),
-                $counters !== '' ? $counters : 'no numbers reported',
-                (string) ($network['posts'] ?? 0),
-            );
-        }
-
-        return implode("\n", array_merge($lines, self::notes($notes)));
-    }
-
-    /**
      * @param array<string, mixed> $connection
      */
     private static function connectionLine(array $connection): string
@@ -346,9 +262,13 @@ final class SocialToolPresenter
     private static function accountLine(array $account): string
     {
         $name = trim((string) ($account['display_name'] ?? ''));
-        $username = trim((string) ($account['username'] ?? ''));
 
-        $label = $name !== '' ? $name : ($username !== '' ? '@' . $username : '(unnamed)');
+        $label = $name;
+
+        if ($label === '') {
+            $username = trim((string) ($account['username'] ?? ''));
+            $label = $username !== '' ? '@' . $username : '(unnamed)';
+        }
 
         return sprintf(
             'account %d (%s) — %s',
@@ -425,21 +345,6 @@ final class SocialToolPresenter
     /**
      * @param array<string, mixed> $target
      */
-    private static function measuredTarget(array $target): string
-    {
-        $counters = self::counters((array) ($target['metrics'] ?? []));
-
-        return sprintf(
-            '%s (account %d): %s',
-            (string) ($target['platform'] ?? ''),
-            (int) ($target['account_id'] ?? 0),
-            $counters !== '' ? $counters : 'no numbers reported',
-        );
-    }
-
-    /**
-     * @param array<string, mixed> $target
-     */
     private static function targetOutcome(array $target): string
     {
         $parts = [
@@ -458,62 +363,12 @@ final class SocialToolPresenter
             $parts[] = $url;
         }
 
-        $counters = self::counters((array) ($target['metrics'] ?? []));
+        $counters = SocialAnalyticsPresenter::counters((array) ($target['metrics'] ?? []));
         if ($counters !== '') {
             $parts[] = $counters;
         }
 
         return implode(' — ', $parts);
-    }
-
-    /**
-     * The counters that were reported.
-     *
-     * A counter the platform does not report stays empty rather than
-     * becoming a zero that reads as "nobody saw it", so it is left out
-     * here as well.
-     *
-     * @param array<string, mixed> $metrics
-     */
-    private static function counters(array $metrics): string
-    {
-        $parts = [];
-
-        foreach (MetricSnapshot::COUNTERS as $counter) {
-            $value = $metrics[$counter] ?? null;
-
-            if ($value === null) {
-                continue;
-            }
-
-            $parts[] = $counter . ' ' . $value;
-        }
-
-        return implode(', ', $parts);
-    }
-
-    /**
-     * @param list<string> $notes
-     * @return list<string>
-     */
-    private static function notes(array $notes): array
-    {
-        $lines = [];
-
-        foreach ($notes as $note) {
-            if ($note !== '') {
-                $lines[] = 'Note: ' . $note;
-            }
-        }
-
-        return $lines;
-    }
-
-    private static function titled(mixed $title): string
-    {
-        $title = trim((string) $title);
-
-        return $title !== '' ? ' — "' . $title . '"' : '';
     }
 
     /**
