@@ -165,6 +165,62 @@ it('inspects one post', function () {
         ->and($result->content)->toContain('account ' . $account->id);
 });
 
+it('writes a draft without an account and says that it cannot go out', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = postTool();
+
+    $result = $tool->execute([
+        'action' => 'create',
+        'body'   => SocialFixtures::POST_BODY,
+    ], 1, null, principalContext($principalId));
+
+    // A draft may sit without an account, but it has no platform to go
+    // to — and the agent has to know that, or it tells the operator a
+    // post is ready that cannot go out.
+    expect($result->success)->toBeTrue()
+        ->and($result->data['post']['status'])->toBe('draft')
+        ->and($result->data['post']['targets'])->toBe([])
+        ->and($result->content)->toContain('no account');
+});
+
+it('refuses to schedule a post without an account, and names the way out', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = postTool();
+
+    $result = $tool->execute([
+        'action'        => 'schedule',
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ], 1, null, principalContext($principalId));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('No social account is connected for this principal.')
+        ->and($result->content)->toContain('social_connections');
+});
+
+it('refuses to publish a post that has no account', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = postTool();
+
+    $created = $tool->execute([
+        'action' => 'create',
+        'body'   => SocialFixtures::POST_BODY,
+    ], 1, null, principalContext($principalId));
+
+    $result = $tool->execute(
+        ['action' => 'publish', 'post_id' => $created->data['post']['id']],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('there is nothing to publish');
+});
+
 it('updates a post', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

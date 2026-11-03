@@ -207,11 +207,19 @@ final class SocialPublisher
     {
         $post = $this->posts->find($postId, $principalId);
 
-        $post->status = SocialPost::STATUS_PUBLISHING;
-        $post->save();
-
         /** @var Collection<int, SocialPostTarget> $targets */
         $targets = $post->targets()->get();
+
+        // A draft may have no account, and it cannot go out without one:
+        // the targets are the platforms, and there is nothing to publish
+        // to. Refused here rather than left to publish nothing, which
+        // would read as a post that went out.
+        if ($targets->isEmpty()) {
+            throw SocialException::validation('This post has no account, so there is nothing to publish. Pick one for it with `social_post` action `update`, or connect one with `social_connections`.');
+        }
+
+        $post->status = SocialPost::STATUS_PUBLISHING;
+        $post->save();
 
         foreach ($targets as $target) {
             if ($onlyFailed && $target->status !== SocialPostTarget::STATUS_FAILED) {

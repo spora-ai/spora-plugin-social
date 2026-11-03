@@ -229,6 +229,11 @@ it, so there is no separate `create` first. `social_post` with action
 `list` takes a `from` / `to` window, which is how an agent sees what is
 already going out.
 
+A **draft** may be written without an account: the accounts are what name
+the platforms, and a draft has not been sent anywhere. It cannot go out
+until one is picked, and the plugin says so — on the answer, on the post
+in the list, and on the refusal to publish it.
+
 Every read answers with the rows, not with a count: the account ids a
 post can go to, the asset ids that can be attached, the post ids and the
 days they are due. A model that cannot see an id has to guess it, and a

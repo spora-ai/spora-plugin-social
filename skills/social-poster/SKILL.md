@@ -53,10 +53,14 @@ operator's voice, with the operator's approval.
 ## `create` versus `schedule`
 
 - `create` makes a **draft**. Nothing goes out; it is for a post the
-  operator wants to see and rewrite. A draft needs no approval.
+  operator wants to see and rewrite. A draft needs no approval, and it
+  needs no account either — the accounts are what name the platforms, so
+  a draft may sit without one. It cannot go out until an account is
+  picked, and the answer says so. Say it to the operator too.
 - `schedule` makes a post that **goes out at a moment**. The worker
   publishes it when the time comes. This is the call for "post this on
-  Tuesday".
+  Tuesday". A scheduled post needs at least one account: it commits the
+  copy to go out, so it has to know where to.
 - `publish` sends it **now**.
 - `retry` sends again only the accounts that failed. The ones that
   published are left alone.
@@ -171,3 +175,6 @@ operator approves the copy and the time once — not again at the moment.
   and a body of its own only where the copy really differs.
 - Do not attach an asset you have not checked.
 - Do not invent an account id — list them.
+- Do not call a draft ready. A draft without an account has no platform
+  to go to, and the operator has to know that before they wait for a post
+  that was never going to go out.

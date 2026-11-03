@@ -38,14 +38,14 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'create',
-    description: 'Create a draft post for this principal. Give it a body, and the media assets to attach; a platform whose copy differs gets a body of its own. A draft goes nowhere until it is scheduled or published, so this needs no approval.',
+    description: 'Create a draft post for this principal. Give it a body, and the media assets to attach; a platform whose copy differs gets a body of its own. A draft goes nowhere until it is scheduled or published, so this needs no approval. The accounts are optional here: the accounts name the platforms, and a draft may sit without one — but it cannot go out until one is picked.',
     operatorDescription: 'Create a social post draft',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
 )]
 #[ToolOperation(
     name: 'schedule',
-    description: 'Create a post that goes out at a given moment — this is the one call that schedules it, no separate create first. The post is published by the worker when the time comes, without asking again, so the operator approves the copy and the time now.',
+    description: 'Create a post that goes out at a given moment — this is the one call that schedules it, no separate create first. The post is published by the worker when the time comes, without asking again, so the operator approves the copy and the time now. A scheduled post needs at least one account: the accounts are what name the platforms it goes to.',
     operatorDescription: 'Schedule a social post',
     enabledByDefault: true,
     requiresApprovalByDefault: true,
@@ -99,7 +99,7 @@ use Throwable;
 #[ToolParameter(name: 'body', type: 'string', description: 'The post text. Every platform publishes it, unless that platform carries a text of its own in platform_bodies.', required: ['create', 'schedule', 'update'])]
 #[ToolParameter(name: 'platform_bodies', type: 'object', description: 'The text for the platforms whose copy differs, keyed by platform name: linkedin, facebook, instagram. A platform that is not in here uses `body`.', required: false)]
 #[ToolParameter(name: 'hashtags', type: 'array', description: 'The hashtags the post carries, without the hashes: they are added under the body when the post goes out, on every platform. Keep it to a few.', required: false, items: ['type' => 'string'])]
-#[ToolParameter(name: 'account_ids', type: 'array', description: 'The ids of the connected accounts the post goes to. Use `social_connections` with action `list` to find them.', required: ['create', 'schedule'], items: ['type' => 'integer'])]
+#[ToolParameter(name: 'account_ids', type: 'array', description: 'The ids of the connected accounts the post goes to. Use `social_connections` with action `list` to find them. A draft may be written without one — the accounts are what name the platforms — but a scheduled post needs at least one.', required: ['schedule'], items: ['type' => 'integer'])]
 #[ToolParameter(name: 'media_asset_ids', type: 'array', description: 'The Media Archive assets to attach. Instagram cannot publish without one, so an Instagram post needs an attachment.', required: false, items: ['type' => 'string'])]
 #[ToolParameter(name: 'scheduled_for', type: 'string', description: 'When the post should go out, as an ISO 8601 timestamp. Required by schedule.', required: ['schedule'])]
 #[ToolParameter(name: 'timezone', type: 'string', description: 'The timezone the schedule is written in, e.g. Europe/Zurich.', required: false)]
@@ -164,10 +164,7 @@ final class SocialPostTool extends AbstractSocialTool
     {
         $post = $this->posts->create($principalId, $this->input($arguments));
 
-        return ToolResult::ok(
-            'Created post #' . $post->id . ' as a draft.',
-            ['post' => SocialPostResource::toArray($post)],
-        );
+        return $this->answer($post, 'Created post #' . $post->id . ' as a draft.');
     }
 
     private function schedule(int $principalId, array $arguments): ToolResult
@@ -177,10 +174,7 @@ final class SocialPostTool extends AbstractSocialTool
 
         $post = $this->posts->create($principalId, $input);
 
-        return ToolResult::ok(
-            'Scheduled post #' . $post->id . ' for ' . (string) $post->scheduled_for?->toIso8601String() . '.',
-            ['post' => SocialPostResource::toArray($post)],
-        );
+        return $this->answer($post, 'Scheduled post #' . $post->id . ' for ' . (string) $post->scheduled_for?->toIso8601String() . '.');
     }
 
     private function publish(int $principalId, array $arguments): ToolResult
@@ -223,10 +217,7 @@ final class SocialPostTool extends AbstractSocialTool
     {
         $post = $this->posts->update($this->postId($arguments), $principalId, $this->input($arguments));
 
-        return ToolResult::ok(
-            'Updated post #' . $post->id . '.',
-            ['post' => SocialPostResource::toArray($post)],
-        );
+        return $this->answer($post, 'Updated post #' . $post->id . '.');
     }
 
     private function retry(int $principalId, array $arguments): ToolResult

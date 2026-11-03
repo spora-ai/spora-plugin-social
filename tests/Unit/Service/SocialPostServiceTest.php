@@ -183,6 +183,97 @@ it('refuses a post that names an account of another principal', function () {
     ]))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'was not found for this principal');
 });
 
+it('writes a draft without an account, because a draft goes nowhere', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = $service->create($principalId, ['body' => SocialFixtures::POST_BODY]);
+
+    // The accounts are what name the platforms. A draft has not been sent
+    // anywhere, so it may sit without one.
+    expect($post->status)->toBe('draft')
+        ->and($post->targets()->count())->toBe(0);
+});
+
+it('refuses a scheduled post without an account, and names the way out', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // A scheduled post commits the copy to go out, so it has to know where
+    // to — and the refusal says what to do about it.
+    expect(fn() => $service->create($principalId, [
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'No social account is connected for this principal. Connect one first',
+    );
+});
+
+it('names the connected accounts when the post names none of them', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    publishableAccount($principalId, 'linkedin', 'organization');
+
+    expect(fn() => $service->create($principalId, [
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'A post needs at least one account to publish to.',
+    );
+});
+
+it('refuses to give a draft a date while it has no account', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = $service->create($principalId, ['body' => SocialFixtures::POST_BODY]);
+
+    // The date is what sends it, and a post with no account has nowhere
+    // to go.
+    expect(fn() => $service->update((int) $post->id, $principalId, [
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'No social account is connected for this principal.',
+    );
+});
+
+it('takes the accounts off a draft', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$account->id],
+    ]);
+
+    $updated = $service->update((int) $post->id, $principalId, ['account_ids' => []]);
+
+    expect($updated->targets()->count())->toBe(0);
+});
+
+it('refuses to publish a post that has no account', function () {
+    $publisher = postPublisher();
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = $service->create($principalId, ['body' => SocialFixtures::POST_BODY]);
+
+    expect(fn() => $publisher->publish((int) $post->id, $principalId))
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'there is nothing to publish');
+});
+
 it('lists only the posts of the days asked for', function () {
     $service = postService();
 

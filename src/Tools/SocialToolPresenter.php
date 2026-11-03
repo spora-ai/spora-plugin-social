@@ -138,6 +138,15 @@ final class SocialToolPresenter
     {
         $lines = [];
 
+        $targets = (array) ($post['targets'] ?? []);
+
+        // A draft may be written before any account is connected. It has
+        // no platform to go to, and the agent has to know that — or it
+        // tells the operator a post is ready that cannot go out.
+        if ($targets === []) {
+            $lines[] = '- no account: the post has no platform to go to, so it cannot be published yet';
+        }
+
         $body = trim((string) ($post['body'] ?? ''));
         if ($body !== '') {
             $lines[] = '- body: ' . $body;
