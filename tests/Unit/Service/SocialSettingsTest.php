@@ -45,6 +45,13 @@ it('answers the redirect uri as an absolute address', function () {
         ->toBe('https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback');
 });
 
+it('does not allow a local address unless the install says it is developing', function () {
+    expect((new SocialSettings(new Spora\Core\Config([])))->allowsLocalAppUrl())->toBeFalse()
+        ->and((new SocialSettings(new Spora\Core\Config([
+            SocialSettings::KEY_ALLOW_LOCAL_APP_URL => true,
+        ])))->allowsLocalAppUrl())->toBeTrue();
+});
+
 it('refuses an origin that is not an origin', function () {
     // The request carried no host, and the detection answers `http://`.
     expect(SocialSettings::resolveOrigin(null, 'http://'))->toBeNull()

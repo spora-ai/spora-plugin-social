@@ -244,6 +244,39 @@ it('refuses to connect when the app url is not publicly reachable', function () 
         ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, '.env or config.php');
 });
 
+it('connects on a local address when the install says it is developing', function () {
+    // The platforms that fetch published media with their own servers
+    // cannot reach a local address — but the connect, the token and the
+    // platforms that upload the bytes can be built against a real
+    // account.
+    $provider = new FakeOAuthProvider(SocialProvider::LinkedIn);
+
+    $service = connectionService(
+        new FakeProviderResolver(['linkedin' => $provider]),
+        'http://localhost:8080',
+        [SocialSettings::KEY_ALLOW_LOCAL_APP_URL => true],
+    );
+
+    $request = $service->startConnect(7, SocialProvider::LinkedIn);
+
+    expect($request['authorize_url'])->toContain('state=');
+});
+
+it('refuses a local address when the install does not say it is developing', function () {
+    $provider = new FakeOAuthProvider(SocialProvider::LinkedIn);
+
+    $service = connectionService(
+        new FakeProviderResolver(['linkedin' => $provider]),
+        'http://localhost:8080',
+    );
+
+    expect(fn() => $service->startConnect(7, SocialProvider::LinkedIn))
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'publicly reachable')
+        // The refusal names the switch, so a developer blocked by it finds
+        // the way out without reading the source.
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'SPORA_SOCIAL_ALLOW_LOCAL_APP_URL');
+});
+
 it('refuses to connect Meta without a configuration id', function () {
     $settings = new SocialSettings(socialConfig([SocialSettings::KEY_META_CONFIG_ID => '']));
 

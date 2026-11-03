@@ -61,6 +61,24 @@ it('says that there is no address to register when the instance has none', funct
         ->and($definitions['LINKEDIN_CLIENT_ID']->description)->not->toContain('http://localhost');
 });
 
+it('offers the development switch, off by default', function () {
+    $provider = new SocialSettingsProvider(new SocialSettings(new Config([])));
+
+    $definitions = [];
+
+    foreach ($provider->settings() as $definition) {
+        $definitions[$definition->key] = $definition;
+    }
+
+    expect($definitions)->toHaveKey('ALLOW_LOCAL_APP_URL')
+        ->and($definitions['ALLOW_LOCAL_APP_URL']->type)->toBe(Spora\Settings\SettingDefinition::TYPE_TOGGLE)
+        ->and($definitions['ALLOW_LOCAL_APP_URL']->default)->toBeFalse()
+        // The description has to say what the switch costs, because an
+        // operator could leave it on in production.
+        ->and($definitions['ALLOW_LOCAL_APP_URL']->description)->toContain('development')
+        ->and($definitions['ALLOW_LOCAL_APP_URL']->description)->toContain('Instagram');
+});
+
 it('refuses a meta provider that has an app id and a secret but no configuration id', function () {
     // The notice and the refusal read the same answer, so the operator is
     // never told one thing and then refused for another.

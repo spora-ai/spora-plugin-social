@@ -234,6 +234,12 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 description: 'Where the browser is sent after an account is connected. '
                     . 'Leave it empty unless the SPA runs on another origin, as it does in local development.',
             ),
+            $this->toggle(
+                $group,
+                'ALLOW_LOCAL_APP_URL',
+                'Allow a local app URL',
+                'Only for development. Lets an account be connected when SPORA_APP_URL is not reachable from the internet. Instagram and Facebook video fetch the published media with their own servers, so they cannot fetch a local address and those publishes fail. Leave this off in production.',
+            ),
         ];
     }
 }

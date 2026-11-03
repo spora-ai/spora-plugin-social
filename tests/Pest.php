@@ -289,12 +289,13 @@ function derivativeService(): Spora\Services\MediaArchive\MediaDerivativeService
 function connectionService(
     ?OAuthProviderResolver $resolver = null,
     ?string $appUrl = 'https://spora.test',
+    array $overrides = [],
 ): SocialConnectionService {
     $probe = new SocialAppUrlProbe(new MockHttpClient([
         new MockResponse('', ['http_code' => 200]),
     ]));
 
-    $settings = new SocialSettings(socialConfig($appUrl === null ? ['SPORA_APP_URL' => ''] : ['SPORA_APP_URL' => $appUrl]));
+    $settings = new SocialSettings(socialConfig($overrides + ($appUrl === null ? ['SPORA_APP_URL' => ''] : ['SPORA_APP_URL' => $appUrl])));
 
     return new SocialConnectionService(
         $settings,
