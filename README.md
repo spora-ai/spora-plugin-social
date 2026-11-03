@@ -393,14 +393,13 @@ A development install can say that it knows that:
 
 **What it buys.** The connect goes through, so there is a token, a draft,
 a schedule and a publish to develop against. LinkedIn and Facebook photos
-upload the bytes and work either way. The refusal moves from *before the
-connect* to *where the publish really fails*.
+upload the bytes and work either way.
 
-**What it does not buy.** Instagram, and Facebook video, still fail: the
-platform fetches the media from `{SPORA_APP_URL}/api/v1/public/media/{id}`
-with its own servers, and no setting makes a loopback address reachable
-from Meta. Those publishes fail with the platform's own reason, recorded
-on the target — which is the failure worth seeing while developing.
+**What it does not buy.** Instagram still fails: the platform fetches the
+media from `{SPORA_APP_URL}/api/v1/public/media/{id}?token=…` with its own
+servers, and no setting makes a loopback address reachable from Meta.
+Those publishes fail with the platform's own reason, recorded on the
+target — which is the failure worth seeing while developing.
 
 For a local install that publishes to Instagram, put a tunnel in front of
 it instead:
@@ -411,9 +410,13 @@ cloudflared tunnel --url http://127.0.0.1:8080   # → https://<host>.trycloudfl
 
 and set `SPORA_APP_URL` to that address. It is the address the OAuth
 redirect URI is built from *and* the address the platform fetches the
-media from, so it has to be the one registered with the app. Core never
-reads `X-Forwarded-*`, and the tunnel ends TLS locally, so the detected
-origin would be `http://<host>` without the scheme — set it explicitly.
+media from, so it has to be the one registered with the app — the address
+of your API, not the one the request happened to carry. Core never reads
+`X-Forwarded-*`, and the tunnel ends TLS locally, so the detected origin
+would be `http://<host>` rather than `https://<host>`: set it explicitly.
+Set `SPORA_SOCIAL_FRONTEND_URL` to the origin the panel runs on when that
+is not the API's own, so the browser lands back on the panel after the
+OAuth round trip.
 
 **Leave the setting off in production.** A production install that
 carries it publishes to Instagram and fails with a platform error that

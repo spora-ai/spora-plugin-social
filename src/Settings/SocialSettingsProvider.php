@@ -61,7 +61,7 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
     {
         $redirect = $this->settings->oauthRedirectUri(SocialProvider::Meta);
 
-        if ($redirect === null || !$this->settings->hasPublicAddress()) {
+        if ($redirect === null || !$this->settings->canRegisterTheRedirectUri()) {
             return 'The configuration id from your Meta app\'s Facebook Login for Business → Configurations. This instance has no public address, so there is no redirect URL to register.';
         }
 
@@ -80,7 +80,7 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
     {
         $redirect = $this->settings->oauthRedirectUri(SocialProvider::LinkedIn);
 
-        if ($redirect === null || !$this->settings->hasPublicAddress()) {
+        if ($redirect === null || !$this->settings->canRegisterTheRedirectUri()) {
             return 'Your LinkedIn app. Member posting needs no review; organisation pages need the Community Management API. This instance has no public address, so there is no redirect URL to register.';
         }
 
@@ -238,7 +238,7 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 $group,
                 'ALLOW_LOCAL_APP_URL',
                 'Allow a local app URL',
-                'Only for development. Lets an account be connected when SPORA_APP_URL is not reachable from the internet. Instagram and Facebook video fetch the published media with their own servers, so they cannot fetch a local address and those publishes fail. Leave this off in production.',
+                'Only for development. Lets an account be connected when SPORA_APP_URL is not reachable from the internet. Instagram fetches the published media with its own servers, so it cannot fetch a local address and those publishes fail. Leave this off in production.',
             ),
         ];
     }

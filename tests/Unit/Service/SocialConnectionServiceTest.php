@@ -238,15 +238,14 @@ it('refuses to connect when the app url is not publicly reachable', function () 
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
         ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'publicly reachable')
-        // The refusal says where the address is set. The global settings
-        // list SPORA_APP_URL read-only, so an operator who looks for it
-        // there finds no editor and no sentence about the files.
+        // The global settings list SPORA_APP_URL read-only, so the
+        // refusal has to name the files it is set in.
         ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, '.env or config.php');
 });
 
 it('connects on a local address when the install says it is developing', function () {
-    // The platforms that fetch published media with their own servers
-    // cannot reach a local address — but the connect, the token and the
+    // Instagram fetches the media with its own servers, so it cannot
+    // reach a local address — but the connect, the token and the
     // platforms that upload the bytes can be built against a real
     // account.
     $provider = new FakeOAuthProvider(SocialProvider::LinkedIn);

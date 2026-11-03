@@ -61,6 +61,27 @@ it('says that there is no address to register when the instance has none', funct
         ->and($definitions['LINKEDIN_CLIENT_ID']->description)->not->toContain('http://localhost');
 });
 
+it('names the redirect url of a development install', function () {
+    // The platform refuses a callback it was not given, so a local
+    // install has to be told which URI to register — the connect sends
+    // exactly that one.
+    $provider = new SocialSettingsProvider(new SocialSettings(new Config([
+        'SPORA_APP_URL' => 'http://localhost:8080',
+        SocialSettings::KEY_ALLOW_LOCAL_APP_URL => true,
+    ])));
+
+    $definitions = [];
+
+    foreach ($provider->settings() as $definition) {
+        $definitions[$definition->key] = $definition;
+    }
+
+    expect($definitions['LINKEDIN_CLIENT_ID']->description)
+        ->toContain('Register this redirect URL with it: http://localhost:8080/api/v1/plugins/social/oauth/linkedin/callback')
+        ->and($definitions['META_CONFIG_ID']->description)
+        ->toContain('Register this redirect URL with it: http://localhost:8080/api/v1/plugins/social/oauth/meta/callback');
+});
+
 it('offers the development switch, off by default', function () {
     $provider = new SocialSettingsProvider(new SocialSettings(new Config([])));
 

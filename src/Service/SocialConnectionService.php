@@ -94,9 +94,7 @@ final class SocialConnectionService
         // Checked here rather than at publish time: Instagram fetches the
         // published media from the internet, and an address only the
         // operator's network can see fails at the last step, with an error
-        // that never mentions the URL. A development install can say so
-        // and connect anyway — the publish then fails where it really
-        // fails, with the platform's own reason.
+        // that never mentions the URL.
         if (!$this->settings->allowsLocalAppUrl()
             && !$this->appUrlProbe->isPubliclyReachable($this->settings->appUrl())) {
             throw SocialException::validation('SPORA_APP_URL must be a publicly reachable HTTPS address before an account can be connected — the platform fetches published media from the internet. Set it in your .env or config.php; the global settings list it read-only. On a development install, turn on SPORA_SOCIAL_ALLOW_LOCAL_APP_URL in Settings → Plugins.');

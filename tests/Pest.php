@@ -286,6 +286,11 @@ function derivativeService(): Spora\Services\MediaArchive\MediaDerivativeService
     );
 }
 
+/**
+ * The connection service, against the plugin's own collaborators.
+ *
+ * @param array<string, mixed> $overrides
+ */
 function connectionService(
     ?OAuthProviderResolver $resolver = null,
     ?string $appUrl = 'https://spora.test',

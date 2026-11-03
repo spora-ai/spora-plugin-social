@@ -188,13 +188,25 @@ final class SocialSettings
     }
 
     /**
+     * Whether the operator can be told which redirect URI to register.
+     *
+     * A platform accepts a public address. A development install sends a
+     * local one, and the operator has to register that — the platform
+     * refuses a callback it was not given.
+     */
+    public function canRegisterTheRedirectUri(): bool
+    {
+        return $this->hasPublicAddress() || $this->allowsLocalAppUrl();
+    }
+
+    /**
      * Whether an account may be connected on a local address.
      *
-     * For development only. The platforms that fetch published media with
-     * their own servers cannot reach a loopback address, so those
-     * publishes fail — but the rest of the flow (the connect, the token,
-     * the drafts, the platforms that upload the bytes instead of
-     * fetching them) can be built against a real account.
+     * For development only. Instagram fetches the published media with
+     * its own servers, so it cannot reach a loopback address — but the
+     * rest of the flow (the connect, the token, the drafts, the platforms
+     * that upload the bytes instead of fetching them) can be built
+     * against a real account.
      */
     public function allowsLocalAppUrl(): bool
     {
