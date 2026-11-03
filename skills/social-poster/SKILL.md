@@ -27,7 +27,9 @@ operator's voice, with the operator's approval.
 > "Post something about the release next Tuesday morning."
 
 1. **Know the accounts.** `social_connections` with action `list`. Which
-   accounts are connected, on which platforms. A connection whose token is
+   accounts are connected, on which platforms — the answer carries the
+   account id of each one, and that id is what `social_post` takes. A
+   connection whose token is
    close to its expiry (`needs_reconnect`) is flagged there — renew it with
    action `refresh` and the connection's `connection_id` before you plan a
    post around it. A Meta connection is not renewed: it has no refresh
@@ -36,24 +38,29 @@ operator's voice, with the operator's approval.
    and `from` / `to` set to the days around the requested date, or
    `social_calendar` with action `list_month` for the month. Do not post
    the same thing twice.
-3. **Write the copy.** One body per platform — see the rules below.
+3. **Write the copy.** One body for every platform — see the rules below.
+   A platform gets a body of its own only where its copy really differs.
 4. **Pick the media.** `social_media` with action `list_assets` for the
    library, then `check_fit` for the asset against every platform you are
    targeting.
 5. **Hand it over.** `social_post` with action `schedule`, the body (and
-   the per-platform bodies), the account ids, the media asset ids and the
-   time. That is one call — `schedule` creates the post and dates it, so
-   there is no separate "create" first.
+   the per-platform bodies where they differ), the hashtags, the account
+   ids, the media asset ids and the time. That is one call — `schedule`
+   creates the post and dates it, so there is no separate "create" first.
 6. **Later, read the result.** `social_analytics` with action
    `post_metrics` for one post, or `period_totals` for the period.
 
 ## `create` versus `schedule`
 
 - `create` makes a **draft**. Nothing goes out; it is for a post the
-  operator wants to see and rewrite. A draft needs no approval.
+  operator wants to see and rewrite. A draft needs no approval, and it
+  needs no account either — the accounts are what name the platforms, so
+  a draft may sit without one. It cannot go out until an account is
+  picked, and the answer says so. Say it to the operator too.
 - `schedule` makes a post that **goes out at a moment**. The worker
   publishes it when the time comes. This is the call for "post this on
-  Tuesday".
+  Tuesday". A scheduled post needs at least one account: it commits the
+  copy to go out, so it has to know where to.
 - `publish` sends it **now**.
 - `retry` sends again only the accounts that failed. The ones that
   published are left alone.
@@ -68,9 +75,10 @@ operator's voice, with the operator's approval.
 
 ## The per-platform rules
 
-One body per platform. The platforms have different conventions, different
-limits and different readers; one text for all three reads as an
-afterthought on at least one of them.
+One body goes to every platform. A platform gets a body of its own only
+where its readers, its conventions or its limit ask for one: the copy that
+fits one of them need not fit another. Three bodies by reflex is as wrong as
+one body that ignores the platform.
 
 | Platform | Media | Types | Cap | Body |
 |---|---|---|---|---|
@@ -82,6 +90,9 @@ A body over the limit does not go out. The publish fails with the same
 wording the composer shows: "Over the limit: 5000 / 2200 characters for
 Instagram."
 
+The visible count is not a limit: the whole body is published, and the
+platform folds the rest away until a reader opens it.
+
 **LinkedIn publishes images only in this version.** No video, no carousels,
 no reels, no stories.
 
@@ -89,7 +100,8 @@ no reels, no stories.
 takes no PNG at all** — a PNG asset has to be converted. You do not convert
 it yourself: attach the original asset id and the backend converts it to
 JPEG when it publishes. Use `social_media` action `prepare` to see what
-Instagram will get — the JPEG derivative and the public URL it will fetch.
+Instagram will get — the JPEG derivative, its asset id and the public URL
+it will fetch.
 
 The character limits are the platforms' limits, and the plugin **enforces
 them at publish time**: a body over its platform's limit is refused, and the
@@ -97,6 +109,10 @@ refusal names the platform and the numbers. Each platform is judged against
 its own body — `platform_bodies[platform]`, or the shared `body` when there
 is none for it — so a post aimed at Instagram and Facebook with one body
 is checked twice, against each platform's limit.
+
+**Hashtags** are a list of tags without the hashes. The plugin adds them
+under the body when the post goes out, on every platform. Keep it to a few —
+a hashtag wall is not a voice.
 
 ## The media rules
 
@@ -106,7 +122,9 @@ is checked twice, against each platform's limit.
   publishes the bytes for LinkedIn and Facebook.
 - **Check before you attach.** `check_fit` answers per platform and names
   the remedy: "Convert to JPEG", "Compress", "Convert the file to MP4".
-  Attach an asset only when it fits every platform you are targeting.
+  It judges the asset as the platform receives it, so a PNG fits Instagram:
+  the backend converts it to a JPEG before it publishes. Attach an asset
+  only when it fits every platform you are targeting.
 - One attachment per post in this version, and the backend refuses a second
   one.
 - **Instagram fetches the media from the internet**, so the file has to be
@@ -153,6 +171,10 @@ operator approves the copy and the time once — not again at the moment.
 - Do not publish on your own initiative. "Post this every Tuesday" is a
   schedule the operator approves.
 - Do not post the same thing twice — look at what is going out first.
-- Do not write one text for three platforms.
+- Do not give every platform a body of its own by reflex. One shared body,
+  and a body of its own only where the copy really differs.
 - Do not attach an asset you have not checked.
 - Do not invent an account id — list them.
+- Do not call a draft ready. A draft without an account has no platform
+  to go to, and the operator has to know that before they wait for a post
+  that was never going to go out.

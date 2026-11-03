@@ -122,9 +122,7 @@ final class SocialConnectionsTool extends AbstractSocialTool
         );
 
         return ToolResult::ok(
-            $connections === []
-                ? 'No social account is connected for this principal.'
-                : count($connections) . ' social connection(s).',
+            SocialToolPresenter::connections($connections),
             ['connections' => $connections],
         );
     }

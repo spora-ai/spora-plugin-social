@@ -247,10 +247,12 @@ it('leaves a scheduled post with no targets out of publishing', function () {
     $after = $post->fresh();
 
     // The same outcome a manual publish of a targetless post has: the post
-    // leaves the scheduled state and is not left half-published.
+    // leaves the scheduled state and is not left half-published. It failed:
+    // a post with no account has no platform to go to, and the publish
+    // refuses it like every other post that cannot go out.
     expect($after?->status)->not->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_SCHEDULED)
         ->and($after?->status)->not->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_PUBLISHING)
-        ->and($after?->status)->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_DRAFT);
+        ->and($after?->status)->toBe(Spora\Plugins\Social\Model\SocialPost::STATUS_FAILED);
 });
 
 it('answers with the publish that half-finished, so the container can be asked', function () {

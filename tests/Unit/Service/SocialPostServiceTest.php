@@ -183,6 +183,97 @@ it('refuses a post that names an account of another principal', function () {
     ]))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'was not found for this principal');
 });
 
+it('writes a draft without an account, because a draft goes nowhere', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = $service->create($principalId, ['body' => SocialFixtures::POST_BODY]);
+
+    // The accounts are what name the platforms. A draft has not been sent
+    // anywhere, so it may sit without one.
+    expect($post->status)->toBe('draft')
+        ->and($post->targets()->count())->toBe(0);
+});
+
+it('refuses a scheduled post without an account, and names the way out', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // A scheduled post commits the copy to go out, so it has to know where
+    // to — and the refusal says what to do about it.
+    expect(fn() => $service->create($principalId, [
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'No social account is connected for this principal. Connect one first',
+    );
+});
+
+it('names the connected accounts when the post names none of them', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    publishableAccount($principalId, 'linkedin', 'organization');
+
+    expect(fn() => $service->create($principalId, [
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'A post needs at least one account to publish to.',
+    );
+});
+
+it('refuses to give a draft a date while it has no account', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = $service->create($principalId, ['body' => SocialFixtures::POST_BODY]);
+
+    // The date is what sends it, and a post with no account has nowhere
+    // to go.
+    expect(fn() => $service->update((int) $post->id, $principalId, [
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'No social account is connected for this principal.',
+    );
+});
+
+it('takes the accounts off a draft', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$account->id],
+    ]);
+
+    $updated = $service->update((int) $post->id, $principalId, ['account_ids' => []]);
+
+    expect($updated->targets()->count())->toBe(0);
+});
+
+it('refuses to publish a post that has no account', function () {
+    $publisher = postPublisher();
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = $service->create($principalId, ['body' => SocialFixtures::POST_BODY]);
+
+    expect(fn() => $publisher->publish((int) $post->id, $principalId))
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'there is nothing to publish');
+});
+
 it('lists only the posts of the days asked for', function () {
     $service = postService();
 
@@ -339,4 +430,274 @@ it('replaces the accounts and the attachments of a post', function () {
     expect($updated->targets()->get())->toHaveCount(1)
         ->and($updated->targets()->first()?->account_id)->toBe($second->id)
         ->and($updated->media()->get())->toHaveCount(1);
+});
+
+it('stores the hashtags the caller named', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'hashtags'    => ['#launch', 'shipit'],
+        'account_ids' => [$account->id],
+    ]);
+
+    expect($post->hashtags)->toBe(['launch', 'shipit']);
+});
+
+it('sends the body and the hashtags to the network', function () {
+    $captured = null;
+
+    $publisher = postPublisher([
+        'linkedin' => function (string $method, string $url, array $options) use (&$captured): MockResponse {
+            $captured = json_decode((string) $options['body'], true);
+
+            return new MockResponse(SocialFixtures::LINKEDIN_SHARE);
+        },
+    ]);
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => 'The general copy',
+        'hashtags'    => ['launch', 'shipit'],
+        'account_ids' => [$linkedIn->id],
+    ]);
+
+    $publisher->publish((int) $post->id, $principalId);
+
+    expect($captured['commentary'])->toBe("The general copy\n\n#launch #shipit");
+});
+
+it('counts the hashtags against the character limit', function () {
+    $publisher = postPublisher(['linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]]]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = postService()->create($principalId, [
+        // The body alone fits LinkedIn; the hashtags do not fit with it.
+        'body'        => str_repeat('a', 2995),
+        'hashtags'    => ['launch'],
+        'account_ids' => [$linkedIn->id],
+    ]);
+
+    $published = $publisher->publish((int) $post->id, $principalId);
+
+    $target = $published->targets()->first();
+
+    expect($target?->status)->toBe('failed')
+        ->and($target?->error)->toContain('Over the limit')
+        ->and($target?->error)->toContain('3000');
+});
+
+it('gives a platform the body written for it, whatever the key was spelled', function () {
+    $captured = null;
+
+    $publisher = postPublisher([
+        'linkedin' => function (string $method, string $url, array $options) use (&$captured): MockResponse {
+            $captured = json_decode((string) $options['body'], true);
+
+            return new MockResponse(SocialFixtures::LINKEDIN_SHARE);
+        },
+    ]);
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'           => 'The general copy',
+        'platform_bodies' => ['LinkedIn' => 'The LinkedIn copy'],
+        'account_ids'    => [$linkedIn->id],
+    ]);
+
+    $publisher->publish((int) $post->id, $principalId);
+
+    expect($captured['commentary'])->toBe('The LinkedIn copy');
+});
+
+it('drops a body written for a platform the plugin does not publish to', function () {
+    $captured = null;
+
+    $publisher = postPublisher([
+        'linkedin' => function (string $method, string $url, array $options) use (&$captured): MockResponse {
+            $captured = json_decode((string) $options['body'], true);
+
+            return new MockResponse(SocialFixtures::LINKEDIN_SHARE);
+        },
+    ]);
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'           => 'The general copy',
+        'platform_bodies' => ['twitter' => 'Not a platform'],
+        'account_ids'    => [$linkedIn->id],
+    ]);
+
+    $publisher->publish((int) $post->id, $principalId);
+
+    expect($post->platform_bodies)->toBeNull()
+        ->and($captured['commentary'])->toBe('The general copy');
+});
+
+it('refuses a post that says nothing and carries nothing', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    expect(fn() => $service->create($principalId, [
+        'account_ids' => [$account->id],
+    ]))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'A post needs a message or media.');
+});
+
+it('accepts a post that only has a body for one platform', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'platform_bodies' => ['linkedin' => 'Only LinkedIn'],
+        'account_ids'     => [$account->id],
+    ]);
+
+    expect($post->platform_bodies)->toBe(['linkedin' => 'Only LinkedIn']);
+});
+
+it('accepts a post that carries media and no message', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'instagram', 'business');
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/jpeg', 'payload' => jpegBytes()]);
+
+    $post = $service->create($principalId, [
+        'account_ids' => [$account->id],
+        'media'       => [['media_asset_id' => $asset->id]],
+    ]);
+
+    expect($post->media()->get())->toHaveCount(1);
+});
+
+it('judges an edit on the post it leaves behind', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$account->id],
+    ]);
+
+    expect(fn() => $service->update((int) $post->id, $principalId, ['body' => '']))
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'A post needs a message or media.');
+});
+
+it('keeps an edit that leaves the post with media alone', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'instagram', 'business');
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/jpeg', 'payload' => jpegBytes()]);
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$account->id],
+        'media'       => [['media_asset_id' => $asset->id]],
+    ]);
+
+    $updated = $service->update((int) $post->id, $principalId, ['body' => '']);
+
+    expect($updated->body)->toBeNull()
+        ->and($updated->media()->get())->toHaveCount(1);
+});
+
+it('schedules a draft when an edit gives it a date', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$account->id],
+    ]);
+
+    expect($post->status)->toBe('draft');
+
+    $updated = $service->update((int) $post->id, $principalId, [
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]);
+
+    expect($updated->status)->toBe('scheduled')
+        ->and($updated->scheduled_for?->toIso8601String())->toBe('2026-11-02T09:00:00+00:00');
+});
+
+it('turns a scheduled post back into a draft when the date is cleared', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'          => SocialFixtures::POST_BODY,
+        'account_ids'   => [$account->id],
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]);
+
+    expect($post->status)->toBe('scheduled');
+
+    $updated = $service->update((int) $post->id, $principalId, ['scheduled_for' => null]);
+
+    expect($updated->status)->toBe('draft')
+        ->and($updated->scheduled_for)->toBeNull();
+});
+
+it('leaves a published post its status when it is edited', function () {
+    $publisher = postPublisher(['linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]]]);
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$linkedIn->id],
+    ]);
+
+    $published = $publisher->publish((int) $post->id, $principalId);
+
+    expect($published->status)->toBe('published');
+
+    $updated = $service->update((int) $post->id, $principalId, [
+        'body'          => 'A different copy',
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]);
+
+    expect($updated->status)->toBe('published');
 });

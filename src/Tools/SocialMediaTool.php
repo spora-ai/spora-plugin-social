@@ -10,6 +10,7 @@ use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\PlatformFit;
 use Spora\Plugins\Social\Service\SocialPostService;
+use Spora\Services\MediaArchive\MediaType;
 use Spora\Services\PrincipalContext;
 use Spora\Tools\Attributes\Tool;
 use Spora\Tools\Attributes\ToolOperation;
@@ -35,21 +36,21 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'list_assets',
-    description: 'List the Media Archive assets of this principal with their mime type, size and dimensions.',
+    description: 'List the Media Archive assets of this principal with their mime type, size and dimensions. The answer carries the asset id of every row — that is the id you attach.',
     operatorDescription: 'List the media library',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
 )]
 #[ToolOperation(
     name: 'check_fit',
-    description: 'Check whether an asset fits a platform, and say what to do about it when it does not. Instagram needs a JPEG and cannot publish without media at all.',
+    description: 'Check whether an asset fits a platform, and say what to do about it when it does not. The asset is judged as the platform receives it, so a PNG fits Instagram — the backend converts it to a JPEG before it publishes. Instagram needs media and cannot publish without one.',
     operatorDescription: 'Check a media asset against a platform',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
 )]
 #[ToolOperation(
     name: 'prepare',
-    description: 'Prepare an asset for Instagram: the JPEG derivative and the public URL Instagram will fetch. Nothing else is needed afterwards — attach the original asset id to the post and the backend publishes the converted image.',
+    description: 'Prepare an asset for Instagram: the JPEG derivative, its asset id and the public URL Instagram will fetch. Nothing else is needed afterwards — attach the original asset id to the post and the backend publishes the converted image.',
     operatorDescription: 'Prepare a media asset for Instagram',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
@@ -119,12 +120,25 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $limit = max(1, min(100, (int) ($arguments['limit'] ?? 20)));
 
-        $assets = MediaAsset::query()
+        $query = MediaAsset::query()
             ->where('principal_id', $principalId)
-            ->whereNotIn('id', \Spora\Models\MediaDerivative::query()->select('derivative_id'))
-            ->orderByDesc('created_at')
-            ->limit($limit)
-            ->get();
+            ->whereNotIn('id', \Spora\Models\MediaDerivative::query()->select('derivative_id'));
+
+        $mediaKind = trim((string) ($arguments['media_kind'] ?? ''));
+
+        if ($mediaKind !== '') {
+            $kind = MediaType::tryFrom($mediaKind);
+
+            if ($kind === null || $kind === MediaType::Unknown) {
+                return new ToolResult(false, 'Error (VALIDATION_ERROR): media_kind must be image, video, audio or document.');
+            }
+
+            $query->where('media_type', $kind->value);
+        }
+
+        $total = (clone $query)->count();
+
+        $assets = $query->orderByDesc('created_at')->limit($limit)->get();
 
         $rows = [];
         foreach ($assets as $asset) {
@@ -139,8 +153,8 @@ final class SocialMediaTool extends AbstractSocialTool
         }
 
         return ToolResult::ok(
-            count($rows) . ' media asset(s) in this principal\'s library.',
-            ['assets' => $rows],
+            SocialToolPresenter::assets($rows, $total),
+            ['assets' => $rows, 'total' => $total],
         );
     }
 
@@ -157,13 +171,7 @@ final class SocialMediaTool extends AbstractSocialTool
                 continue;
             }
 
-            $fit = PlatformFit::check($platform, $asset->mime_type, $asset->byte_size);
-            $perPlatform[] = [
-                'platform' => $platform->value,
-                'fits'     => $fit['fits'],
-                'reasons'  => $fit['reasons'],
-                'remedy'   => $fit['remedy'],
-            ];
+            $perPlatform[] = $this->fitOf($platform, $asset);
         }
 
         $fits = true;
@@ -174,9 +182,40 @@ final class SocialMediaTool extends AbstractSocialTool
         }
 
         return ToolResult::ok(
-            $fits ? 'The asset fits every platform asked about.' : 'The asset does not fit every platform asked about.',
+            SocialToolPresenter::fit($fits, $perPlatform),
             ['fits' => $fits, 'per_platform' => $perPlatform],
         );
+    }
+
+    /**
+     * The fit as the publish will reach it.
+     *
+     * The publish judges the prepared media, not the original: Instagram
+     * takes no PNG, but the backend converts one before it publishes. A
+     * check that judged the original would refuse a post that goes out.
+     *
+     * @return array<string, mixed>
+     */
+    private function fitOf(SocialPlatform $platform, MediaAsset $asset): array
+    {
+        $prepared = $this->media->prepareForFit($asset, $platform);
+
+        $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+
+        $convertedFrom = null;
+        if ($prepared->mimeType !== (string) $asset->mime_type) {
+            $convertedFrom = (string) $asset->mime_type;
+        }
+
+        return [
+            'platform'       => $platform->value,
+            'fits'           => $fit['fits'],
+            'reasons'        => $fit['reasons'],
+            'remedy'         => $fit['remedy'],
+            'mime_type'      => $prepared->mimeType,
+            'size_bytes'     => $prepared->sizeBytes,
+            'converted_from' => $convertedFrom,
+        ];
     }
 
     /**
@@ -193,12 +232,13 @@ final class SocialMediaTool extends AbstractSocialTool
         $prepared = $this->media->prepare($asset, SocialPlatform::Instagram);
 
         return ToolResult::ok(
-            'Prepared the asset for Instagram.',
+            SocialToolPresenter::prepared((string) $asset->id, $prepared),
             [
-                'media_asset_id' => $prepared->mediaAssetId,
-                'format'         => $prepared->derivativeFormat ?? $prepared->mimeType,
-                'url'            => $prepared->publicUrl,
-                'mime_type'      => $prepared->mimeType,
+                'media_asset_id'       => $prepared->mediaAssetId,
+                'source_media_asset_id' => (string) $asset->id,
+                'format'               => $prepared->derivativeFormat ?? $prepared->mimeType,
+                'url'                  => $prepared->publicUrl,
+                'mime_type'            => $prepared->mimeType,
             ],
         );
     }

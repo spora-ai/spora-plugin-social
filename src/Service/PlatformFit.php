@@ -9,6 +9,10 @@ use Spora\Plugins\Social\Model\SocialPlatform;
 /**
  * What each platform accepts: the media rules and the character limit.
  *
+ * A rule also carries the characters the network shows before it hides the
+ * rest behind a "see more": a post that reads well in full can still say
+ * nothing in the first line, and that is what a reader sees.
+ *
  * One table, because the rules are read in three places — the composer
  * badge on an attachment, the publish-time guard, and the prose the agent
  * reads — and three copies of a size cap would drift.
@@ -69,6 +73,7 @@ final class PlatformFit
      *     mime_types: list<string>,
      *     max_bytes: int,
      *     max_characters: int,
+     *     visible_chars: int,
      *     media: string
      * }>
      */
@@ -83,6 +88,7 @@ final class PlatformFit
                 'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, 'image/gif'],
                 'max_bytes'      => 8 * self::MEGABYTE,
                 'max_characters' => 3000,
+                'visible_chars'  => 200,
                 'media'          => 'JPEG, PNG or GIF, up to 8 MB.',
             ],
             SocialPlatform::Facebook->value => [
@@ -93,6 +99,7 @@ final class PlatformFit
                 'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, 'image/gif', 'image/bmp', self::MIME_MP4],
                 'max_bytes'      => 1024 * self::MEGABYTE,
                 'max_characters' => 63206,
+                'visible_chars'  => 125,
                 'media'          => 'JPEG, PNG, GIF, BMP or MP4, up to 1 GB.',
             ],
             SocialPlatform::Instagram->value => [
@@ -103,6 +110,7 @@ final class PlatformFit
                 'mime_types'     => [self::MIME_JPEG, self::MIME_MP4],
                 'max_bytes'      => 100 * self::MEGABYTE,
                 'max_characters' => 2200,
+                'visible_chars'  => 125,
                 'media'          => 'JPEG or MP4, up to 100 MB.',
             ],
         ];
@@ -117,6 +125,7 @@ final class PlatformFit
      *     mime_types: list<string>,
      *     max_bytes: int,
      *     max_characters: int,
+     *     visible_chars: int,
      *     media: string
      * }
      */
@@ -144,6 +153,7 @@ final class PlatformFit
      *     mime_types: list<string>,
      *     max_bytes: int,
      *     max_text: int,
+     *     visible_chars: int,
      *     media_note: string,
      *     media_remedy: string,
      *     video_remedy: string,
@@ -162,6 +172,7 @@ final class PlatformFit
                 'mime_types'     => $rule['mime_types'],
                 'max_bytes'      => $rule['max_bytes'],
                 'max_text'       => $rule['max_characters'],
+                'visible_chars'  => $rule['visible_chars'],
                 'media_note'     => $rule['label'] . ' accepts ' . $rule['media'],
                 'media_remedy'   => self::remedyForMime(SocialPlatform::from($platform), self::MIME_PNG),
                 'video_remedy'   => self::remedyForMime(SocialPlatform::from($platform), self::MIME_MP4),
@@ -178,6 +189,31 @@ final class PlatformFit
     public static function characterLimit(SocialPlatform $platform): int
     {
         return (int) self::rule($platform)['max_characters'];
+    }
+
+    /**
+     * The text a post goes out with: its body, and its hashtags under it.
+     *
+     * This is the authority for the composition — the frontend mirrors it,
+     * so the preview in the composer and the post on the network read the
+     * same.
+     *
+     * @param list<string> $hashtags
+     */
+    public static function composeText(string $body, array $hashtags): string
+    {
+        $tags = array_map(
+            static fn(string $hashtag): string => '#' . $hashtag,
+            $hashtags,
+        );
+
+        if ($tags === []) {
+            return $body;
+        }
+
+        $text = implode(' ', $tags);
+
+        return $body === '' ? $text : $body . "\n\n" . $text;
     }
 
     /**

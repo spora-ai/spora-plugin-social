@@ -175,14 +175,4 @@ final class SocialFixtures
      * The query the principal is named in.
      */
     public const PRINCIPAL_QUERY = '?principal_id=';
-
-    /**
-     * The brief the draft tests write from.
-     */
-    public const BRIEF = 'We shipped';
-
-    /**
-     * The copy a model answers with when it does not answer in JSON.
-     */
-    public const PROSE_ANSWER = 'We shipped, and it went well.';
 }

@@ -84,15 +84,6 @@ function mediaController(AuthService $auth): SocialMediaController
         new PrincipalService($resolver),
         mediaPipeline(),
         postService(),
-        new Spora\Plugins\Social\Service\SocialDraftService(
-            new Spora\Services\LLMConfigPreferences(),
-            new Spora\Drivers\DriverFactory(
-                new Monolog\Logger('test'),
-                new Spora\Services\LLMConfigService(
-                    new Spora\Core\SecurityManager(str_repeat('k', SODIUM_CRYPTO_SECRETBOX_KEYBYTES)),
-                ),
-            ),
-        ),
     );
 }
 
@@ -342,11 +333,32 @@ it('lists the media of the principal with the url the host renders as an image',
         ->and($body['data'][0]['asset_url'])->toStartWith('/api/v1/assets/');
 });
 
-it('checks the fit of an asset and names the remedy', function () {
+it('checks the fit of an asset as the platform receives it', function () {
     $auth = bootAuthLayer();
     $principalId = createUserPrincipal(bootAuth($auth));
 
     $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+
+    $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
+        'principal_id'   => $principalId,
+        'media_asset_id' => $asset->id,
+        'platforms'      => ['instagram'],
+    ]));
+
+    expect($response->getStatusCode())->toBe(200);
+
+    // Instagram takes no PNG, but the backend converts one before it
+    // publishes — so the asset fits there, as the publish will find it.
+    $body = decode($response);
+    expect($body['data']['fits'])->toBeTrue()
+        ->and($body['data']['per_platform'][0]['mime_type'])->toBe('image/jpeg');
+});
+
+it('names the remedy for a media Instagram cannot take at all', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'text/markdown', 'payload' => '# hello']);
 
     $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
         'principal_id'   => $principalId,
@@ -774,22 +786,6 @@ it('refuses an attachment without an asset', function () {
 
     expect($response->getStatusCode())->toBe(422)
         ->and(decode($response)['error']['message'])->toContain('media_asset_id is required');
-});
-
-it('asks the model for a draft', function () {
-    $auth = bootAuthLayer();
-    $principalId = createUserPrincipal(bootAuth($auth));
-
-    $response = mediaController($auth)->generateDraft(jsonRequest('POST', '/api/v1/plugins/social/drafts/generate', [
-        'principal_id' => $principalId,
-        'brief'        => 'We shipped',
-        'platforms'    => ['linkedin'],
-    ]));
-
-    // The model is not configured in the test suite, and the refusal is
-    // the endpoint's answer all the same.
-    expect($response->getStatusCode())->toBe(422)
-        ->and(decode($response)['error']['message'])->toContain('No language model is configured');
 });
 
 it('answers with the calendar of a month', function () {

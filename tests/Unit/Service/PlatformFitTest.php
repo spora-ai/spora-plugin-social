@@ -77,3 +77,25 @@ it('serialises the remedies the frontend shows', function () {
         ->and($rules['instagram']['video_remedy'])->toBe(PlatformFit::REMEDY_CONVERT_VIDEO)
         ->and($rules['instagram']['size_remedy'])->toBe(PlatformFit::REMEDY_COMPRESS);
 });
+
+it('puts the hashtags under the body', function () {
+    expect(PlatformFit::composeText('Hi', ['a', 'b']))->toBe("Hi\n\n#a #b");
+});
+
+it('leaves the body alone when the post carries no hashtags', function () {
+    expect(PlatformFit::composeText('Hi', []))->toBe('Hi');
+});
+
+it('names the characters a network shows before it hides the rest', function () {
+    expect(PlatformFit::rule(SocialPlatform::LinkedIn)['visible_chars'])->toBe(200)
+        ->and(PlatformFit::rule(SocialPlatform::Facebook)['visible_chars'])->toBe(125)
+        ->and(PlatformFit::rule(SocialPlatform::Instagram)['visible_chars'])->toBe(125);
+});
+
+it('tells the frontend how many characters a network shows', function () {
+    $rules = PlatformFit::apiRules();
+
+    expect($rules['linkedin']['visible_chars'])->toBe(200)
+        ->and($rules['facebook']['visible_chars'])->toBe(125)
+        ->and($rules['instagram']['visible_chars'])->toBe(125);
+});

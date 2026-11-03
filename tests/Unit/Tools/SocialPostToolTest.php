@@ -83,7 +83,10 @@ it('publishes a post and reports the per-account outcome', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->data['post']['status'])->toBe('published')
-        ->and($result->data['post']['targets'][0]['external_id'])->toBe('urn:li:share:9');
+        ->and($result->data['post']['targets'][0]['external_id'])->toBe('urn:li:share:9')
+        // Which network published and which one refused is the answer
+        // the agent needs — and the model reads the content.
+        ->and($result->content)->toContain('linkedin — account ' . $account->id . ' — published');
 });
 
 it('takes a published post back down', function () {
@@ -120,7 +123,7 @@ it('lists the posts of the principal', function () {
 
     $tool = postTool();
 
-    $tool->execute([
+    $created = $tool->execute([
         'action'      => 'create',
         'body'        => SocialFixtures::POST_BODY,
         'account_ids' => [$account->id],
@@ -130,7 +133,12 @@ it('lists the posts of the principal', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->data['total'])->toBe(1)
-        ->and($result->data['items'])->toHaveCount(1);
+        ->and($result->data['items'])->toHaveCount(1)
+        // The post id is what a follow-up call takes, and the model
+        // reads the content — not the data — so it has to be in the
+        // answer.
+        ->and($result->content)->toContain('#' . $created->data['post']['id'])
+        ->and($result->content)->toContain(SocialFixtures::POST_BODY);
 });
 
 it('inspects one post', function () {
@@ -150,7 +158,67 @@ it('inspects one post', function () {
     );
 
     expect($result->success)->toBeTrue()
-        ->and($result->data['post']['body'])->toBe(SocialFixtures::POST_BODY);
+        ->and($result->data['post']['body'])->toBe(SocialFixtures::POST_BODY)
+        // The copy and the accounts are in the answer, not only in the
+        // data: the model reads the answer.
+        ->and($result->content)->toContain('body: ' . SocialFixtures::POST_BODY)
+        ->and($result->content)->toContain('account ' . $account->id);
+});
+
+it('writes a draft without an account and says that it cannot go out', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = postTool();
+
+    $result = $tool->execute([
+        'action' => 'create',
+        'body'   => SocialFixtures::POST_BODY,
+    ], 1, null, principalContext($principalId));
+
+    // A draft may sit without an account, but it has no platform to go
+    // to — and the agent has to know that, or it tells the operator a
+    // post is ready that cannot go out.
+    expect($result->success)->toBeTrue()
+        ->and($result->data['post']['status'])->toBe('draft')
+        ->and($result->data['post']['targets'])->toBe([])
+        ->and($result->content)->toContain('no account');
+});
+
+it('refuses to schedule a post without an account, and names the way out', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = postTool();
+
+    $result = $tool->execute([
+        'action'        => 'schedule',
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ], 1, null, principalContext($principalId));
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('No social account is connected for this principal.')
+        ->and($result->content)->toContain('social_connections');
+});
+
+it('refuses to publish a post that has no account', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = postTool();
+
+    $created = $tool->execute([
+        'action' => 'create',
+        'body'   => SocialFixtures::POST_BODY,
+    ], 1, null, principalContext($principalId));
+
+    $result = $tool->execute(
+        ['action' => 'publish', 'post_id' => $created->data['post']['id']],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('there is nothing to publish');
 });
 
 it('updates a post', function () {
@@ -302,4 +370,22 @@ it('attaches the media assets the agent names', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->data['post']['media'])->toHaveCount(1);
+});
+
+it('writes the hashtags the agent names', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = publishableAccount($principalId, 'linkedin', 'organization');
+
+    $tool = postTool();
+
+    $result = $tool->execute([
+        'action'      => 'create',
+        'body'        => SocialFixtures::POST_BODY,
+        'hashtags'    => ['#launch', 'shipit'],
+        'account_ids' => [$account->id],
+    ], 1, null, principalContext($principalId));
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['post']['hashtags'])->toBe(['launch', 'shipit']);
 });

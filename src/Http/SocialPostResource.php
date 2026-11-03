@@ -71,6 +71,7 @@ final class SocialPostResource
             'title'           => $post->title,
             'body'            => $post->body,
             'platform_bodies' => is_array($post->platform_bodies) ? $post->platform_bodies : new stdClass(),
+            'hashtags'        => is_array($post->hashtags) ? $post->hashtags : [],
             'status'          => (string) $post->status,
             'source'          => (string) $post->source,
             'scheduled_for'   => $post->scheduled_for?->toIso8601String(),

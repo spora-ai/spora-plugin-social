@@ -95,7 +95,7 @@ final class SocialCalendarTool extends AbstractSocialTool
         }
 
         return ToolResult::ok(
-            count($posts) . ' of ' . $result['total'] . ' post(s) in ' . $month . '.',
+            SocialToolPresenter::month($month, $posts, (int) $result['total']),
             ['month' => $month, 'posts' => $posts, 'total' => $result['total']],
         );
     }

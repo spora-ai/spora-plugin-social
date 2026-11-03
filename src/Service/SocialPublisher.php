@@ -207,11 +207,19 @@ final class SocialPublisher
     {
         $post = $this->posts->find($postId, $principalId);
 
-        $post->status = SocialPost::STATUS_PUBLISHING;
-        $post->save();
-
         /** @var Collection<int, SocialPostTarget> $targets */
         $targets = $post->targets()->get();
+
+        // A draft may have no account, and it cannot go out without one:
+        // the targets are the platforms, and there is nothing to publish
+        // to. Refused here rather than left to publish nothing, which
+        // would read as a post that went out.
+        if ($targets->isEmpty()) {
+            throw SocialException::validation('This post has no account, so there is nothing to publish. Pick one for it with `social_post` action `update`, or connect one with `social_connections`.');
+        }
+
+        $post->status = SocialPost::STATUS_PUBLISHING;
+        $post->save();
 
         foreach ($targets as $target) {
             if ($onlyFailed && $target->status !== SocialPostTarget::STATUS_FAILED) {
@@ -260,9 +268,11 @@ final class SocialPublisher
 
             $body = $this->bodyFor($post, $platform);
 
-            // The body is judged against the platform it is going to, with
-            // that platform's own text: one post aimed at Instagram and
-            // Facebook carries two bodies, and each has its own limit.
+            // The text is judged against the platform it is going to, with
+            // that platform's own body: one post aimed at Instagram and
+            // Facebook carries two bodies, and each has its own limit. The
+            // hashtags are part of the text that goes out, so they are
+            // counted against the limit as well.
             $bodyFit = PlatformFit::checkBody($platform, $body);
             if (!$bodyFit['fits']) {
                 throw SocialException::validation(trim(
@@ -424,13 +434,15 @@ final class SocialPublisher
     {
         $bodies = $post->platform_bodies;
 
+        $body = (string) $post->body;
+
         if (is_array($bodies)) {
             $specific = $bodies[$platform->value] ?? null;
             if (is_string($specific) && $specific !== '') {
-                return $specific;
+                $body = $specific;
             }
         }
 
-        return (string) $post->body;
+        return PlatformFit::composeText($body, is_array($post->hashtags) ? $post->hashtags : []);
     }
 }
