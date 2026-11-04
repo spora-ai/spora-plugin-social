@@ -45,6 +45,13 @@ it('answers the redirect uri as an absolute address', function () {
         ->toBe('https://spora.example.com/api/v1/plugins/social/oauth/linkedin/callback');
 });
 
+it('does not allow a local address unless the install says it is developing', function () {
+    expect((new SocialSettings(new Spora\Core\Config([])))->allowsLocalAppUrl())->toBeFalse()
+        ->and((new SocialSettings(new Spora\Core\Config([
+            SocialSettings::KEY_ALLOW_LOCAL_APP_URL => true,
+        ])))->allowsLocalAppUrl())->toBeTrue();
+});
+
 it('refuses an origin that is not an origin', function () {
     // The request carried no host, and the detection answers `http://`.
     expect(SocialSettings::resolveOrigin(null, 'http://'))->toBeNull()
@@ -71,7 +78,10 @@ it('refuses to connect when the instance has no public address', function () {
     ])), new SocialConnectionTokens($settings, new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]), securityManager()));
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
-        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'no public address');
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'no public address')
+        // The refusal names the file the address is set in, because the
+        // global settings list the setting read-only.
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, '.env or config.php');
 });
 
 it('reads the LinkedIn permissions the operator asked for', function () {

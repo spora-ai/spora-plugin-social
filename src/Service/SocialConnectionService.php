@@ -88,20 +88,16 @@ final class SocialConnectionService
         // A relative path is not something a platform can be given, so
         // there is nothing to register and nothing to come back to.
         if ($this->settings->oauthRedirectUri($provider) === null) {
-            throw SocialException::validation(
-                'The instance has no public address, so there is no redirect URI to register. Set SPORA_APP_URL.',
-            );
+            throw SocialException::validation('The instance has no public address, so there is no redirect URI to register. Set SPORA_APP_URL in your .env or config.php — the global settings list it read-only.');
         }
 
         // Checked here rather than at publish time: Instagram fetches the
         // published media from the internet, and an address only the
         // operator's network can see fails at the last step, with an error
         // that never mentions the URL.
-        if (!$this->appUrlProbe->isPubliclyReachable($this->settings->appUrl())) {
-            throw SocialException::validation(
-                'SPORA_APP_URL must be a publicly reachable HTTPS address before an account can be connected — '
-                . 'the platform fetches published media from the internet.',
-            );
+        if (!$this->settings->allowsLocalAppUrl()
+            && !$this->appUrlProbe->isPubliclyReachable($this->settings->appUrl())) {
+            throw SocialException::validation('SPORA_APP_URL must be a publicly reachable HTTPS address before an account can be connected — the platform fetches published media from the internet. Set it in your .env or config.php; the global settings list it read-only. On a development install, turn on SPORA_SOCIAL_ALLOW_LOCAL_APP_URL in Settings → Plugins.');
         }
 
         $pkce = $this->pkceVerifier();

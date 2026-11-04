@@ -35,6 +35,7 @@ final class SocialSettings
     public const KEY_LINKEDIN_READ_ORG_FEED = 'SPORA_SOCIAL_LINKEDIN_READ_ORG_FEED';
     public const KEY_GRAPH_API_VERSION = 'SPORA_SOCIAL_GRAPH_API_VERSION';
     public const KEY_LINKEDIN_API_VERSION = 'SPORA_SOCIAL_LINKEDIN_API_VERSION';
+    public const KEY_ALLOW_LOCAL_APP_URL = 'SPORA_SOCIAL_ALLOW_LOCAL_APP_URL';
 
     public function __construct(
         private readonly Config $config,
@@ -184,6 +185,32 @@ final class SocialSettings
         }
 
         return $base . '/api/v1/plugins/social/oauth/' . $provider->value . '/callback';
+    }
+
+    /**
+     * Whether the operator can be told which redirect URI to register.
+     *
+     * A platform accepts a public address. A development install sends a
+     * local one, and the operator has to register that — the platform
+     * refuses a callback it was not given.
+     */
+    public function canRegisterTheRedirectUri(): bool
+    {
+        return $this->hasPublicAddress() || $this->allowsLocalAppUrl();
+    }
+
+    /**
+     * Whether an account may be connected on a local address.
+     *
+     * For development only. Instagram fetches the published media with
+     * its own servers, so it cannot reach a loopback address — but the
+     * rest of the flow (the connect, the token, the drafts, the platforms
+     * that upload the bytes instead of fetching them) can be built
+     * against a real account.
+     */
+    public function allowsLocalAppUrl(): bool
+    {
+        return $this->config->getBool(self::KEY_ALLOW_LOCAL_APP_URL);
     }
 
     /**
