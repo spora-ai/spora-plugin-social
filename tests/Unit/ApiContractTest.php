@@ -258,7 +258,7 @@ it('asks linkedin for exactly the documented permissions', function () {
     //
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api
     $plain = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(), $recorder->client());
-    $scopes = scopeListOf($plain->authorizationUrl('state', str_repeat('a', 64)));
+    $scopes = scopeListOf($plain->authorizationUrl('state'));
 
     expect($scopes)->toContain('openid')
         ->and($scopes)->toContain('profile')
@@ -268,7 +268,7 @@ it('asks linkedin for exactly the documented permissions', function () {
         ->and($scopes)->not->toContain('w_organization_social');
 
     $withOrganization = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(organizationScope: true), $recorder->client());
-    $organizationScopes = scopeListOf($withOrganization->authorizationUrl('state', str_repeat('a', 64)));
+    $organizationScopes = scopeListOf($withOrganization->authorizationUrl('state'));
 
     expect($organizationScopes)->toContain('w_organization_social');
 });
@@ -284,7 +284,7 @@ it('asks linkedin for each read permission on its own', function () {
     // r_organization_admin — the organisations the member administers.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role
     $acls = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readOrganizationAcls: true), $recorder->client(), apiVersions());
-    $aclScopes = scopeListOf($acls->authorizationUrl('state', str_repeat('a', 64)));
+    $aclScopes = scopeListOf($acls->authorizationUrl('state'));
 
     expect($aclScopes)->toContain('r_organization_admin')
         ->and($aclScopes)->not->toContain('rw_organization_admin')
@@ -293,7 +293,7 @@ it('asks linkedin for each read permission on its own', function () {
     // rw_organization_admin — the organisation's share statistics.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/share-statistics
     $stats = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readOrganizationStats: true), $recorder->client(), apiVersions());
-    $statsScopes = scopeListOf($stats->authorizationUrl('state', str_repeat('a', 64)));
+    $statsScopes = scopeListOf($stats->authorizationUrl('state'));
 
     expect($statsScopes)->toContain('rw_organization_admin')
         ->and($statsScopes)->not->toContain('r_organization_admin')
@@ -302,7 +302,7 @@ it('asks linkedin for each read permission on its own', function () {
     // r_member_social_feed — the reactions on a member post.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
     $feed = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readMemberFeed: true), $recorder->client(), apiVersions());
-    $feedScopes = scopeListOf($feed->authorizationUrl('state', str_repeat('a', 64)));
+    $feedScopes = scopeListOf($feed->authorizationUrl('state'));
 
     expect($feedScopes)->toContain('r_member_social_feed')
         ->and($feedScopes)->not->toContain('r_organization_admin')
@@ -311,7 +311,7 @@ it('asks linkedin for each read permission on its own', function () {
     // r_organization_social_feed — the reactions on an organisation post.
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/network-update-social-actions
     $organizationFeed = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(readOrganizationFeed: true), $recorder->client(), apiVersions());
-    $organizationFeedScopes = scopeListOf($organizationFeed->authorizationUrl('state', str_repeat('a', 64)));
+    $organizationFeedScopes = scopeListOf($organizationFeed->authorizationUrl('state'));
 
     expect($organizationFeedScopes)->toContain('r_organization_social_feed')
         ->and($organizationFeedScopes)->not->toContain('r_member_social_feed')
@@ -323,7 +323,7 @@ it('reads the linkedin organization scope from the post api, not the legacy one'
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(organizationScope: true), $recorder->client());
 
-    $url = $provider->authorizationUrl('state', str_repeat('a', 64));
+    $url = $provider->authorizationUrl('state');
 
     expect($url)->toContain('w_organization_social')
         ->and($url)->not->toContain('urn%3Ali%3Aorganization%3Aauthorize');
@@ -373,7 +373,7 @@ it('exchanges the meta code at the configured graph version', function () {
         ]),
     );
 
-    $provider->exchangeCode('the-code', str_repeat('v', 64));
+    $provider->exchangeCode('the-code');
 
     expect((string) $recorder->requests[0]['request']->getUri())
         ->toStartWith('https://graph.facebook.com/v26.0/oauth/access_token?');

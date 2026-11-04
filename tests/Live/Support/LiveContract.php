@@ -20,15 +20,4 @@ final class LiveContract
     {
         Assert::assertTrue($condition, $claim);
     }
-
-    /**
-     * The S256 challenge of a verifier.
-     *
-     * The shape the authorization url has to carry, so the check can say
-     * that the challenge belongs to the verifier the exchange will present.
-     */
-    public static function pkceChallenge(string $verifier): string
-    {
-        return rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
-    }
 }

@@ -14,8 +14,8 @@ use Spora\Plugins\Social\Exception\SocialException;
  * The state is the only thing that authenticates the OAuth callback: the
  * platform's browser arrives with no session, so the callback cannot ask
  * who is calling. The state therefore carries the principal, the platform,
- * a nonce and the PKCE verifier, and it is signed — an unsigned state
- * would let anyone point a victim's callback at a principal they chose.
+ * a nonce and the expiry, and it is signed — an unsigned state would let
+ * anyone point a victim's callback at a principal they chose.
  *
  * The signature is an HMAC over the master key rather than a plain hash,
  * so the state cannot be forged without the host's secret.
