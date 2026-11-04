@@ -145,7 +145,7 @@ it('answers with the connections of the principal, each with its accounts', func
         ->and($body['data'][0]['accounts'][0]['platform'])->toBe('linkedin');
 });
 
-it('does not carry the redirect uri, which is setup instruction', function () {
+it('carries the redirect uri the operator has to register', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
@@ -155,10 +155,32 @@ it('does not carry the redirect uri, which is setup instruction', function () {
 
     $body = decode($response);
 
-    // The URI is registered on the setting it belongs to, so the endpoint
-    // does not hand it out again.
-    expect($body['data']['providers']['meta'])->not->toHaveKey('redirect_uri')
-        ->and($body['data']['providers']['linkedin'])->not->toHaveKey('redirect_uri');
+    // The accounts screen shows it so the operator can copy it into the
+    // platform's own form.
+    expect($body['data']['providers']['meta']['redirect_uri'])
+        ->toBe('https://spora.test/api/v1/plugins/social/oauth/meta/callback')
+        ->and($body['data']['providers']['linkedin']['redirect_uri'])
+        ->toBe('https://spora.test/api/v1/plugins/social/oauth/linkedin/callback');
+});
+
+it('carries no redirect uri on an instance that cannot register one', function () {
+    $auth = bootAuthLayer();
+    bootAuth($auth);
+
+    // A local address without the development switch: no platform accepts
+    // it, so naming it would send the operator to register something that
+    // cannot work.
+    $settings = new SocialSettings(socialConfig(['SPORA_APP_URL' => 'http://localhost:8080']));
+
+    $response = connectionController($auth, $settings)->config();
+
+    $body = decode($response);
+
+    // The key is there and it is empty: an absent key would say the same
+    // thing about an endpoint that never sent one.
+    expect($body['data']['providers']['meta'])->toHaveKey('redirect_uri')
+        ->and($body['data']['providers']['meta']['redirect_uri'])->toBeNull()
+        ->and($body['data']['providers']['linkedin']['redirect_uri'])->toBeNull();
 });
 
 it('carries no setup notice for a provider that needs no setup', function () {

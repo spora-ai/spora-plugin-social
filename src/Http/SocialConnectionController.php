@@ -41,6 +41,11 @@ final class SocialConnectionController extends AbstractSocialController
      * work, and to say why — the operator prerequisite is a setting, not a
      * mystery.
      *
+     * **The redirect URL travels with them.** The accounts screen shows it so
+     * the operator can copy it into the platform's own form; it is the one
+     * value they cannot work out, because it is built from the address this
+     * instance is reached at.
+     *
      * The rules travel with them: the composer's counters and the badge on
      * an attachment read the limits from here, because the backend is what
      * refuses the publish. A copy in the frontend warns about a number that
@@ -56,9 +61,8 @@ final class SocialConnectionController extends AbstractSocialController
                     'configured' => $this->settings->isConfigured($provider),
                     'client_id'  => $this->settings->clientId($provider),
                     'config_id'  => $provider === SocialProvider::Meta ? $this->settings->metaConfigId() : null,
-                    // The redirect URL is not here: it is setup instruction,
-                    // and it belongs in the setting it is registered on.
                     'needs_setup' => $this->setupNotice($provider),
+                    'redirect_uri' => $this->redirectUri($provider),
                 ];
             }
 
@@ -98,6 +102,28 @@ final class SocialConnectionController extends AbstractSocialController
                 'body'  => 'Add the client id, the client secret and the requested permissions in Settings → Plugins.',
             ],
         };
+    }
+
+    /**
+     * The URL the platform has to be given, when there is one to give.
+     *
+     * The accounts screen shows it so the operator can copy it into the
+     * platform's own form. It is the one value they cannot work out: it is
+     * built from the address this instance is reached at, and the frontend
+     * does not know that address.
+     *
+     * A URL that cannot be registered is not named. A local address without
+     * the development switch is refused by every platform, so naming it would
+     * send the operator to register something that cannot work — the screen
+     * says there is none instead, the way the setting's own description does.
+     */
+    private function redirectUri(SocialProvider $provider): ?string
+    {
+        if (!$this->settings->canRegisterTheRedirectUri()) {
+            return null;
+        }
+
+        return $this->settings->oauthRedirectUri($provider);
     }
 
     /**
