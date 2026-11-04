@@ -52,8 +52,7 @@ it('builds an authorization url with the unified login', function () {
             $context = LiveContext::instance();
             $provider = $context->provider(SocialPlatform::Instagram);
 
-            $verifier = str_repeat('v', 64);
-            $url = $provider->authorizationUrl('live-check-state', $verifier);
+            $url = $provider->authorizationUrl('live-check-state');
 
             $query = [];
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);

@@ -17,9 +17,8 @@ owned the tokens, the scheduling and the publishing.
   refresh grant, so it is reconnected rather than renewed, and whether it
   expires at all is the configuration's decision — a Meta token *can* carry
   an expiry, and the expiry the platform sends is the expiry the
-  connection keeps. **LinkedIn** keeps its own flow: PKCE, OpenID Connect,
-  and one token that covers the member and the organisations they
-  administer.
+  connection keeps. **LinkedIn** keeps its own flow: OpenID Connect, and one
+  token that covers the member and the organisations they administer.
   One Instagram caveat the plugin cannot check for you: an account
   connected to a Page that *requires* Page Publishing Authorization cannot
   be published to until PPA is completed, and Meta says there is no way

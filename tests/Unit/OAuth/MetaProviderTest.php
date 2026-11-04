@@ -24,7 +24,7 @@ it('builds the login url of the configuration', function () {
         $recorder->client(),
     );
 
-    $url = $provider->authorizationUrl('signed-state', str_repeat('a', 64));
+    $url = $provider->authorizationUrl('signed-state');
 
     $query = [];
     parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
@@ -57,7 +57,7 @@ it('exchanges the code server to server and stores the client business id', func
         ]),
     );
 
-    $tokens = $provider->exchangeCode('the-code', str_repeat('v', 64));
+    $tokens = $provider->exchangeCode('the-code');
 
     expect($tokens->accessToken)->toBe('the-suat')
         // A system-user token "defaults to never expire", so there is no
@@ -94,7 +94,7 @@ it('records the scopes the token response names', function () {
         ]),
     );
 
-    $tokens = $provider->exchangeCode('the-code', str_repeat('v', 64));
+    $tokens = $provider->exchangeCode('the-code');
 
     // The scopes are what the connection records; without them the plugin
     // cannot say which permissions the token carries.
@@ -115,7 +115,7 @@ it('leaves the scopes unknown when the token response names none', function () {
         ]),
     );
 
-    $tokens = $provider->exchangeCode('the-code', str_repeat('v', 64));
+    $tokens = $provider->exchangeCode('the-code');
 
     // Unknown is not "not granted": a Meta system-user token reports its
     // permissions through the configuration, not through the response.

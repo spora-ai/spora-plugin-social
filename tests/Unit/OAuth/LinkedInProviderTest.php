@@ -8,12 +8,11 @@ use Spora\Plugins\Social\OAuth\OAuthTokenSet;
 use Spora\Plugins\Social\Tests\Support\GuzzleRecorder;
 use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
-it('builds the authorization url with a pkce challenge and the signed state', function () {
+it('builds the authorization url without a pkce challenge', function () {
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client());
 
-    $verifier = str_repeat('a', 64);
-    $url = $provider->authorizationUrl('signed-state', $verifier);
+    $url = $provider->authorizationUrl('signed-state');
 
     $query = [];
     parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
@@ -24,19 +23,24 @@ it('builds the authorization url with a pkce challenge and the signed state', fu
         ->and($query['redirect_uri'])->toBe(SocialFixtures::OAUTH_CALLBACK)
         ->and($query['state'])->toBe('signed-state')
         ->and($query['response_type'])->toBe('code')
-        ->and($query['code_challenge_method'])->toBe('S256')
-        ->and($query['code_challenge'])->toBe(rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='))
         ->and($query['scope'])->toBe('openid profile email w_member_social');
+
+    // LinkedIn's token endpoint does not take a verifier: it answers the
+    // exchange with "invalid_client — Client authentication failed" when
+    // one is sent. A challenge is not offered either, because a code issued
+    // against a challenge has nothing to verify a verifier against.
+    expect($query)->not->toHaveKey('code_challenge')
+        ->and($query)->not->toHaveKey('code_challenge_method');
 });
 
 it('asks for the organisation scope only when the operator says the app has it', function () {
     $recorder = new GuzzleRecorder();
 
     $withoutScope = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(), $recorder->client());
-    parse_str((string) parse_url($withoutScope->authorizationUrl('s', str_repeat('a', 64)), PHP_URL_QUERY), $plainQuery);
+    parse_str((string) parse_url($withoutScope->authorizationUrl('s'), PHP_URL_QUERY), $plainQuery);
 
     $withScope = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(organizationScope: true), $recorder->client());
-    parse_str((string) parse_url($withScope->authorizationUrl('s', str_repeat('a', 64)), PHP_URL_QUERY), $orgQuery);
+    parse_str((string) parse_url($withScope->authorizationUrl('s'), PHP_URL_QUERY), $orgQuery);
 
     // The Posts API's own organisation permission, not the legacy
     // organisation-authorisation scope.
@@ -48,11 +52,11 @@ it('asks for the organisation scope only when the operator says the app has it',
         ->and($orgQuery['scope'])->not->toContain('urn:li:organization:authorize');
 });
 
-it('exchanges the code for tokens, carrying the pkce verifier', function () {
+it('exchanges the code for tokens, without a pkce verifier', function () {
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => '{"access_token":"at","expires_in":5184000,"refresh_token":"rt","scope":"openid profile w_member_social"}']]));
 
-    $tokens = $provider->exchangeCode('the-code', str_repeat('v', 64));
+    $tokens = $provider->exchangeCode('the-code');
 
     expect($tokens->accessToken)->toBe('at')
         ->and($tokens->refreshToken)->toBe('rt')
@@ -69,10 +73,13 @@ it('exchanges the code for tokens, carrying the pkce verifier', function () {
     expect((string) $request->getUri())->toBe('https://www.linkedin.com/oauth/v2/accessToken')
         ->and($fields['grant_type'])->toBe('authorization_code')
         ->and($fields['code'])->toBe('the-code')
-        ->and($fields['code_verifier'])->toBe(str_repeat('v', 64))
         ->and($fields['client_id'])->toBe('client-id')
         ->and($fields['client_secret'])->toBe('client-secret')
         ->and($fields['redirect_uri'])->toBe(SocialFixtures::OAUTH_CALLBACK);
+
+    // The verifier is the one parameter that makes LinkedIn answer the
+    // exchange with "invalid_client — Client authentication failed".
+    expect($fields)->not->toHaveKey('code_verifier');
 });
 
 it('refreshes without a pkce verifier, which a refresh is not', function () {

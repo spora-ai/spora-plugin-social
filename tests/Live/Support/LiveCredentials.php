@@ -67,11 +67,6 @@ final class LiveCredentials
         return $this->value($this->names->authorizationCodeName($platform));
     }
 
-    public function pkceVerifier(SocialPlatform $platform): ?string
-    {
-        return $this->value($this->names->pkceVerifierName($platform));
-    }
-
     public function appUrl(): ?string
     {
         return $this->value(self::ENV_REDIRECT_URI);

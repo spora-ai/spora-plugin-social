@@ -303,6 +303,5 @@ it('signs the state with the principal, the provider and a nonce', function () {
     expect($payload['principal_id'])->toBe(7)
         ->and($payload['provider'])->toBe('linkedin')
         ->and($payload['nonce'])->not->toBeEmpty()
-        ->and($payload['pkce'])->not->toBeEmpty()
         ->and($request['authorize_url'])->toContain('state=');
 });
