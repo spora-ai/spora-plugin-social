@@ -93,17 +93,22 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
     /**
      * A setting the operator turns on or off.
      *
-     * The five LinkedIn permissions are all of the same shape, and a
-     * `SettingDefinition` written out five times is a shape that can
+     * The LinkedIn permissions are all of the same shape, and a
+     * `SettingDefinition` written out for each of them is a shape that can
      * drift.
      */
-    private function toggle(string $group, string $key, string $label, string $description): SettingDefinition
-    {
+    private function toggle(
+        string $group,
+        string $key,
+        string $label,
+        string $description,
+        bool $default = false,
+    ): SettingDefinition {
         return new SettingDefinition(
             key: $key,
             label: $label,
             type: SettingDefinition::TYPE_TOGGLE,
-            default: false,
+            default: $default,
             group: $group,
             section: 'social',
             description: $description,
@@ -136,6 +141,26 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 section: 'social',
                 description: 'The client secret of your LinkedIn app. Stored encrypted.',
                 secret: true,
+            ),
+            $this->toggle(
+                $group,
+                'LINKEDIN_MEMBER_SCOPE',
+                'Ask LinkedIn for member posting',
+                'Ask for w_member_social, the permission that posts on behalf of the member. '
+                    . 'On by default, because it is an open permission every app holds. '
+                    . 'Turn it off for an app that holds only the Community Management API product and posts to organisation pages only — '
+                    . 'though that product grants this permission too.',
+                true,
+            ),
+            $this->toggle(
+                $group,
+                'LINKEDIN_SIGN_IN_SCOPE',
+                'Ask LinkedIn for the member\'s identity',
+                'Ask for openid, profile and email, the OpenID Connect permissions that name the member who signed in. '
+                    . 'On by default. Turn it off for an app that holds only the Community Management API product: that product cannot '
+                    . 'serve OpenID Connect, and asking for it refuses the whole authorization request. '
+                    . 'The member is then named by the organisations the member administers.',
+                true,
             ),
             $this->toggle(
                 $group,

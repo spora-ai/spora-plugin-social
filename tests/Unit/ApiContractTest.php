@@ -122,7 +122,7 @@ it('sends the linkedin version header on every rest request', function () {
     // @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/organizations/organization-access-control-by-role
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
-        scopes: ['r_organization_admin'],
+        scopes: ['openid', 'r_organization_admin'],
     ));
 
     expect($accounts)->toHaveCount(2);
@@ -155,7 +155,7 @@ it('does not send the linkedin version header to the oidc userinfo endpoint', fu
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => SocialFixtures::META_SUBJECT]]), apiVersions());
 
-    $provider->resolveAccounts(new OAuthTokenSet(accessToken: 'INSERT_TOKEN'));
+    $provider->resolveAccounts(new OAuthTokenSet(accessToken: 'INSERT_TOKEN', scopes: ['openid']));
 
     $request = $recorder->requests[0]['request'];
 
@@ -181,7 +181,7 @@ it('reads the organisations from the documented acl response', function () {
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
-        scopes: ['r_organization_admin'],
+        scopes: ['openid', 'r_organization_admin'],
     ));
 
     expect($accounts)->toHaveCount(2)
@@ -211,7 +211,7 @@ it('leaves out an organisation whose role is only requested', function () {
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
-        scopes: ['r_organization_admin'],
+        scopes: ['openid', 'r_organization_admin'],
     ));
 
     // "APPROVED — Role is approved. REQUESTED — Role is requested."
@@ -238,7 +238,7 @@ it('connects the organisation even when the name lookup is refused', function ()
 
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'INSERT_TOKEN',
-        scopes: ['r_organization_admin'],
+        scopes: ['openid', 'r_organization_admin'],
     ));
 
     // The lookup is admin-only for some organisations. A refusal costs the

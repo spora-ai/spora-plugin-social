@@ -6,6 +6,24 @@ use Spora\Core\Config;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Settings\SocialSettingsProvider;
 
+it('asks for the member permissions by default and the organisation ones not', function () {
+    $provider = new SocialSettingsProvider(new SocialSettings(new Config([])));
+
+    $definitions = [];
+
+    foreach ($provider->settings() as $definition) {
+        $definitions[$definition->key] = $definition;
+    }
+
+    // The member permissions are open and every app holds them; the
+    // organisation ones are restricted and are asked for only once the
+    // operator's app holds them.
+    expect($definitions['LINKEDIN_MEMBER_SCOPE']->default)->toBeTrue()
+        ->and($definitions['LINKEDIN_SIGN_IN_SCOPE']->default)->toBeTrue()
+        ->and($definitions['LINKEDIN_ORGANIZATION_SCOPE']->default)->toBeFalse()
+        ->and($definitions['LINKEDIN_READ_ORG_ACLS']->default)->toBeFalse();
+});
+
 /**
  * The redirect URL is setup instruction, and it belongs in the setting it
  * is registered on.
