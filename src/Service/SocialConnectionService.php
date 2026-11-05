@@ -205,7 +205,12 @@ final class SocialConnectionService
         }
 
         try {
-            $this->tokens->resolveAccounts($connection, new OAuthTokenSet(accessToken: $token));
+            // The scopes travel with the token: they say what the platform
+            // granted, and the member is named by them.
+            $this->tokens->resolveAccounts($connection, new OAuthTokenSet(
+                accessToken: $token,
+                scopes: $this->grantedScopes($connection),
+            ));
         } catch (Throwable $e) {
             $status = $this->tokens->statusOfFailure($e->getMessage());
 

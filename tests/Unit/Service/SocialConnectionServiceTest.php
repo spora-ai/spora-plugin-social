@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Spora\Plugins\Social\Model\SocialProvider;
+use Spora\Plugins\Social\OAuth\LinkedInPermissions;
+use Spora\Plugins\Social\OAuth\LinkedInProvider;
 use Spora\Plugins\Social\OAuth\OAuthTokenSet;
 use Spora\Plugins\Social\OAuth\SocialStateCodec;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
@@ -11,6 +13,8 @@ use Spora\Plugins\Social\Service\SocialConnectionTokens;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeOAuthProvider;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
+use Spora\Plugins\Social\Tests\Support\GuzzleRecorder;
+use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -219,6 +223,45 @@ it('remembers that a call failed for another reason', function () {
 
     expect($health['status'])->toBe('error')
         ->and(SocialConnectionService::statusOf($connection->fresh() ?? $connection))->toBe('error');
+});
+
+it('reports a linkedin connection with a valid token as active', function () {
+    // The real provider, not the fake one: the fake answers whatever it is
+    // asked, so it let a token without scopes through as a working
+    // connection.
+    $recorder = new GuzzleRecorder();
+    $provider = new LinkedInProvider(
+        'client-id',
+        'client-secret',
+        SocialFixtures::OAUTH_CALLBACK,
+        new LinkedInPermissions(),
+        $recorder->client([
+            ['body' => '{"sub":"abc123","name":"Fabeat Person","email":"fabeat@example.test"}'],
+        ]),
+    );
+
+    $service = connectionService(new FakeProviderResolver(['linkedin' => $provider]));
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $connection = createSocialConnection($principalId, 'linkedin', [
+        'access_token' => 'the-token',
+        'scopes'       => 'openid profile email w_member_social',
+    ]);
+
+    $health = $service->health((int) $connection->id, $principalId);
+
+    expect($health['status'])->toBe('active')
+        ->and(SocialConnectionService::statusOf($connection->fresh() ?? $connection))->toBe('active');
+
+    // The scopes reached the provider: it asks for the member by OpenID
+    // Connect only when the token carries it.
+    $urls = array_map(
+        static fn(array $entry): string => (string) $entry['request']->getUri(),
+        $recorder->requests,
+    );
+
+    expect($urls)->toContain('https://api.linkedin.com/v2/userinfo');
 });
 
 it('refuses to connect when the app url is not publicly reachable', function () {
