@@ -67,11 +67,11 @@ The plugin ships both:
 |---|---|
 | `SPORA_SOCIAL_LINKEDIN_CLIENT_ID` / `_SECRET` | Your LinkedIn app. Member posting needs no review; organisation pages need a **second** app, because the Community Management API has to be the only product on an app. The setting's own description carries the redirect URL to register with it. |
 | `SPORA_SOCIAL_LINKEDIN_MEMBER_SCOPE` | On by default. Turn it off for an app that cannot post as a member. |
-| `SPORA_SOCIAL_LINKEDIN_SIGN_IN_SCOPE` | On by default. Turn it off for a Community Management API app, which cannot serve OpenID Connect — asking for it refuses the whole request. |
+| `SPORA_SOCIAL_LINKEDIN_SIGN_IN_SCOPE` | On by default. Turn it off for a Community Management API app, which cannot serve OpenID Connect — asking for it refuses the whole request. The member is then named by the access-control list instead, so `SPORA_SOCIAL_LINKEDIN_READ_ORG_ACLS` has to be on as well. |
 | `SPORA_SOCIAL_META_APP_ID` / `_SECRET` | Your Meta app — **one app for both networks**. `pages_manage_posts` needs the app reviewed. |
 | `SPORA_SOCIAL_META_CONFIG_ID` | The id of the Facebook Login for Business configuration the login dialog uses: the permissions and assets your app asks a client for. Not a secret, but the login cannot happen without it. The setting's own description carries the redirect URL to register with it. |
 | `SPORA_SOCIAL_LINKEDIN_ORGANIZATION_SCOPE` | Turn on **only** once your app holds `w_organization_social` — asking for a scope the app does not have makes the whole authorization request fail. |
-| `SPORA_SOCIAL_LINKEDIN_READ_ORG_ACLS` | Turn on **only** once your app holds `r_organization_admin` (the organisations the member administers). One setting per permission, because an app that asks for one it does not hold is refused the whole request. |
+| `SPORA_SOCIAL_LINKEDIN_READ_ORG_ACLS` | Turn on **only** once your app holds `r_organization_admin` (the organisations the member administers). One setting per permission, because an app that asks for one it does not hold is refused the whole request. It is also what names the member when **Ask LinkedIn for the member's identity** is off. |
 | `SPORA_SOCIAL_LINKEDIN_READ_ORG_STATS` | Turn on **only** once your app holds `rw_organization_admin` (an organisation's share statistics). |
 | `SPORA_SOCIAL_LINKEDIN_READ_MEMBER_FEED` | Turn on **only** once your app holds `r_member_social_feed` (a member post's reactions). |
 | `SPORA_SOCIAL_LINKEDIN_READ_ORG_FEED` | Turn on **only** once your app holds `r_organization_social_feed` (an organisation post's reactions). |
@@ -181,7 +181,10 @@ Point the plugin at the **Community Management API app**. It grants
 `w_member_social` as well, so that one app covers member posting and page
 posting together. It cannot serve OpenID Connect, so turn **Ask LinkedIn for
 the member's identity** off: the member is then named by the organisation
-access-control list, which says who the role belongs to.
+access-control list, which says who the role belongs to. That list is read
+with `r_organization_admin`, so **Ask LinkedIn for the administered
+organisations** has to be on as well — without it there is no list to read,
+and the connect is refused.
 
 The four read permissions are asked for one at a time — turn each on once
 the app holds it, never before, because an app that asks for a permission
@@ -197,7 +200,10 @@ other three:
 | `r_organization_social_feed` | an organisation post's reactions |
 
 All four are off by default. Without them the plugin still publishes; the
-numbers simply stay empty.
+numbers simply stay empty. As long as **Ask LinkedIn for the member's
+identity** is on, that is the whole of it. With it off, the member is named
+by the access-control list instead, and `r_organization_admin` is the
+permission that reads it — without it the connect is refused.
 
 **Meta** — [app dashboard](https://developers.facebook.com/apps)
 
