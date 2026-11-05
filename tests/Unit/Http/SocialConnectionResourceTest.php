@@ -46,6 +46,20 @@ it('carries the connection health and the accounts it covers', function () {
         ->and($payload['accounts'][0]['report_note'])->toBeNull();
 });
 
+it('carries the scopes of a connection made before the answer was split', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // The column holds the platform's answer as one comma-joined string.
+    $connection = createSocialConnection($principalId, 'linkedin', [
+        'access_token' => 'the-token',
+        'scopes'       => 'email,openid,profile,w_member_social',
+    ]);
+
+    $payload = SocialConnectionResource::toArray($connection->fresh() ?? $connection);
+
+    expect($payload['scopes'])->toBe(['email', 'openid', 'profile', 'w_member_social']);
+});
+
 it('says on the account that it cannot report, and why', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

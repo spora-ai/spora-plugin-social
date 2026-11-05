@@ -98,3 +98,18 @@ it('reads the LinkedIn permissions the operator asked for', function () {
         ->and($permissions->readMemberFeed)->toBeFalse()
         ->and($permissions->readOrganizationFeed)->toBeFalse();
 });
+
+it('asks for the member permissions unless the operator says the app has none', function () {
+    $default = (new LinkedInPermissionSettings(new Spora\Core\Config([])))->requested();
+
+    expect($default->memberScope)->toBeTrue()
+        ->and($default->signInScope)->toBeTrue();
+
+    $without = (new LinkedInPermissionSettings(new Spora\Core\Config([
+        SocialSettings::KEY_LINKEDIN_MEMBER_SCOPE => false,
+        SocialSettings::KEY_LINKEDIN_SIGN_IN_SCOPE => false,
+    ])))->requested();
+
+    expect($without->memberScope)->toBeFalse()
+        ->and($without->signInScope)->toBeFalse();
+});

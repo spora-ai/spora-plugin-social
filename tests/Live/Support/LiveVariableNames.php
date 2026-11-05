@@ -42,11 +42,6 @@ final class LiveVariableNames
         return $this->name($platform, 'AUTHORIZATION_CODE');
     }
 
-    public function pkceVerifierName(SocialPlatform $platform): string
-    {
-        return $this->name($platform, 'PKCE_VERIFIER');
-    }
-
     /**
      * The variables that may hold the redirect URL, canonical first.
      *

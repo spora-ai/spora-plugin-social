@@ -24,16 +24,15 @@ interface OAuthProviderInterface
     /**
      * The URL the operator's browser is sent to.
      *
-     * The PKCE verifier is passed in rather than generated here because the
-     * verifier has to survive the round trip to the platform's callback:
-     * it is carried in the signed state.
+     * The state carries the principal, the platform and a nonce, and it is
+     * signed — it is the only thing that authenticates the callback.
      */
-    public function authorizationUrl(string $state, string $pkceVerifier): string;
+    public function authorizationUrl(string $state): string;
 
     /**
      * Exchange the authorization code for tokens.
      */
-    public function exchangeCode(string $code, string $pkceVerifier): OAuthTokenSet;
+    public function exchangeCode(string $code): OAuthTokenSet;
 
     /**
      * Renew the tokens ahead of their expiry.

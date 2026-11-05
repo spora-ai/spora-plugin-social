@@ -13,15 +13,14 @@ use Spora\Plugins\Social\Tests\Live\Support\LiveContext;
 use Spora\Plugins\Social\Tests\Live\Support\LiveContract;
 use Spora\Plugins\Social\Tests\Live\Support\LiveTarget;
 
-it('builds an authorization url with the client id, the member scope and a pkce challenge', function () {
+it('builds an authorization url with the client id and the member scope', function () {
     LiveContext::instance()
-        ->check(SocialPlatform::LinkedIn, 'the authorization url carries the client id, the member scope and a pkce challenge')
+        ->check(SocialPlatform::LinkedIn, 'the authorization url carries the client id and the member scope')
         ->run(function () {
             $context = LiveContext::instance();
             $provider = $context->provider(SocialPlatform::LinkedIn);
 
-            $verifier = str_repeat('v', 64);
-            $url = $provider->authorizationUrl('live-check-state', $verifier);
+            $url = $provider->authorizationUrl('live-check-state');
 
             $query = [];
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
@@ -48,13 +47,10 @@ it('builds an authorization url with the client id, the member scope and a pkce 
                 ($query['response_type'] ?? null) === 'code',
                 'the authorization url does not ask for an authorization code',
             );
+            // No challenge: LinkedIn's token endpoint refuses a verifier.
             LiveContract::holds(
-                ($query['code_challenge_method'] ?? null) === 'S256',
-                'the authorization url does not ask for the S256 pkce challenge',
-            );
-            LiveContract::holds(
-                ($query['code_challenge'] ?? null) === LiveContract::pkceChallenge($verifier),
-                'the pkce challenge is not the challenge of the verifier the exchange will present',
+                !isset($query['code_challenge']) && !isset($query['code_challenge_method']),
+                'the authorization url asks for a pkce challenge the token endpoint does not take',
             );
             LiveContract::holds(
                 in_array('w_member_social', $scopes, true),

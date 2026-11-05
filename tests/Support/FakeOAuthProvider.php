@@ -38,12 +38,12 @@ final class FakeOAuthProvider implements OAuthProviderInterface
         return $this->provider;
     }
 
-    public function authorizationUrl(string $state, string $pkceVerifier): string
+    public function authorizationUrl(string $state): string
     {
         return 'https://platform.test/authorize?state=' . $state;
     }
 
-    public function exchangeCode(string $code, string $pkceVerifier): OAuthTokenSet
+    public function exchangeCode(string $code): OAuthTokenSet
     {
         return new OAuthTokenSet(accessToken: 'exchanged-token', expiresAt: new DateTimeImmutable('+60 days'));
     }

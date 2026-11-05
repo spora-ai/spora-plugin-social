@@ -23,13 +23,6 @@ use Spora\Settings\SettingDefinition;
  */
 final class SocialSettingsProvider implements PluginSettingsProviderInterface
 {
-    /**
-     * The caveat the restricted LinkedIn permissions carry.
-     *
-     * Three of the permissions are granted to selected developers only, so
-     * asking for one the app does not hold refuses the whole authorization
-     * request — not only the part that needs the permission.
-     */
     private const LINKEDIN_RESTRICTED_PERMISSION = 'LinkedIn grants it to selected developers only, and an app that asks for a permission it does not hold is refused the whole authorization request — so this is off unless your app has it.';
 
     /**
@@ -93,17 +86,21 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
     /**
      * A setting the operator turns on or off.
      *
-     * The five LinkedIn permissions are all of the same shape, and a
-     * `SettingDefinition` written out five times is a shape that can
-     * drift.
+     * The LinkedIn permissions are all of the same shape, so one helper
+     * holds them in step.
      */
-    private function toggle(string $group, string $key, string $label, string $description): SettingDefinition
-    {
+    private function toggle(
+        string $group,
+        string $key,
+        string $label,
+        string $description,
+        bool $default = false,
+    ): SettingDefinition {
         return new SettingDefinition(
             key: $key,
             label: $label,
             type: SettingDefinition::TYPE_TOGGLE,
-            default: false,
+            default: $default,
             group: $group,
             section: 'social',
             description: $description,
@@ -136,6 +133,27 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 section: 'social',
                 description: 'The client secret of your LinkedIn app. Stored encrypted.',
                 secret: true,
+            ),
+            $this->toggle(
+                $group,
+                'LINKEDIN_MEMBER_SCOPE',
+                'Ask LinkedIn for member posting',
+                'Ask for w_member_social, the permission that posts on behalf of the member. '
+                    . 'On by default, because it is an open permission every app holds. '
+                    . 'Turn it off only for an app that does not hold it: '
+                    . 'the Community Management API product grants it, so an app with that product leaves it on.',
+                true,
+            ),
+            $this->toggle(
+                $group,
+                'LINKEDIN_SIGN_IN_SCOPE',
+                'Ask LinkedIn for the member\'s identity',
+                'Ask for openid, profile and email, the OpenID Connect permissions that name the member who signed in. '
+                    . 'On by default. Turn it off for an app that holds only the Community Management API product: that product cannot '
+                    . 'serve OpenID Connect, and asking for it refuses the whole authorization request. '
+                    . 'The member is then named by the organisations the member administers, which needs '
+                    . 'Ask LinkedIn for the administered organisations turned on.',
+                true,
             ),
             $this->toggle(
                 $group,

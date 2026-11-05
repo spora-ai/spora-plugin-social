@@ -15,6 +15,7 @@ use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\OAuthProviderInterface;
 use Spora\Plugins\Social\OAuth\OAuthProviderResolver;
 use Spora\Plugins\Social\OAuth\OAuthTokenSet;
+use Spora\Plugins\Social\OAuth\TokenExchange;
 
 /**
  * The token of a connection: how it is stored, how it is renewed and how
@@ -136,6 +137,9 @@ final class SocialConnectionTokens
      * response. The caller decides what an empty list means; here it is
      * only the fact.
      *
+     * The column is split the way a platform answers — see
+     * {@see TokenExchange::scopesOf()}.
+     *
      * @return list<string>
      */
     public function grantedScopes(SocialConnection $connection): array
@@ -144,7 +148,9 @@ final class SocialConnectionTokens
             return [];
         }
 
-        return array_values(array_filter(array_map('trim', explode(' ', $connection->scopes))));
+        $parts = preg_split('/[,\s]+/', $connection->scopes) ?: [];
+
+        return array_values(array_filter($parts));
     }
 
     /**

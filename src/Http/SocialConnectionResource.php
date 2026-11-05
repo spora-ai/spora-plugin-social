@@ -78,6 +78,11 @@ final class SocialConnectionResource
     }
 
     /**
+     * The scopes the operator sees on the connection.
+     *
+     * Split the way a platform answers — see
+     * {@see \Spora\Plugins\Social\OAuth\TokenExchange::scopesOf()}.
+     *
      * @return list<string>
      */
     private static function scopesOf(SocialConnection $connection): array
@@ -86,6 +91,8 @@ final class SocialConnectionResource
             return [];
         }
 
-        return array_values(array_filter(array_map('trim', explode(' ', $connection->scopes))));
+        $parts = preg_split('/[,\s]+/', $connection->scopes) ?: [];
+
+        return array_values(array_filter($parts));
     }
 }

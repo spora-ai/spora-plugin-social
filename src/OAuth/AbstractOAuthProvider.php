@@ -21,9 +21,17 @@ use Throwable;
  * The shared machinery of the two OAuth flows.
  *
  * Built on `league/oauth2-client`'s provider core: it owns the
- * authorization URL, the PKCE challenge, the authorization-code exchange
- * and the refresh grant. The providers differ in their endpoints and in
- * what their token exchange looks like, so those live in the subclasses.
+ * authorization URL, the authorization-code exchange and the refresh grant.
+ * The providers differ in their endpoints and in what their token exchange
+ * looks like, so those live in the subclasses.
+ *
+ * **No PKCE.** Neither platform's token endpoint takes a verifier, and
+ * offering one is worse than offering none: LinkedIn answers the exchange
+ * with `invalid_client` — "Client authentication failed" — which reads as a
+ * wrong client id or a wrong secret and names neither the parameter nor the
+ * platform. The same request without the verifier returns the token. The
+ * plugin is a confidential client — the code is redeemed server to server
+ * with the app secret — so a verifier has nothing to add here.
  *
  * What a grant turned into lives in {@see TokenExchange}; this class is
  * about the flow itself.
@@ -96,20 +104,15 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
         return new GenericResourceOwner($response, 'id');
     }
 
-    public function authorizationUrl(string $state, string $pkceVerifier): string
+    public function authorizationUrl(string $state): string
     {
-        $this->pkceCode = $pkceVerifier;
-
         return $this->getAuthorizationUrl(['state' => $state]);
     }
 
-    public function exchangeCode(string $code, string $pkceVerifier): OAuthTokenSet
+    public function exchangeCode(string $code): OAuthTokenSet
     {
-        $this->pkceCode = $pkceVerifier;
-
         return $this->exchange->toTokenSet(
             $this->requestToken('authorization_code', ['code' => $code]),
-            $this->getScopeSeparator(),
         );
     }
 
@@ -120,13 +123,8 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
             throw SocialException::platform('This connection has no refresh token, so it cannot be renewed.', 'TOKEN_NOT_REFRESHABLE');
         }
 
-        // A refresh is not a PKCE exchange; leaving the verifier in place
-        // would send a `code_verifier` the platform did not ask for.
-        $this->pkceCode = null;
-
         return $this->exchange->toTokenSet(
             $this->requestToken('refresh_token', ['refresh_token' => $refreshToken]),
-            $this->getScopeSeparator(),
         );
     }
 
@@ -184,21 +182,6 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
         unset($parameters['approval_prompt']);
 
         return $parameters;
-    }
-
-    protected function getPkceMethod(): ?string
-    {
-        return self::PKCE_METHOD_S256;
-    }
-
-    /**
-     * The verifier the caller supplied is kept: it travels to the platform
-     * in the challenge and comes back in the signed state, so the provider
-     * must not replace it with a fresh one.
-     */
-    protected function getRandomPkceCode($length = 64): string
-    {
-        return $this->pkceCode ?? parent::getRandomPkceCode($length);
     }
 
     /**

@@ -6,6 +6,55 @@ use Spora\Core\Config;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Settings\SocialSettingsProvider;
 
+it('asks for the member permissions by default and the organisation ones not', function () {
+    $provider = new SocialSettingsProvider(new SocialSettings(new Config([])));
+
+    $definitions = [];
+
+    foreach ($provider->settings() as $definition) {
+        $definitions[$definition->key] = $definition;
+    }
+
+    expect($definitions['LINKEDIN_MEMBER_SCOPE']->default)->toBeTrue()
+        ->and($definitions['LINKEDIN_SIGN_IN_SCOPE']->default)->toBeTrue()
+        ->and($definitions['LINKEDIN_ORGANIZATION_SCOPE']->default)->toBeFalse()
+        ->and($definitions['LINKEDIN_READ_ORG_ACLS']->default)->toBeFalse();
+});
+
+it('does not tell the operator to turn off a permission their app holds', function () {
+    $provider = new SocialSettingsProvider(new SocialSettings(new Config([])));
+
+    $definitions = [];
+
+    foreach ($provider->settings() as $definition) {
+        $definitions[$definition->key] = $definition;
+    }
+
+    $member = $definitions['LINKEDIN_MEMBER_SCOPE']->description;
+
+    // The Community Management API product grants w_member_social, so the
+    // description may not tell the operator to turn it off for such an app.
+    expect($member)->toContain('Community Management API')
+        ->and($member)->toContain('does not hold it')
+        ->and($member)->not->toContain('Turn it off for an app that holds only the Community Management API product');
+});
+
+it('names the organisation list that replaces the sign-in permission', function () {
+    $provider = new SocialSettingsProvider(new SocialSettings(new Config([])));
+
+    $definitions = [];
+
+    foreach ($provider->settings() as $definition) {
+        $definitions[$definition->key] = $definition;
+    }
+
+    // With the sign-in permission off, the member is named by the access
+    // control list, and the list is only readable with the permission the
+    // setting names.
+    expect($definitions['LINKEDIN_SIGN_IN_SCOPE']->description)
+        ->toContain('Ask LinkedIn for the administered organisations');
+});
+
 /**
  * The redirect URL is setup instruction, and it belongs in the setting it
  * is registered on.

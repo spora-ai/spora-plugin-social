@@ -80,7 +80,6 @@ final class LiveContext
         foreach (SocialPlatform::cases() as $platform) {
             $this->secrets->remember($this->credentials->clientSecret($platform));
             $this->secrets->remember($this->credentials->authorizationCode($platform));
-            $this->secrets->remember($this->credentials->pkceVerifier($platform));
         }
     }
 
@@ -229,7 +228,6 @@ final class LiveContext
 
         $tokens = $this->provider($platform)->exchangeCode(
             (string) $this->credentials->authorizationCode($platform),
-            (string) $this->credentials->pkceVerifier($platform),
         );
 
         $this->secrets->remember($tokens->accessToken);

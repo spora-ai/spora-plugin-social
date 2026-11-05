@@ -78,14 +78,6 @@ final class LiveRequirements
             );
         }
 
-        if ($credentials->pkceVerifier($platform) === null) {
-            return sprintf(
-                'no pkce verifier for %s (%s is not set)',
-                $platform->value,
-                $names->pkceVerifierName($platform),
-            );
-        }
-
         return null;
     }
 

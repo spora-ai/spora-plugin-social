@@ -8,14 +8,9 @@ use Spora\Core\Config;
 use Spora\Plugins\Social\OAuth\LinkedInPermissions;
 
 /**
- * The LinkedIn permissions the operator's app asks for.
+ * The permissions the operator's app asks for, read from the settings.
  *
- * Each of them is opt-in: an app that asks for a permission it does not
- * hold is refused the whole authorization request, so the operator says
- * which ones their app has.
- *
- * The answer is one value object, because the login URL asks for them all
- * at once.
+ * See {@see LinkedInProvider} for why these default to on.
  */
 final class LinkedInPermissionSettings
 {
@@ -26,6 +21,8 @@ final class LinkedInPermissionSettings
     public function requested(): LinkedInPermissions
     {
         return new LinkedInPermissions(
+            memberScope: $this->config->getBool(SocialSettings::KEY_LINKEDIN_MEMBER_SCOPE, true),
+            signInScope: $this->config->getBool(SocialSettings::KEY_LINKEDIN_SIGN_IN_SCOPE, true),
             organizationScope: $this->config->getBool(SocialSettings::KEY_LINKEDIN_ORGANIZATION_SCOPE),
             readOrganizationAcls: $this->config->getBool(SocialSettings::KEY_LINKEDIN_READ_ORG_ACLS),
             readOrganizationStats: $this->config->getBool(SocialSettings::KEY_LINKEDIN_READ_ORG_STATS),

@@ -100,19 +100,17 @@ final class SocialConnectionService
             throw SocialException::validation('SPORA_APP_URL must be a publicly reachable HTTPS address before an account can be connected — the platform fetches published media from the internet. Set it in your .env or config.php; the global settings list it read-only. On a development install, turn on SPORA_SOCIAL_ALLOW_LOCAL_APP_URL in Settings → Plugins.');
         }
 
-        $pkce = $this->pkceVerifier();
         $expiresAt = time() + self::STATE_TTL_SECONDS;
 
         $state = $this->stateCodec->encode([
             'principal_id' => $principalId,
             'provider'     => $provider->value,
             'nonce'        => bin2hex(random_bytes(16)),
-            'pkce'         => $pkce,
             'expires_at'   => $expiresAt,
         ]);
 
         return [
-            'authorize_url' => $this->providers->for($provider)->authorizationUrl($state, $pkce),
+            'authorize_url' => $this->providers->for($provider)->authorizationUrl($state),
             'state'         => $state,
             'expires_at'    => gmdate('c', $expiresAt),
         ];
@@ -145,10 +143,9 @@ final class SocialConnectionService
 
         $principalId = (int) ($payload['principal_id'] ?? 0);
         $provider = SocialProvider::tryFromName((string) ($payload['provider'] ?? ''));
-        $pkce = (string) ($payload['pkce'] ?? '');
         $expiresAt = (int) ($payload['expires_at'] ?? 0);
 
-        if ($principalId <= 0 || $provider === null || $pkce === '') {
+        if ($principalId <= 0 || $provider === null) {
             throw SocialException::forbidden('The OAuth state does not carry a usable principal and provider.');
         }
 
@@ -157,7 +154,7 @@ final class SocialConnectionService
         }
 
         $oauth = $this->providers->for($provider);
-        $tokens = $oauth->exchangeCode($code, $pkce);
+        $tokens = $oauth->exchangeCode($code);
 
         $connection = $this->tokens->store($principalId, $provider, $tokens);
 
@@ -208,7 +205,12 @@ final class SocialConnectionService
         }
 
         try {
-            $this->tokens->resolveAccounts($connection, new OAuthTokenSet(accessToken: $token));
+            // The scopes travel with the token: they say what the platform
+            // granted, and the provider names the member by them.
+            $this->tokens->resolveAccounts($connection, new OAuthTokenSet(
+                accessToken: $token,
+                scopes: $this->grantedScopes($connection),
+            ));
         } catch (Throwable $e) {
             $status = $this->tokens->statusOfFailure($e->getMessage());
 
@@ -330,13 +332,5 @@ final class SocialConnectionService
         $account->save();
 
         return $account;
-    }
-
-    /**
-     * A PKCE verifier: 43 to 128 characters from the unreserved set.
-     */
-    private function pkceVerifier(): string
-    {
-        return rtrim(strtr(base64_encode(random_bytes(64)), '+/', '-_'), '=');
     }
 }

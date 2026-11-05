@@ -13,16 +13,14 @@ use Throwable;
  * What a grant turned into.
  *
  * The token, the scopes and the expiry are the same for both platforms, so
- * the conversion lives here rather than in each provider. The scope
- * separator is the provider's own — Meta answers with commas and LinkedIn
- * with spaces — so it is passed in rather than decided here.
+ * the conversion lives here rather than in each provider.
  */
 final class TokenExchange
 {
     /**
      * @param array<string, mixed> $extra
      */
-    public function toTokenSet(AccessTokenInterface $token, string $scopeSeparator, array $extra = []): OAuthTokenSet
+    public function toTokenSet(AccessTokenInterface $token, array $extra = []): OAuthTokenSet
     {
         $expiresAt = null;
         if ($token->getExpires() !== null) {
@@ -33,29 +31,39 @@ final class TokenExchange
             accessToken: $token->getToken(),
             refreshToken: $this->stringOrNull($token->getRefreshToken()),
             expiresAt: $expiresAt,
-            scopes: $this->scopesOf($token->getValues(), $scopeSeparator),
+            scopes: $this->scopesOf($token->getValues()),
             extra: $extra,
         );
     }
 
     /**
-     * The scopes the platform answered with, split the way the platform
-     * joins them.
+     * The scopes the platform answered with.
      *
-     * Splitting on the wrong separator leaves the whole scope string as a
-     * single scope, and every scope check then fails.
+     * **The separator of the answer is not the separator of the request.**
+     * A client asks for scopes separated the way the platform wants them —
+     * LinkedIn with spaces, Facebook with commas — and a platform answers
+     * with commas whatever it was asked with. Splitting an answer on the
+     * request's separator leaves the whole list as one scope, and every
+     * scope check then fails.
      *
-     * @param  array<string, mixed> $values
+     * A scope token is neither a comma nor a space, so both are accepted as
+     * separators: the OAuth spec's space-delimited answer reads too, and a
+     * connection made before the answer was split holds its scopes as one
+     * comma-joined string.
+     *
+     * @param array<string, mixed> $values
      * @return list<string>
      */
-    public function scopesOf(array $values, string $scopeSeparator): array
+    public function scopesOf(array $values): array
     {
         $scope = $values['scope'] ?? null;
         if (!is_string($scope) || $scope === '') {
             return [];
         }
 
-        return array_values(array_filter(array_map('trim', explode($scopeSeparator, $scope))));
+        $parts = preg_split('/[,\s]+/', $scope) ?: [];
+
+        return array_values(array_filter($parts));
     }
 
     public function describeFailure(Throwable $e): string

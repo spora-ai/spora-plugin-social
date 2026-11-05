@@ -88,9 +88,10 @@ if ($configuredProviders === 0) {
 /**
  * The master key of the signed state, kept between runs.
  *
- * The state carries the pkce verifier, so a redirect url the operator
- * collected in an earlier run can still be redeemed in this one. The key
- * never leaves the machine and is not a credential of any platform.
+ * The state is signed with this key, so a redirect url the operator
+ * collected in an earlier run is still a state this machine can read.
+ * The key never leaves the machine and is not a credential of any
+ * platform.
  */
 function liveStateKey(string $path): string
 {
@@ -113,14 +114,6 @@ function liveStateKey(string $path): string
     chmod($path, 0o600);
 
     return $key;
-}
-
-/**
- * A pkce verifier, in the shape the plugin builds.
- */
-function liveVerifier(): string
-{
-    return rtrim(strtr(base64_encode(random_bytes(64)), '+/', '-_'), '=');
 }
 
 /**
@@ -192,17 +185,14 @@ foreach (SocialPlatform::cases() as $platform) {
         continue;
     }
 
-    $verifier = liveVerifier();
-
     $state = $stateCodec->encode([
         'principal_id' => 1,
         'provider'     => $provider,
         'nonce'        => bin2hex(random_bytes(16)),
-        'pkce'         => $verifier,
         'expires_at'   => time() + 86400,
     ]);
 
-    $authorizeUrl = $context->provider($platform)->authorizationUrl($state, $verifier);
+    $authorizeUrl = $context->provider($platform)->authorizationUrl($state);
 
     printf(
         "  %s — open this url, sign in, and copy the url you land on:\n\n",
@@ -237,15 +227,11 @@ foreach (SocialPlatform::cases() as $platform) {
     }
 
     if ($parsed['state'] !== null && $parsed['state'] !== $state) {
-        // The state was signed in an earlier run, so its own verifier is the
-        // one the code belongs to.
+        // The state was signed in an earlier run: reading it proves it was
+        // signed with this machine's key. A state this machine cannot read
+        // was signed elsewhere, and its code belongs to another install.
         try {
-            $payload = $stateCodec->decode($parsed['state']);
-            $carried = $payload['pkce'] ?? null;
-
-            if (is_string($carried) && $carried !== '') {
-                $verifier = $carried;
-            }
+            $stateCodec->decode($parsed['state']);
         } catch (Throwable $e) {
             echo '  the state in the pasted url could not be read: ' . $e->getMessage() . "\n";
             echo "  the checks that need a token will be skipped.\n\n";
@@ -257,7 +243,6 @@ foreach (SocialPlatform::cases() as $platform) {
     // The harness reads the provider's names, so the code is handed over
     // under the provider's names.
     putenv('SPORA_LIVE_' . strtoupper($provider) . '_AUTHORIZATION_CODE=' . $parsed['code']);
-    putenv('SPORA_LIVE_' . strtoupper($provider) . '_PKCE_VERIFIER=' . $verifier);
 
     echo "  the code was taken — the token exchange will run.\n\n";
 }

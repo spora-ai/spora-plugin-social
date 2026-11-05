@@ -85,7 +85,7 @@ final class MetaProvider extends AbstractOAuthProvider
      * server with the app secret, so it never reaches a public client, and
      * the documented flow has none.
      */
-    public function authorizationUrl(string $state, string $pkceVerifier): string
+    public function authorizationUrl(string $state): string
     {
         $query = [
             'client_id'     => $this->clientId,
@@ -110,7 +110,7 @@ final class MetaProvider extends AbstractOAuthProvider
      * The client business id does not come with it: the token management
      * API needs it, so it is a second call, and the connection stores it.
      */
-    public function exchangeCode(string $code, string $pkceVerifier): OAuthTokenSet
+    public function exchangeCode(string $code): OAuthTokenSet
     {
         $body = $this->apiGet($this->tokenUrl(), [
             'client_id'     => $this->clientId,
@@ -136,7 +136,7 @@ final class MetaProvider extends AbstractOAuthProvider
             // are what the connection records; when it does not, the
             // connection's scopes stay unknown rather than empty-because-
             // none-were-granted.
-            scopes: $this->exchange->scopesOf($body, $this->getScopeSeparator()),
+            scopes: $this->exchange->scopesOf($body),
             extra: ['business_external_id' => $this->clientBusinessId($accessToken)],
         );
     }
@@ -322,11 +322,6 @@ final class MetaProvider extends AbstractOAuthProvider
     protected function resourceOwnerUrl(): string
     {
         return $this->graphUrl('/me');
-    }
-
-    protected function getScopeSeparator(): string
-    {
-        return ',';
     }
 
     /**
