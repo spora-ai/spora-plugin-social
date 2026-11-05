@@ -148,8 +148,8 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 'Ask LinkedIn for member posting',
                 'Ask for w_member_social, the permission that posts on behalf of the member. '
                     . 'On by default, because it is an open permission every app holds. '
-                    . 'Turn it off for an app that holds only the Community Management API product and posts to organisation pages only — '
-                    . 'though that product grants this permission too.',
+                    . 'Turn it off only for an app that does not hold it: '
+                    . 'the Community Management API product grants it, so an app with that product leaves it on.',
                 true,
             ),
             $this->toggle(
@@ -159,7 +159,8 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
                 'Ask for openid, profile and email, the OpenID Connect permissions that name the member who signed in. '
                     . 'On by default. Turn it off for an app that holds only the Community Management API product: that product cannot '
                     . 'serve OpenID Connect, and asking for it refuses the whole authorization request. '
-                    . 'The member is then named by the organisations the member administers.',
+                    . 'The member is then named by the organisations the member administers, which needs '
+                    . 'Ask LinkedIn for the administered organisations turned on.',
                 true,
             ),
             $this->toggle(
