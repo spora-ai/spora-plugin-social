@@ -130,6 +130,14 @@ final class LinkedInProvider extends AbstractOAuthProvider
         return $scopes;
     }
 
+    /**
+     * How the scopes are separated in the **request**.
+     *
+     * LinkedIn takes them separated by spaces — `scope=openid profile email
+     * w_member_social` — where Facebook takes commas. It answers with
+     * commas either way, which is why the answer is not split with this:
+     * see {@see TokenExchange::scopesOf()}.
+     */
     protected function getScopeSeparator(): string
     {
         return ' ';

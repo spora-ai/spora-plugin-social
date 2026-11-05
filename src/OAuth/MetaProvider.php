@@ -136,7 +136,7 @@ final class MetaProvider extends AbstractOAuthProvider
             // are what the connection records; when it does not, the
             // connection's scopes stay unknown rather than empty-because-
             // none-were-granted.
-            scopes: $this->exchange->scopesOf($body, $this->getScopeSeparator()),
+            scopes: $this->exchange->scopesOf($body),
             extra: ['business_external_id' => $this->clientBusinessId($accessToken)],
         );
     }
@@ -322,11 +322,6 @@ final class MetaProvider extends AbstractOAuthProvider
     protected function resourceOwnerUrl(): string
     {
         return $this->graphUrl('/me');
-    }
-
-    protected function getScopeSeparator(): string
-    {
-        return ',';
     }
 
     /**

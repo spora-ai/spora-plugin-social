@@ -50,7 +50,7 @@ it('asks for the organisation scope only when the operator says the app has it',
 
 it('exchanges the code for tokens, carrying the pkce verifier', function () {
     $recorder = new GuzzleRecorder();
-    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => '{"access_token":"at","expires_in":5184000,"refresh_token":"rt","scope":"openid profile w_member_social"}']]));
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => '{"access_token":"at","expires_in":5184000,"refresh_token":"rt","scope":"openid,profile,w_member_social"}']]));
 
     $tokens = $provider->exchangeCode('the-code', str_repeat('v', 64));
 

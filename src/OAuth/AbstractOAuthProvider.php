@@ -109,7 +109,6 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
 
         return $this->exchange->toTokenSet(
             $this->requestToken('authorization_code', ['code' => $code]),
-            $this->getScopeSeparator(),
         );
     }
 
@@ -126,7 +125,6 @@ abstract class AbstractOAuthProvider extends AbstractProvider implements OAuthPr
 
         return $this->exchange->toTokenSet(
             $this->requestToken('refresh_token', ['refresh_token' => $refreshToken]),
-            $this->getScopeSeparator(),
         );
     }
 
