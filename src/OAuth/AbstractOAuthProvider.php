@@ -25,13 +25,13 @@ use Throwable;
  * The providers differ in their endpoints and in what their token exchange
  * looks like, so those live in the subclasses.
  *
- * **No PKCE.** A verifier proves that the party redeeming the code is the
- * party that asked for it, and neither platform's token endpoint takes one.
- * Offering one is worse than not offering one: LinkedIn answers the
- * exchange with `invalid_client` — "Client authentication failed" — which
- * reads as a wrong client id or a wrong secret and names neither the
- * parameter nor the platform. The same request without the verifier
- * returns the token.
+ * **No PKCE.** Neither platform's token endpoint takes a verifier, and
+ * offering one is worse than offering none: LinkedIn answers the exchange
+ * with `invalid_client` — "Client authentication failed" — which reads as a
+ * wrong client id or a wrong secret and names neither the parameter nor the
+ * platform. The same request without the verifier returns the token. The
+ * plugin is a confidential client — the code is redeemed server to server
+ * with the app secret — so a verifier has nothing to add here.
  *
  * What a grant turned into lives in {@see TokenExchange}; this class is
  * about the flow itself.

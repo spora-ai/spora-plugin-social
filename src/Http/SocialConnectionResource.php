@@ -80,9 +80,8 @@ final class SocialConnectionResource
     /**
      * The scopes the operator sees on the connection.
      *
-     * Split on commas and on spaces: a connection made before the
-     * platform's answer was split holds its scopes as one comma-joined
-     * string.
+     * Split the way a platform answers — see
+     * {@see \Spora\Plugins\Social\OAuth\TokenExchange::scopesOf()}.
      *
      * @return list<string>
      */

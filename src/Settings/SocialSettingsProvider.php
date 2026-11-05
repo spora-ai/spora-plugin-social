@@ -23,13 +23,6 @@ use Spora\Settings\SettingDefinition;
  */
 final class SocialSettingsProvider implements PluginSettingsProviderInterface
 {
-    /**
-     * The caveat the restricted LinkedIn permissions carry.
-     *
-     * Three of the permissions are granted to selected developers only, so
-     * asking for one the app does not hold refuses the whole authorization
-     * request — not only the part that needs the permission.
-     */
     private const LINKEDIN_RESTRICTED_PERMISSION = 'LinkedIn grants it to selected developers only, and an app that asks for a permission it does not hold is refused the whole authorization request — so this is off unless your app has it.';
 
     /**
@@ -93,9 +86,8 @@ final class SocialSettingsProvider implements PluginSettingsProviderInterface
     /**
      * A setting the operator turns on or off.
      *
-     * The LinkedIn permissions are all of the same shape, and a
-     * `SettingDefinition` written out for each of them is a shape that can
-     * drift.
+     * The LinkedIn permissions are all of the same shape, so one helper
+     * holds them in step.
      */
     private function toggle(
         string $group,

@@ -47,9 +47,7 @@ it('builds an authorization url with the client id and the member scope', functi
                 ($query['response_type'] ?? null) === 'code',
                 'the authorization url does not ask for an authorization code',
             );
-            // No challenge: LinkedIn's token endpoint does not take a
-            // verifier, and answers the exchange with "invalid_client —
-            // Client authentication failed" when one is sent.
+            // No challenge: LinkedIn's token endpoint refuses a verifier.
             LiveContract::holds(
                 !isset($query['code_challenge']) && !isset($query['code_challenge_method']),
                 'the authorization url asks for a pkce challenge the token endpoint does not take',

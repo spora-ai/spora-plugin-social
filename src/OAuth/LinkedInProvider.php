@@ -22,10 +22,10 @@ use Spora\Plugins\Social\Service\ApiVersions;
  * when the operator says their app has it.
  *
  * The member scopes are narrowable too, and for the same reason: the
- * Community Management API product has to be the only product on an app,
- * so an operator who wants organisation pages holds an app that cannot
- * serve OpenID Connect. Asking for it refuses the request outright, so the
- * member is then named by the access-control list instead.
+ * Community Management API product has to be the only product on an app, so
+ * an app holding only it cannot serve OpenID Connect. Asking for it refuses
+ * the request outright, so the member is then named by the access-control
+ * list instead.
  *
  * @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api
  */
@@ -92,10 +92,8 @@ final class LinkedInProvider extends AbstractOAuthProvider
         $scopes = [];
 
         if ($this->permissions->signInScope) {
-            // OpenID Connect: the member's identity, name and email. An app
-            // that holds only the Community Management API product does not
-            // serve it, and asking for it refuses the whole request — so the
-            // member is named by the access-control list instead.
+            // OpenID Connect: the member's identity, name and email. Not
+            // every app can serve it — see the class docblock.
             $scopes[] = self::SCOPE_OPENID;
             $scopes[] = self::SCOPE_PROFILE;
             $scopes[] = self::SCOPE_EMAIL;
@@ -151,9 +149,9 @@ final class LinkedInProvider extends AbstractOAuthProvider
      * How the scopes are separated in the **request**.
      *
      * LinkedIn takes them separated by spaces — `scope=openid profile email
-     * w_member_social` — where Facebook takes commas. It answers with
-     * commas either way, which is why the answer is not split with this:
-     * see {@see TokenExchange::scopesOf()}.
+     * w_member_social` — where Facebook takes commas. The answer is
+     * separated with commas either way, so this separator is not the one
+     * that splits it: see {@see TokenExchange::scopesOf()}.
      */
     protected function getScopeSeparator(): string
     {
@@ -165,9 +163,8 @@ final class LinkedInProvider extends AbstractOAuthProvider
      */
     public function resolveAccounts(OAuthTokenSet $tokens): array
     {
-        // The member is read first, so a token that grants OpenID Connect
-        // is asked for it before the access-control list — the order the
-        // provider asks in is the order the platform answers in.
+        // OpenID Connect names the member; the access-control list is the
+        // fallback for an app that cannot serve it.
         $member = in_array(self::SCOPE_OPENID, $tokens->scopes, true)
             ? $this->memberFromUserinfo($tokens)
             : null;
@@ -182,8 +179,6 @@ final class LinkedInProvider extends AbstractOAuthProvider
 
     /**
      * The member who signed in, by OpenID Connect.
-     *
-     * The answer carries the id, the name and the email.
      */
     private function memberFromUserinfo(OAuthTokenSet $tokens): OAuthAccountIdentity
     {
@@ -208,10 +203,8 @@ final class LinkedInProvider extends AbstractOAuthProvider
     /**
      * The member who signed in, by the access-control list.
      *
-     * An app holding only the Community Management API product cannot serve
-     * OpenID Connect, and asking for it refuses the whole authorization
-     * request — so the member is named by the list instead, which says who
-     * the role was given to.
+     * The list says who the role was given to, and it names the member when
+     * the token grants no OpenID Connect — see the class docblock for why.
      *
      * @param list<array<string, mixed>> $acls
      */

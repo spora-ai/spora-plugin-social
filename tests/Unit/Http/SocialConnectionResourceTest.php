@@ -49,8 +49,7 @@ it('carries the connection health and the accounts it covers', function () {
 it('carries the scopes of a connection made before the answer was split', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    // The column holds the platform's answer as one comma-joined string,
-    // because the answer was not split when it was stored.
+    // The column holds the platform's answer as one comma-joined string.
     $connection = createSocialConnection($principalId, 'linkedin', [
         'access_token' => 'the-token',
         'scopes'       => 'email,openid,profile,w_member_social',

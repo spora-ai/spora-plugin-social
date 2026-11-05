@@ -188,8 +188,7 @@ it('flags a connection whose token has expired', function () {
 it('reads the scopes of a connection made before the answer was split', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
-    // The column holds the platform's answer as one comma-joined string,
-    // because the answer was not split when it was stored.
+    // The column holds the platform's answer as one comma-joined string.
     $connection = createSocialConnection($principalId, 'linkedin', [
         'access_token' => 'the-token',
         'scopes'       => 'email,openid,profile,w_member_social',
@@ -243,8 +242,7 @@ it('remembers that a call failed for another reason', function () {
 
 it('reports a linkedin connection with a valid token as active', function () {
     // The real provider, not the fake one: the fake answers whatever it is
-    // asked, so it let a token without scopes through as a working
-    // connection.
+    // asked, so a token without scopes passed as a working connection.
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider(
         'client-id',

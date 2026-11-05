@@ -206,7 +206,7 @@ final class SocialConnectionService
 
         try {
             // The scopes travel with the token: they say what the platform
-            // granted, and the member is named by them.
+            // granted, and the provider names the member by them.
             $this->tokens->resolveAccounts($connection, new OAuthTokenSet(
                 accessToken: $token,
                 scopes: $this->grantedScopes($connection),

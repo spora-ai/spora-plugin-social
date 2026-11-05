@@ -227,9 +227,9 @@ foreach (SocialPlatform::cases() as $platform) {
     }
 
     if ($parsed['state'] !== null && $parsed['state'] !== $state) {
-        // The state was signed in an earlier run, so it is read with the
-        // key that signed it. A state this machine cannot read was signed
-        // somewhere else, and its code belongs to another install.
+        // The state was signed in an earlier run: reading it proves it was
+        // signed with this machine's key. A state this machine cannot read
+        // was signed elsewhere, and its code belongs to another install.
         try {
             $stateCodec->decode($parsed['state']);
         } catch (Throwable $e) {

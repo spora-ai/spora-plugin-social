@@ -15,6 +15,7 @@ use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\OAuthProviderInterface;
 use Spora\Plugins\Social\OAuth\OAuthProviderResolver;
 use Spora\Plugins\Social\OAuth\OAuthTokenSet;
+use Spora\Plugins\Social\OAuth\TokenExchange;
 
 /**
  * The token of a connection: how it is stored, how it is renewed and how
@@ -136,9 +137,8 @@ final class SocialConnectionTokens
      * response. The caller decides what an empty list means; here it is
      * only the fact.
      *
-     * The column is split on commas and on spaces. A connection made
-     * before the platform's answer was split holds its scopes as one
-     * comma-joined string, and it reads as a list either way.
+     * The column is split the way a platform answers — see
+     * {@see TokenExchange::scopesOf()}.
      *
      * @return list<string>
      */

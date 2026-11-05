@@ -7,14 +7,8 @@ namespace Spora\Plugins\Social\OAuth;
 /**
  * The LinkedIn permissions the operator's app asks for.
  *
- * The restricted ones are opt-in: an app that asks for a permission it does
- * not hold is refused the whole authorization request, so the operator says
- * which ones their app has.
- *
- * The member ones are on by default, because they are open permissions and
- * every app has them — and off when the app does not. An app holding only
- * the Community Management API product cannot serve OpenID Connect, and
- * asking for it costs the whole request, member posting included.
+ * See {@see LinkedInProvider} for which of them an app may be asked for, and
+ * why the defaults differ.
  */
 final class LinkedInPermissions
 {

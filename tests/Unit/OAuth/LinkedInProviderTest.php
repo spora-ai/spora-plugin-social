@@ -25,10 +25,7 @@ it('builds the authorization url without a pkce challenge', function () {
         ->and($query['response_type'])->toBe('code')
         ->and($query['scope'])->toBe('openid profile email w_member_social');
 
-    // LinkedIn's token endpoint does not take a verifier: it answers the
-    // exchange with "invalid_client — Client authentication failed" when
-    // one is sent. A challenge is not offered either, because a code issued
-    // against a challenge has nothing to verify a verifier against.
+    // No verifier and no challenge — see AbstractOAuthProvider for why.
     expect($query)->not->toHaveKey('code_challenge')
         ->and($query)->not->toHaveKey('code_challenge_method');
 });
@@ -55,8 +52,8 @@ it('asks for the organisation scope only when the operator says the app has it',
 it('asks for nothing the app cannot hold', function () {
     $recorder = new GuzzleRecorder();
 
-    // A Community Management API app holds no OpenID Connect, and asking
-    // for what it does not hold refuses the whole authorization request.
+    // A Community Management API app holds no OpenID Connect — see
+    // LinkedInProvider for why that matters.
     $withoutSignIn = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(signInScope: false), $recorder->client());
     parse_str((string) parse_url($withoutSignIn->authorizationUrl('s'), PHP_URL_QUERY), $query);
 
@@ -74,8 +71,6 @@ it('names the member by the access-control list when the token has no openid', f
         ],
     ]));
 
-    // No `openid` in the token: the member is named by the list, which says
-    // who the role was given to.
     $accounts = $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'at',
         scopes: ['r_organization_admin'],
@@ -103,8 +98,7 @@ it('names no member when the access-control list names an organisation', functio
         ],
     ]));
 
-    // A role can be given to an organisation. That urn names no member, so
-    // the connection says so instead of storing an id that names nobody.
+    // A role can be given to an organisation: that urn names no member.
     expect(fn() => $provider->resolveAccounts(new OAuthTokenSet(
         accessToken: 'at',
         scopes: ['r_organization_admin'],
@@ -156,8 +150,7 @@ it('exchanges the code for tokens, without a pkce verifier', function () {
         ->and($fields['client_secret'])->toBe('client-secret')
         ->and($fields['redirect_uri'])->toBe(SocialFixtures::OAUTH_CALLBACK);
 
-    // The verifier is the one parameter that makes LinkedIn answer the
-    // exchange with "invalid_client — Client authentication failed".
+    // The verifier is the one parameter LinkedIn's token endpoint refuses.
     expect($fields)->not->toHaveKey('code_verifier');
 });
 

@@ -15,9 +15,6 @@ it('asks for the member permissions by default and the organisation ones not', f
         $definitions[$definition->key] = $definition;
     }
 
-    // The member permissions are open and every app holds them; the
-    // organisation ones are restricted and are asked for only once the
-    // operator's app holds them.
     expect($definitions['LINKEDIN_MEMBER_SCOPE']->default)->toBeTrue()
         ->and($definitions['LINKEDIN_SIGN_IN_SCOPE']->default)->toBeTrue()
         ->and($definitions['LINKEDIN_ORGANIZATION_SCOPE']->default)->toBeFalse()
@@ -36,8 +33,7 @@ it('does not tell the operator to turn off a permission their app holds', functi
     $member = $definitions['LINKEDIN_MEMBER_SCOPE']->description;
 
     // The Community Management API product grants w_member_social, so the
-    // description may not send the operator to turn it off for an app with
-    // that product.
+    // description may not tell the operator to turn it off for such an app.
     expect($member)->toContain('Community Management API')
         ->and($member)->toContain('does not hold it')
         ->and($member)->not->toContain('Turn it off for an app that holds only the Community Management API product');

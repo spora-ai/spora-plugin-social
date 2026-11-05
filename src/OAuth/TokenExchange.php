@@ -47,7 +47,9 @@ final class TokenExchange
      * scope check then fails.
      *
      * A scope token is neither a comma nor a space, so both are accepted as
-     * separators and the OAuth spec's space-delimited answer reads too.
+     * separators: the OAuth spec's space-delimited answer reads too, and a
+     * connection made before the answer was split holds its scopes as one
+     * comma-joined string.
      *
      * @param array<string, mixed> $values
      * @return list<string>
