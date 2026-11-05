@@ -467,7 +467,6 @@ function aCallbackState(int $principalId, string $provider = 'linkedin'): string
         'principal_id' => $principalId,
         'provider'     => $provider,
         'nonce'        => 'the-nonce',
-        'pkce'         => str_repeat('v', 64),
         'expires_at'   => time() + 600,
     ]);
 }

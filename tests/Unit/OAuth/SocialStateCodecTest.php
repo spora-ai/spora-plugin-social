@@ -12,14 +12,12 @@ it('round-trips a signed state', function () {
         'principal_id' => 3,
         'platform'     => 'linkedin',
         'nonce'        => 'abc',
-        'pkce'         => 'verifier',
     ]);
 
     expect($codec->decode($state))->toBe([
         'principal_id' => 3,
         'platform'     => 'linkedin',
         'nonce'        => 'abc',
-        'pkce'         => 'verifier',
     ]);
 });
 
