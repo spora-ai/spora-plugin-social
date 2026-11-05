@@ -185,6 +185,22 @@ it('flags a connection whose token has expired', function () {
         ->and(SocialConnectionService::needsReconnect($connection))->toBeTrue();
 });
 
+it('reads the scopes of a connection made before the answer was split', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // The column holds the platform's answer as one comma-joined string,
+    // because the answer was not split when it was stored.
+    $connection = createSocialConnection($principalId, 'linkedin', [
+        'access_token' => 'the-token',
+        'scopes'       => 'email,openid,profile,w_member_social',
+    ]);
+
+    $service = connectionService();
+
+    expect($service->grantedScopes($connection))
+        ->toBe(['email', 'openid', 'profile', 'w_member_social']);
+});
+
 it('remembers that the platform revoked the token', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

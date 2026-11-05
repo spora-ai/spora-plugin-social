@@ -136,6 +136,10 @@ final class SocialConnectionTokens
      * response. The caller decides what an empty list means; here it is
      * only the fact.
      *
+     * The column is split on commas and on spaces. A connection made
+     * before the platform's answer was split holds its scopes as one
+     * comma-joined string, and it reads as a list either way.
+     *
      * @return list<string>
      */
     public function grantedScopes(SocialConnection $connection): array
@@ -144,7 +148,9 @@ final class SocialConnectionTokens
             return [];
         }
 
-        return array_values(array_filter(array_map('trim', explode(' ', $connection->scopes))));
+        $parts = preg_split('/[,\s]+/', $connection->scopes) ?: [];
+
+        return array_values(array_filter($parts));
     }
 
     /**
