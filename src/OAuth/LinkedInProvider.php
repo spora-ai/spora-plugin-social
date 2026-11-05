@@ -21,6 +21,12 @@ use Spora\Plugins\Social\Service\ApiVersions;
  * is refused the whole authorization request — so each is asked for only
  * when the operator says their app has it.
  *
+ * The member scopes are narrowable too, and for the same reason: the
+ * Community Management API product has to be the only product on an app,
+ * so an operator who wants organisation pages holds an app that cannot
+ * serve OpenID Connect. Asking for it refuses the request outright, so the
+ * member is then named by the access-control list instead.
+ *
  * @see https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api
  */
 final class LinkedInProvider extends AbstractOAuthProvider
@@ -83,12 +89,23 @@ final class LinkedInProvider extends AbstractOAuthProvider
      */
     protected function getDefaultScopes(): array
     {
-        $scopes = [
-            self::SCOPE_OPENID,
-            self::SCOPE_PROFILE,
-            self::SCOPE_EMAIL,
-            self::SCOPE_MEMBER_SOCIAL,
-        ];
+        $scopes = [];
+
+        if ($this->permissions->signInScope) {
+            // OpenID Connect: the member's identity, name and email. An app
+            // that holds only the Community Management API product does not
+            // serve it, and asking for it refuses the whole request — so the
+            // member is named by the access-control list instead.
+            $scopes[] = self::SCOPE_OPENID;
+            $scopes[] = self::SCOPE_PROFILE;
+            $scopes[] = self::SCOPE_EMAIL;
+        }
+
+        if ($this->permissions->memberScope) {
+            // Posting as the member. The Community Management API product
+            // grants it too, so an app holding only that product can ask.
+            $scopes[] = self::SCOPE_MEMBER_SOCIAL;
+        }
 
         if ($this->permissions->organizationScope) {
             // Writing as an organisation. The permissions that find the
@@ -148,6 +165,28 @@ final class LinkedInProvider extends AbstractOAuthProvider
      */
     public function resolveAccounts(OAuthTokenSet $tokens): array
     {
+        // The member is read first, so a token that grants OpenID Connect
+        // is asked for it before the access-control list — the order the
+        // provider asks in is the order the platform answers in.
+        $member = in_array(self::SCOPE_OPENID, $tokens->scopes, true)
+            ? $this->memberFromUserinfo($tokens)
+            : null;
+
+        $acls = $this->organizationAcls($tokens);
+
+        return [
+            $member ?? $this->memberFromAcls($acls),
+            ...$this->organizationAccounts($acls, $tokens),
+        ];
+    }
+
+    /**
+     * The member who signed in, by OpenID Connect.
+     *
+     * The answer carries the id, the name and the email.
+     */
+    private function memberFromUserinfo(OAuthTokenSet $tokens): OAuthAccountIdentity
+    {
         $profile = $this->apiGet(
             self::USERINFO_URL,
             [],
@@ -159,18 +198,73 @@ final class LinkedInProvider extends AbstractOAuthProvider
             throw SocialException::platform('LinkedIn did not return a member id.', 'IDENTITY_UNRESOLVED');
         }
 
-        $accounts = [
-            new OAuthAccountIdentity(
-                platform: SocialPlatform::LinkedIn,
-                externalId: 'urn:li:person:' . $personId,
-                kind: SocialAccountKind::Member,
-                displayName: $this->exchange->stringOrNull($profile['name'] ?? null),
-                username: $this->exchange->stringOrNull($profile['email'] ?? null),
-                extra: ['author_urn' => 'urn:li:person:' . $personId],
-            ),
-        ];
+        return $this->memberIdentity(
+            $personId,
+            $this->exchange->stringOrNull($profile['name'] ?? null),
+            $this->exchange->stringOrNull($profile['email'] ?? null),
+        );
+    }
 
-        return [...$accounts, ...$this->resolveOrganizations($tokens)];
+    /**
+     * The member who signed in, by the access-control list.
+     *
+     * An app holding only the Community Management API product cannot serve
+     * OpenID Connect, and asking for it refuses the whole authorization
+     * request — so the member is named by the list instead, which says who
+     * the role was given to.
+     *
+     * @param list<array<string, mixed>> $acls
+     */
+    private function memberFromAcls(array $acls): OAuthAccountIdentity
+    {
+        $personId = $this->memberIdFrom($acls);
+        if ($personId === '') {
+            throw SocialException::platform(
+                "This token names no member: ask LinkedIn for the member's identity, or for the organisations the member administers.",
+                'IDENTITY_UNRESOLVED',
+            );
+        }
+
+        return $this->memberIdentity($personId, null, null);
+    }
+
+    private function memberIdentity(string $personId, ?string $name, ?string $email): OAuthAccountIdentity
+    {
+        return new OAuthAccountIdentity(
+            platform: SocialPlatform::LinkedIn,
+            externalId: 'urn:li:person:' . $personId,
+            kind: SocialAccountKind::Member,
+            displayName: $name,
+            username: $email,
+            extra: ['author_urn' => 'urn:li:person:' . $personId],
+        );
+    }
+
+    /**
+     * The member the access-control list is about.
+     *
+     * Every entry names the member the role was given to, so the first one
+     * names the member who signed in.
+     *
+     * @param list<array<string, mixed>> $acls
+     */
+    private function memberIdFrom(array $acls): string
+    {
+        foreach ($acls as $element) {
+            $assignee = $this->exchange->stringOrNull($element['roleAssignee'] ?? null);
+            if ($assignee === null) {
+                continue;
+            }
+
+            $prefix = 'urn:li:person:';
+            if (str_starts_with($assignee, $prefix)) {
+                return substr($assignee, strlen($prefix));
+            }
+
+            return $assignee;
+        }
+
+        return '';
     }
 
     /**
@@ -183,21 +277,11 @@ final class LinkedInProvider extends AbstractOAuthProvider
      *
      * @return list<OAuthAccountIdentity>
      */
-    private function resolveOrganizations(OAuthTokenSet $tokens): array
+    private function organizationAccounts(array $acls, OAuthTokenSet $tokens): array
     {
-        if (!in_array(self::SCOPE_ORGANIZATION_ADMIN, $tokens->scopes, true)) {
-            return [];
-        }
-
-        $acls = $this->apiGet(
-            self::ORGANIZATION_ACLS_URL,
-            ['q' => 'roleAssignee'],
-            $this->versions->linkedInRestHeaders($tokens->accessToken),
-        );
-
         $accounts = [];
 
-        foreach ($this->listOf($acls, 'elements') as $element) {
+        foreach ($acls as $element) {
             // A role that is only REQUESTED is not a role yet: the member
             // cannot post as that organisation until it is approved.
             if (($element['state'] ?? null) !== 'APPROVED') {
@@ -219,6 +303,26 @@ final class LinkedInProvider extends AbstractOAuthProvider
         }
 
         return $accounts;
+    }
+
+    /**
+     * The access-control list, when the token may read it.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function organizationAcls(OAuthTokenSet $tokens): array
+    {
+        if (!in_array(self::SCOPE_ORGANIZATION_ADMIN, $tokens->scopes, true)) {
+            return [];
+        }
+
+        $acls = $this->apiGet(
+            self::ORGANIZATION_ACLS_URL,
+            ['q' => 'roleAssignee'],
+            $this->versions->linkedInRestHeaders($tokens->accessToken),
+        );
+
+        return $this->listOf($acls, 'elements');
     }
 
     /**

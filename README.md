@@ -66,7 +66,9 @@ The plugin ships both:
 
 | Setting | Why |
 |---|---|
-| `SPORA_SOCIAL_LINKEDIN_CLIENT_ID` / `_SECRET` | Your LinkedIn app. Member posting needs no review; organisation pages need the Community Management API. The setting's own description carries the redirect URL to register with it. |
+| `SPORA_SOCIAL_LINKEDIN_CLIENT_ID` / `_SECRET` | Your LinkedIn app. Member posting needs no review; organisation pages need a **second** app, because the Community Management API has to be the only product on an app. The setting's own description carries the redirect URL to register with it. |
+| `SPORA_SOCIAL_LINKEDIN_MEMBER_SCOPE` | On by default. Turn it off for an app that cannot post as a member. |
+| `SPORA_SOCIAL_LINKEDIN_SIGN_IN_SCOPE` | On by default. Turn it off for a Community Management API app, which cannot serve OpenID Connect — asking for it refuses the whole request. |
 | `SPORA_SOCIAL_META_APP_ID` / `_SECRET` | Your Meta app — **one app for both networks**. `pages_manage_posts` needs the app reviewed. |
 | `SPORA_SOCIAL_META_CONFIG_ID` | The id of the Facebook Login for Business configuration the login dialog uses: the permissions and assets your app asks a client for. Not a secret, but the login cannot happen without it. The setting's own description carries the redirect URL to register with it. |
 | `SPORA_SOCIAL_LINKEDIN_ORGANIZATION_SCOPE` | Turn on **only** once your app holds `w_organization_social` — asking for a scope the app does not have makes the whole authorization request fail. |
@@ -134,6 +136,10 @@ and the live suite never reads those.
 
 **LinkedIn** — [developer portal](https://www.linkedin.com/developers/apps)
 
+LinkedIn splits this in two, and the two halves cannot share an app.
+
+**Posting as yourself** is self-service. One app does it:
+
 1. Create an app and add the **Sign in with LinkedIn** product. It brings
    OpenID Connect and the member id with it.
 2. Copy the **Client ID** and the **Client Secret** from *Auth*.
@@ -144,14 +150,45 @@ and the live suite never reads those.
 
 Member posting (`w_member_social`) is **self-service**: an app in
 development mode posts as the member who signed in, and no review is
-involved. Start there.
+involved. **This is as far as an individual developer goes.** The Share on
+LinkedIn product grants `w_member_social` and nothing else — it posts as
+the signed-in member, never as a page.
 
-Organisation posting (`w_organization_social`) and the four read
-permissions need the Community Management API approved — turn each one on
-once the app holds it, never before, because an app that asks for a
-permission it does not hold is refused the whole authorization request.
-They are one setting each, so an app that holds one of them is not refused
-over the other three:
+**Posting to a company page** is a second app, and a different kind of
+applicant. `w_organization_social` — the permission that posts on behalf of
+a page — comes only with the **Community Management API**, and LinkedIn's
+rules for that product are strict:
+
+- **It has to be the only product on the app.** "Share on LinkedIn" is one
+  of the products that blocks it, so the app above can never hold it. The
+  Community Management API app is a **second app**, created with no
+  products at all and verified against the **same company page**.
+  > "The Community Management API requires that it be the only product
+  > associated with a developer application due to legal and security
+  > constraints." — [LinkedIn API Partner Support](https://learn.microsoft.com/en-us/linkedin/shared/linkedin-api-partner-support-guide)
+- **Only a legal organisation can ask for it.** LinkedIn vets the
+  applicant: a verified business email, the organisation's legal name and
+  registered address, its website and a privacy policy, and a company page
+  whose super admin verified the app. "Personal email addresses won't pass
+  the vetting process." An individual developer without a registered legal
+  entity cannot get it.
+  > "our Community Management APIs are only available to registered legal
+  > organizations for commercial use cases only" — [Community Management app review](https://learn.microsoft.com/en-us/linkedin/marketing/community-management-app-review)
+- **It is a review in two tiers.** Development tier first — 500 calls a day
+  for the app, 100 a day per member — then Standard tier, which needs a
+  screen recording of the app working.
+
+Point the plugin at the **Community Management API app**. It grants
+`w_member_social` as well, so that one app covers member posting and page
+posting together. It cannot serve OpenID Connect, so turn **Ask LinkedIn for
+the member's identity** off: the member is then named by the organisation
+access-control list, which says who the role belongs to.
+
+The four read permissions are asked for one at a time — turn each on once
+the app holds it, never before, because an app that asks for a permission
+it does not hold is refused the whole authorization request. They are one
+setting each, so an app that holds one of them is not refused over the
+other three:
 
 | Permission | Reads |
 |---|---|
@@ -204,6 +241,20 @@ reaches an audience of strangers needs it.
 internet, so the image has to be served from an address the platform can
 reach, and it has to be a JPEG. Put one on any public host and set
 `SPORA_LIVE_PUBLIC_IMAGE_URL` to it.
+
+### What the plugin does not set up for you
+
+The Community Management API app is **the operator's work**: the second app,
+the legal entity, the access-request form, the screen recording for
+Standard tier. The plugin points at one LinkedIn app and asks it for the
+scopes the operator says it holds — it does not build the app, and it
+cannot get one approved.
+
+That is deliberate, and it is also the reason a project without a legal
+entity cannot reach a page at all. **Posting as a page is worth the path
+when there is an organisation behind it.** An open-source project that
+wants a page of its own needs a registered legal entity to ask with, and
+that is the part that has to be arranged before any of this works.
 
 ### What it leaves behind
 

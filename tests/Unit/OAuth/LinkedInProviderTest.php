@@ -48,6 +48,49 @@ it('asks for the organisation scope only when the operator says the app has it',
         ->and($orgQuery['scope'])->not->toContain('urn:li:organization:authorize');
 });
 
+it('asks for nothing the app cannot hold', function () {
+    $recorder = new GuzzleRecorder();
+
+    // A Community Management API app holds no OpenID Connect, and asking
+    // for what it does not hold refuses the whole authorization request.
+    $withoutSignIn = new LinkedInProvider('id', 'secret', SocialFixtures::OAUTH_CALLBACK_SHORT, new LinkedInPermissions(signInScope: false), $recorder->client());
+    parse_str((string) parse_url($withoutSignIn->authorizationUrl('s', str_repeat('a', 64)), PHP_URL_QUERY), $query);
+
+    expect($query['scope'])->not->toContain('openid')
+        ->and($query['scope'])->not->toContain('profile')
+        ->and($query['scope'])->not->toContain('email')
+        ->and($query['scope'])->toContain('w_member_social');
+});
+
+it('names the member by the access-control list when the token has no openid', function () {
+    $recorder = new GuzzleRecorder();
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}],"paging":{"count":10,"start":0,"links":[]}}',
+        ],
+    ]));
+
+    // No `openid` in the token: the member is named by the list, which says
+    // who the role was given to.
+    $accounts = $provider->resolveAccounts(new OAuthTokenSet(
+        accessToken: 'at',
+        scopes: ['r_organization_admin'],
+    ));
+
+    expect($accounts)->toHaveCount(2)
+        ->and($accounts[0]->externalId)->toBe('urn:li:person:abCdEf')
+        ->and($accounts[0]->kind->value)->toBe('member')
+        ->and($accounts[1]->externalId)->toBe('urn:li:organization:2414183');
+
+    // The OpenID Connect endpoint is not called: the token cannot read it.
+    $urls = array_map(
+        static fn(array $entry): string => (string) $entry['request']->getUri(),
+        $recorder->requests,
+    );
+
+    expect($urls)->not->toContain('https://api.linkedin.com/v2/userinfo');
+});
+
 it('exchanges the code for tokens, carrying the pkce verifier', function () {
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => '{"access_token":"at","expires_in":5184000,"refresh_token":"rt","scope":"openid,profile,w_member_social"}']]));
@@ -107,7 +150,7 @@ it('resolves the member account and its reactions-only note', function () {
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => '{"sub":"abc123","name":"Fabeat Person","email":"fabeat@example.test"}']]));
 
-    $accounts = $provider->resolveAccounts(new OAuthTokenSet(accessToken: 'at'));
+    $accounts = $provider->resolveAccounts(new OAuthTokenSet(accessToken: 'at', scopes: ['openid']));
 
     expect($accounts)->toHaveCount(1)
         ->and($accounts[0]->externalId)->toBe('urn:li:person:abc123')
