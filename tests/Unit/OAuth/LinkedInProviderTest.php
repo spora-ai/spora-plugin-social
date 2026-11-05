@@ -95,6 +95,42 @@ it('names the member by the access-control list when the token has no openid', f
     expect($urls)->not->toContain('https://api.linkedin.com/v2/userinfo');
 });
 
+it('names no member when the access-control list names an organisation', function () {
+    $recorder = new GuzzleRecorder();
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:organization:99","state":"APPROVED"}],"paging":{"count":10,"start":0,"links":[]}}',
+        ],
+    ]));
+
+    // A role can be given to an organisation. That urn names no member, so
+    // the connection says so instead of storing an id that names nobody.
+    expect(fn() => $provider->resolveAccounts(new OAuthTokenSet(
+        accessToken: 'at',
+        scopes: ['r_organization_admin'],
+    )))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'names no member');
+});
+
+it('names the member that follows an organisation in the access-control list', function () {
+    $recorder = new GuzzleRecorder();
+    $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([
+        [
+            'body' => '{"elements":[{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:organization:99","state":"APPROVED"},{"role":"ADMINISTRATOR","organization":"urn:li:organization:2414183","roleAssignee":"urn:li:person:abCdEf","state":"APPROVED"}],"paging":{"count":10,"start":0,"links":[]}}',
+        ],
+        [
+            'body' => '{"localizedName":"Fabeat GmbH"}',
+        ],
+    ]));
+
+    $accounts = $provider->resolveAccounts(new OAuthTokenSet(
+        accessToken: 'at',
+        scopes: ['r_organization_admin'],
+    ));
+
+    expect($accounts[0]->externalId)->toBe('urn:li:person:abCdEf')
+        ->and($accounts[0]->kind->value)->toBe('member');
+});
+
 it('exchanges the code for tokens, without a pkce verifier', function () {
     $recorder = new GuzzleRecorder();
     $provider = new LinkedInProvider('client-id', 'client-secret', SocialFixtures::OAUTH_CALLBACK, new LinkedInPermissions(), $recorder->client([['body' => '{"access_token":"at","expires_in":5184000,"refresh_token":"rt","scope":"openid,profile,w_member_social"}']]));

@@ -243,25 +243,24 @@ final class LinkedInProvider extends AbstractOAuthProvider
     /**
      * The member the access-control list is about.
      *
-     * Every entry names the member the role was given to, so the first one
-     * names the member who signed in.
+     * A role can be given to a member or to an organisation, and only a
+     * member names the one who signed in: an organisation's urn read as a
+     * member's id names nobody, and it is stored as the member's id and
+     * published as the author.
      *
      * @param list<array<string, mixed>> $acls
      */
     private function memberIdFrom(array $acls): string
     {
+        $prefix = 'urn:li:person:';
+
         foreach ($acls as $element) {
             $assignee = $this->exchange->stringOrNull($element['roleAssignee'] ?? null);
-            if ($assignee === null) {
+            if ($assignee === null || !str_starts_with($assignee, $prefix)) {
                 continue;
             }
 
-            $prefix = 'urn:li:person:';
-            if (str_starts_with($assignee, $prefix)) {
-                return substr($assignee, strlen($prefix));
-            }
-
-            return $assignee;
+            return substr($assignee, strlen($prefix));
         }
 
         return '';
