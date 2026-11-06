@@ -589,8 +589,10 @@ function postPublisher(array $answers = [], ?ZernioRecorder $zernio = null): Soc
             new FacebookAdapter(new PlatformApi($client('facebook'), apiVersions())),
             new InstagramAdapter(new PlatformApi($client('instagram'), apiVersions())),
         ),
-        new Spora\Plugins\Social\Aggregator\AggregatorPublisher($aggregators, zernioClient($zernio?->client())),
-        new Spora\Plugins\Social\Service\PostMedia($media),
+        new Spora\Plugins\Social\Aggregator\AggregatorRoute(
+            new Spora\Plugins\Social\Aggregator\AggregatorPublisher($aggregators, zernioClient($zernio?->client())),
+            new Spora\Plugins\Social\Service\PostMedia($media),
+        ),
     );
 }
 
