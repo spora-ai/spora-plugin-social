@@ -282,6 +282,14 @@ final class SocialMetricsService
     }
 
     /**
+     * The posts of a period, one row per target.
+     *
+     * The readings table holds **one row per target per day**, so a post
+     * published ten days ago contributes ten readings. The row is the
+     * latest of them, and the target's id travels with it: a post with
+     * two targets is two rows, and the reader needs the id to tell them
+     * apart.
+     *
      * @return list<array<string, mixed>>
      */
     private function topPosts(int $principalId, string $since): array
@@ -291,9 +299,11 @@ final class SocialMetricsService
             ->join('social_posts', 'social_posts.id', '=', 'social_post_metrics.post_id')
             ->where('social_posts.principal_id', $principalId)
             ->where('social_post_metrics.metric_date', '>=', $since)
+            ->orderBy('social_post_metrics.metric_date')
             ->select([
                 'social_posts.id as post_id',
                 'social_posts.title as title',
+                'social_post_targets.id as target_id',
                 'social_post_targets.platform as platform',
                 'social_post_targets.via as via',
                 'social_post_metrics.reach as reach',
@@ -303,10 +313,20 @@ final class SocialMetricsService
             ])
             ->get();
 
-        $posts = [];
+        // The table is unique on (target_id, metric_date), so the last
+        // reading of a target in date order is its latest one.
+        $latest = [];
+
         foreach ($rows as $row) {
+            $latest[(int) $row->target_id] = $row;
+        }
+
+        $posts = [];
+
+        foreach ($latest as $row) {
             $posts[] = [
                 'post_id'      => (int) $row->post_id,
+                'target_id'    => (int) $row->target_id,
                 'title'        => $row->title,
                 'platform'     => (string) $row->platform,
                 'via'          => (string) $row->via,

@@ -540,6 +540,32 @@ it('gives two routes to one network two rows and two series segments', function 
         ->and($summary['totals']['impressions'])->toBe(280);
 });
 
+it('answers with one row per post, not one per reading', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = publishedTarget($principalId, 'linkedin', 'organization', 'urn:li:share:9');
+
+    // Ten daily readings of one post: the readings table holds one row
+    // per target per day.
+    for ($day = 9; $day >= 0; $day--) {
+        $row = new Spora\Plugins\Social\Model\SocialPostMetric();
+        $row->post_id = $target->post_id;
+        $row->target_id = $target->id;
+        $row->metric_date = gmdate('Y-m-d', strtotime('-' . $day . ' days'));
+        $row->reach = 109 - $day;
+        $row->measured_at = Carbon::now();
+        $row->save();
+    }
+
+    $summary = metricsService([])->summary($principalId);
+
+    // One row, carrying the latest reading's numbers, and the target's
+    // id so the reader can tell two targets of one post apart.
+    expect($summary['top_posts'])->toHaveCount(1)
+        ->and($summary['top_posts'][0]['reach'])->toBe(109)
+        ->and($summary['top_posts'][0]['target_id'])->toBe((int) $target->id);
+});
+
 it('names the route of every target it reports the numbers of', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 
