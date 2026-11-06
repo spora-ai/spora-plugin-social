@@ -44,7 +44,7 @@ function zernioConnection(int $principalId): SocialConnection
 
 it('upserts the accounts the aggregator reports', function () {
     $recorder = new ZernioRecorder([
-        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
@@ -72,7 +72,7 @@ it('upserts the accounts the aggregator reports', function () {
 
 it('maps the kind by network, and falls back to the aggregator kind', function () {
     $recorder = new ZernioRecorder([
-        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
@@ -113,7 +113,7 @@ it('lets what the aggregator says about the account win over the table', functio
 
 it('fetches the follower count and writes it down', function () {
     $recorder = new ZernioRecorder([
-        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
@@ -162,7 +162,7 @@ it('reads the follower count off the account object, and asks for none', functio
 
 it('asks for the follower count the account object does not carry', function () {
     $recorder = new ZernioRecorder([
-        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
@@ -218,7 +218,7 @@ it('asks only for the counts the account object does not carry', function () {
 
 it('leaves the follower count empty when the add-on is not there, and does not fail the sync', function () {
     $recorder = new ZernioRecorder([
-        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('analytics-addon-required'), 'status' => 402],
     ]);
 
@@ -285,9 +285,38 @@ it('leaves the follower count empty when the endpoint refuses the add-on, and do
     expect($connection->fresh()?->analytics_available)->toBeFalse();
 });
 
-it('marks an account the aggregator no longer reports disconnected, and does not delete it', function () {
+it('marks the connection as not having the add-on, from the accounts list alone', function () {
+    // The accounts list says whether the user has analytics add-on
+    // access, and it is the authority.
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('accounts')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $connection = zernioConnection($principalId);
+
+    $sync = accountSync($recorder);
+    $result = $sync->read($connection);
+    $sync->apply($connection, $result);
+
+    expect($connection->fresh()?->analytics_available)->toBeFalse();
+
+    // And no follower count is asked for: the call per account would
+    // learn nothing.
+    expect($recorder->callsTo('follower-stats'))->toBe([]);
+
+    $account = SocialAccount::query()
+        ->where('principal_id', $principalId)
+        ->where('via', 'zernio')
+        ->where('platform', 'bluesky')
+        ->first();
+
+    expect($account?->followers)->toBeNull();
+});
+
+it('marks an account the aggregator no longer reports disconnected, and does not delete it', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
@@ -313,7 +342,7 @@ it('marks an account the aggregator no longer reports disconnected, and does not
 
 it('never creates a connection', function () {
     $recorder = new ZernioRecorder([
-        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('accounts-with-analytics-access')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],
         ['body' => zernioFixture('follower-stats')],

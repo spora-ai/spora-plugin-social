@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Aggregator;
 
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
+use Spora\Plugins\Social\Aggregator\Zernio\ZernioResponse;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialConnection;
@@ -78,7 +79,7 @@ final class AggregatorAccountSync
             $reported[] = $account->externalId;
         }
 
-        $followers = $this->followerCounts($key, $accounts);
+        $followers = $this->followerCounts($key, $accounts, $this->analyticsAccess($response));
 
         return new AggregatorSyncResult(
             accounts: $accounts,
@@ -86,6 +87,22 @@ final class AggregatorAccountSync
             followers: $followers['counts'],
             analyticsAvailable: $followers['available'],
         );
+    }
+
+    /**
+     * Whether the plan carries the analytics add-on.
+     *
+     * The accounts list says so, and it is the authority: the count is
+     * the add-on's, and a call per account to learn that the plan has
+     * none is a call per account for nothing.
+     *
+     * Null when the answer does not say: the call decides then.
+     */
+    private function analyticsAccess(ZernioResponse $response): ?bool
+    {
+        $access = $response->body['hasAnalyticsAccess'] ?? null;
+
+        return is_bool($access) ? $access : null;
     }
 
     /**
@@ -128,10 +145,18 @@ final class AggregatorAccountSync
      * would answer the same way.
      *
      * @param  list<AggregatorAccount> $accounts
+     * @param  bool|null               $analyticsAccess what the accounts list said about the add-on
      * @return array{counts: array<string, int>, available: bool}
      */
-    private function followerCounts(string $key, array $accounts): array
+    private function followerCounts(string $key, array $accounts, ?bool $analyticsAccess): array
     {
+        // The plan carries no add-on: the count is not there to be
+        // fetched, and a call per account to learn that is a call per
+        // account for nothing.
+        if ($analyticsAccess === false) {
+            return ['counts' => [], 'available' => false];
+        }
+
         $counts = [];
         $missing = [];
 
