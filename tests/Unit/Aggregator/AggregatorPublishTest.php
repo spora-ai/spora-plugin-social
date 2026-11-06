@@ -176,6 +176,10 @@ it('leaves the targets publishing when the call never landed', function () {
     expect($target?->status)->toBe(SocialPostTarget::STATUS_PUBLISHING)
         ->and($target?->idempotency_key)->not->toBeNull()
         ->and($target?->error)->toBeNull();
+
+    // The post row says the same thing: `failed` means the aggregator
+    // answered and refused, and it did not answer at all.
+    expect($post->status)->toBe(SocialPost::STATUS_PUBLISHING);
 });
 
 it('does not publish a target that is still publishing under its own key', function () {

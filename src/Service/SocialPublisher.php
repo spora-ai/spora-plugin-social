@@ -99,6 +99,11 @@ final class SocialPublisher
      * failed when none did. A target that was taken back down is not a
      * failure — the post went out and came back — so a post with nothing
      * left on any network is cancelled rather than failed.
+     *
+     * A target still in `publishing` is a publish whose outcome is not
+     * known: the post is going out, not refused. `failed` means the
+     * platform answered and said no, and a post row that says otherwise
+     * invites the operator to publish it a second time.
      */
     public function deriveStatus(SocialPost $post): string
     {
@@ -106,6 +111,10 @@ final class SocialPublisher
 
         if ($targets->isEmpty()) {
             return SocialPost::STATUS_DRAFT;
+        }
+
+        if ($this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHING) > 0) {
+            return SocialPost::STATUS_PUBLISHING;
         }
 
         $published = $this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHED);
