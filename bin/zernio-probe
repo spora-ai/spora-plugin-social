@@ -28,8 +28,15 @@ declare(strict_types=1);
  *
  * Usage:
  *
- *   php bin/zernio-probe --key=sk_… [--publish-to=<accountId>] [--network=bluesky]
- *   ZERNIO_API_KEY=sk_… php bin/zernio-probe
+ *   php bin/zernio-probe [--publish-to=<accountId>] [--network=bluesky]
+ *
+ * The key is read from the `ZERNIO_API_KEY` environment variable, or from
+ * the first line of stdin. **It is never taken as an argument**: an
+ * argument lands in the shell's history and in the process list, and both
+ * are readable by every other process on the machine. Set the variable
+ * without typing the key into the history —
+ * `read -rs ZERNIO_API_KEY && export ZERNIO_API_KEY` in bash — or pipe the
+ * key in.
  */
 
 use Symfony\Component\HttpClient\HttpClient;
@@ -76,12 +83,14 @@ const DROPPED_KEYS = ['metadata', 'scopeAreas', 'platformSpecificData'];
 /**
  * The probe's own options, read once.
  *
- * @return array{key: string, baseUrl: string, out: string, publishTo: string, network: string, content: string}
+ * The key is not one of them: it comes from the environment or from
+ * stdin, and never from the command line.
+ *
+ * @return array{baseUrl: string, out: string, publishTo: string, network: string, content: string}
  */
 function probeOptions(array $argv): array
 {
     $options = [
-        'key'       => (string) (getenv('ZERNIO_API_KEY') ?: ''),
         'baseUrl'   => (string) (getenv('ZERNIO_BASE_URL') ?: DEFAULT_BASE_URL),
         'out'       => 'build/zernio-probe',
         'publishTo' => '',
@@ -98,12 +107,47 @@ function probeOptions(array $argv): array
         $name = $pair[0];
         $value = $pair[1] ?? '';
 
+        if ($name === 'key') {
+            // The key is in the shell's history and in the process list
+            // by now, whether the script reads it or not. Say so, and
+            // do not pretend the argument was ignored.
+            echo "\n  The key does not go on the command line. Set ZERNIO_API_KEY,\n";
+            echo "  or pipe the key in on stdin.\n\n";
+
+            exit(1);
+        }
+
         if (array_key_exists($name, $options)) {
             $options[$name] = $value;
         }
     }
 
     return $options;
+}
+
+/**
+ * The API key, read from the environment or from stdin.
+ *
+ * Neither is in the shell's history and neither is in the process list,
+ * and that is the whole reason the key is not an argument.
+ */
+function probeKey(): string
+{
+    $key = trim((string) (getenv('ZERNIO_API_KEY') ?: ''));
+
+    if ($key !== '') {
+        return $key;
+    }
+
+    // From stdin, when something is piped in: the key is a line, and a
+    // line is in neither the history nor the process list.
+    if (!stream_isatty(STDIN)) {
+        $line = fgets(STDIN);
+
+        return $line === false ? '' : trim($line);
+    }
+
+    return '';
 }
 
 /**
@@ -304,14 +348,16 @@ function redactDropped(array $source, array $map): array
     return is_array($redacted) ? $redacted : [];
 }
 
-$options = probeOptions($argv);
-
 echo "\n";
 echo "  Spora social — the Zernio probe\n";
 echo "\n";
 
-if ($options['key'] === '') {
-    echo "  No API key. Pass --key=… or set ZERNIO_API_KEY.\n\n";
+$options = probeOptions($argv);
+
+$key = probeKey();
+
+if ($key === '') {
+    echo "  No API key. Set ZERNIO_API_KEY, or pipe the key in on stdin.\n\n";
     exit(1);
 }
 
@@ -329,7 +375,7 @@ $accountsResponse = zernioCall(
     $client,
     'GET',
     '/accounts',
-    $options['key'],
+    $key,
     $options['baseUrl'],
     ['category' => 'social'],
 );
@@ -382,7 +428,7 @@ if ($healthAccount !== null) {
         $client,
         'GET',
         '/accounts/' . rawurlencode((string) $healthAccount['_id']) . '/health',
-        $options['key'],
+        $key,
         $options['baseUrl'],
     );
 
@@ -401,7 +447,7 @@ if ($healthAccount !== null) {
         $client,
         'GET',
         '/accounts/follower-stats',
-        $options['key'],
+        $key,
         $options['baseUrl'],
         ['accountIds' => (string) $healthAccount['_id']],
     );
@@ -429,7 +475,7 @@ if ($options['publishTo'] !== '' || $options['network'] !== '') {
             $client,
             'POST',
             '/posts',
-            $options['key'],
+            $key,
             $options['baseUrl'],
             [],
             [
@@ -451,7 +497,7 @@ if ($options['publishTo'] !== '' || $options['network'] !== '') {
                 $client,
                 'GET',
                 '/analytics',
-                $options['key'],
+                $key,
                 $options['baseUrl'],
                 ['postId' => $createdId],
             );
