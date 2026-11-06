@@ -302,6 +302,11 @@ final class SocialToolPresenter
             $parts[] = $when;
         }
 
+        $channels = self::channelsOf($post);
+        if ($channels !== '') {
+            $parts[] = $channels;
+        }
+
         $title = trim((string) ($post['title'] ?? ''));
         if ($title !== '') {
             $parts[] = '"' . $title . '"';
@@ -313,6 +318,30 @@ final class SocialToolPresenter
         }
 
         return '#' . (int) ($post['id'] ?? $post['post_id'] ?? 0) . ' — ' . implode(' — ', $parts);
+    }
+
+    /**
+     * The channels a post goes to, named.
+     *
+     * The calendar answers what is going out and where, and a post that
+     * named only the network would not say which route it goes out
+     * through. Two accounts of one network are two channels.
+     *
+     * @param array<string, mixed> $post
+     */
+    private static function channelsOf(array $post): string
+    {
+        $keys = [];
+
+        foreach ((array) ($post['channels'] ?? []) as $channel) {
+            $key = (string) ($channel['key'] ?? '');
+
+            if ($key !== '' && !in_array($key, $keys, true)) {
+                $keys[] = $key;
+            }
+        }
+
+        return implode(', ', $keys);
     }
 
     /**

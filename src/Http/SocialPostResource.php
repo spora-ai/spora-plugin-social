@@ -110,6 +110,33 @@ final class SocialPostResource
     }
 
     /**
+     * The channels a post goes to — one per target.
+     *
+     * A post knows its targets, and a target knows its channel: the
+     * network and the route to it. Two routes to one network are two
+     * channels, and a screen that named only the network would hide which
+     * of the two the post goes out through.
+     *
+     * @return list<array{key: string, network: string, via: string}>
+     */
+    public static function channelsOf(SocialPost $post): array
+    {
+        $channels = [];
+
+        foreach ($post->targets()->orderBy('id')->get() as $target) {
+            $channel = $target->channel();
+
+            $channels[] = [
+                'key'     => $channel->key(),
+                'network' => $channel->network,
+                'via'     => $channel->via,
+            ];
+        }
+
+        return $channels;
+    }
+
+    /**
      * @return array<string, int|string|null>
      */
     public static function metricsOf(SocialPostMetric $row): array

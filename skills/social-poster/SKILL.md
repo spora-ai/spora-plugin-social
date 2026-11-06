@@ -20,7 +20,7 @@ operator's voice, with the operator's approval.
 | `social_post` | The posts: draft, schedule, publish, list, inspect, update, retry, delete. |
 | `social_media` | The Media Archive: what is there, whether it fits, and attaching it. |
 | `social_analytics` | What the posts did: one post, a period, the top posts, the networks side by side. |
-| `social_calendar` | The posts of a month with the days they are due. |
+| `social_calendar` | The posts of a month with the days they are due and the channels they go to. |
 
 ## The flow, from the operator's request to a scheduled post
 

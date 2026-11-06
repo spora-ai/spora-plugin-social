@@ -869,6 +869,42 @@ it('answers with the calendar of a month', function () {
         ->and(decode($response)['data'])->toHaveKeys(['posts', 'total']);
 });
 
+it('carries the channels every post of the month goes to', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    // A LinkedIn member profile on the plugin's own route and a Bluesky
+    // account through the aggregator: two channels, two accounts.
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'bluesky', 'zernio', 'id_002');
+
+    postService()->create($principalId, [
+        'title'         => SocialFixtures::POST_TITLE,
+        'body'          => SocialFixtures::POST_BODY,
+        'account_ids'   => [$direct->id, $aggregated->id],
+        'scheduled_for' => SocialFixtures::CALENDAR_MOMENT,
+    ]);
+
+    $response = calendarController($auth)->calendar(
+        Request::create(SocialFixtures::PLUGIN_CALENDAR_PATH . SocialFixtures::PRINCIPAL_QUERY . $principalId . '&month=' . SocialFixtures::CALENDAR_MONTH),
+    );
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $post = decode($response)['data']['posts'][0];
+
+    // One entry per target, and the entry names the route as well as the
+    // network: a post that names only the network cannot say which of the
+    // two routes it goes out through.
+    expect($post['channels'])->toHaveCount(2)
+        ->and($post['channels'][0]['key'])->toBe('direct:linkedin')
+        ->and($post['channels'][0]['network'])->toBe('linkedin')
+        ->and($post['channels'][0]['via'])->toBe('direct')
+        ->and($post['channels'][1]['key'])->toBe('zernio:bluesky')
+        ->and($post['channels'][1]['network'])->toBe('bluesky')
+        ->and($post['channels'][1]['via'])->toBe('zernio');
+});
+
 it('falls back to this month when the calendar names none', function () {
     $auth = bootAuthLayer();
     $principalId = createUserPrincipal(bootAuth($auth));

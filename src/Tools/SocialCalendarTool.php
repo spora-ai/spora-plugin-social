@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
+use Spora\Plugins\Social\Http\SocialPostResource;
 use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Services\PrincipalContext;
 use Spora\Tools\Attributes\Tool;
@@ -25,7 +26,7 @@ use Throwable;
  */
 #[Tool(
     name: 'social_calendar',
-    description: 'See what is going out and when. Returns the posts of a month with the day each one is due or went out, so you do not schedule the same thing twice. For a precise window use social_post with action=list and the from/to parameters. At most 100 posts at a time; the result carries the total, so a longer month is known.',
+    description: 'See what is going out and when. Returns the posts of a month with the day each one is due or went out and the channels it goes to — the network and the route to it — so you do not schedule the same thing twice. For a precise window use social_post with action=list and the from/to parameters. At most 100 posts at a time; the result carries the total, so a longer month is known.',
     displayName: 'Social Calendar',
     category: 'social',
     icon: 'globe',
@@ -33,7 +34,7 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'list_month',
-    description: 'The posts of a month with their dates — what is scheduled and what already went out. Defaults to the current month; pass the next month as well to see what crosses the month boundary.',
+    description: 'The posts of a month with their dates and the channels they go to — what is scheduled and what already went out. Defaults to the current month; pass the next month as well to see what crosses the month boundary.',
     operatorDescription: 'List the posts of a month',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
@@ -91,6 +92,7 @@ final class SocialCalendarTool extends AbstractSocialTool
                 'status'        => (string) $post->status,
                 'scheduled_for' => $post->scheduled_for?->toIso8601String(),
                 'published_at'  => $post->published_at?->toIso8601String(),
+                'channels'      => SocialPostResource::channelsOf($post),
             ];
         }
 
