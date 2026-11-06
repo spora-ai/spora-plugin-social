@@ -182,7 +182,7 @@ final class ZernioClient
                 $responseHeaders[strtolower($name)] = implode(', ', $values);
             }
         } catch (TransportExceptionInterface $e) {
-            throw new ZernioTransportException('Zernio did not answer: ' . $e->getMessage(), 0, $e);
+            throw new ZernioTransportException(sprintf('Zernio did not answer: %s', $e->getMessage()), 0, $e);
         }
 
         $decoded = json_decode($raw, true);

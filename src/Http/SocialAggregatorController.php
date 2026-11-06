@@ -89,8 +89,11 @@ final class SocialAggregatorController extends AbstractSocialController
                 'label'      => $provider->label(),
                 'configured' => false,
                 'deleted'    => true,
-                'message'    => 'The ' . $provider->label() . ' key is forgotten. The accounts stay in '
-                    . $provider->label() . ' — remove them there if you do not want them published to any more.',
+                'message'    => sprintf(
+                    'The %s key is forgotten. The accounts stay in %s — remove them there if you do not want them published to any more.',
+                    $provider->label(),
+                    $provider->label(),
+                ),
             ]);
         });
     }
@@ -111,7 +114,7 @@ final class SocialAggregatorController extends AbstractSocialController
             $connection = $this->aggregators->connection($principalId, $provider);
 
             if ($connection === null) {
-                throw SocialException::conflict('There is no ' . $provider->label() . ' connection to sync.');
+                throw SocialException::conflict(sprintf('There is no %s connection to sync.', $provider->label()));
             }
 
             $result = $this->sync->read($connection);
@@ -135,7 +138,7 @@ final class SocialAggregatorController extends AbstractSocialController
         $provider = AggregatorProvider::tryFromName($slug);
 
         if ($provider === null) {
-            throw SocialException::notFound('There is no aggregator called ' . $slug . '.');
+            throw SocialException::notFound(sprintf('There is no aggregator called %s.', $slug));
         }
 
         return $provider;

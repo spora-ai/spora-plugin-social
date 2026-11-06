@@ -212,8 +212,7 @@ final class PlatformFit
                 maxCharacters: 280,
                 visibleChars: 280,
                 media: 'JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB.',
-                countingNote: 'X counts a URL as 23 characters whatever its length, and an emoji as 2, '
-                    . 'so the number of characters in the body is not the number X counts.',
+                countingNote: 'X counts a URL as 23 characters whatever its length, and an emoji as 2, so the number of characters in the body is not the number X counts.',
             ),
             'zernio:instagram' => self::row(
                 label: 'Instagram',
