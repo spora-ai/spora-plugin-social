@@ -216,6 +216,33 @@ it('does not publish a target that is still publishing under its own key', funct
     expect($posts)->toHaveCount(1);
 });
 
+it('does not give two accounts of one network the same result', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('create-post-one-of-two-accounts'), 'status' => 201],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $first = zernioAccount($principalId, 'bluesky', 'id_002');
+    $second = zernioAccount($principalId, 'bluesky', 'id_004');
+
+    $post = aPostTo($principalId, [$first, $second]);
+
+    $post = $publisher->publish((int) $post->id, $principalId);
+
+    $targets = $post->targets()->orderBy('id')->get();
+
+    // The answer names one Bluesky entry and no account, so it does not
+    // say which of the two accounts it is about. Neither target may take
+    // it: a wrong url and a wrong status are worse than none.
+    expect($targets[0]->status)->toBe(SocialPostTarget::STATUS_PUBLISHING)
+        ->and($targets[1]->status)->toBe(SocialPostTarget::STATUS_PUBLISHING)
+        ->and($targets[0]->external_url)->toBeNull()
+        ->and($targets[1]->external_url)->toBeNull();
+});
+
 it('fails a target whose channel the plugin has no rules for, and publishes the others', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post'), 'status' => 201],

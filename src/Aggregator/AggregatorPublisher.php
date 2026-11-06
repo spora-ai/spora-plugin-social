@@ -226,7 +226,7 @@ final class AggregatorPublisher
         $outcomes = [];
 
         foreach ($targets as $index => $target) {
-            $entry = $this->entryFor($entries, $target, $index, count($targets));
+            $entry = $this->entryFor($entries, $target, $index, $targets);
             $result = $this->resultFor($results, $target);
 
             $status = (string) ($entry['status'] ?? $result['status'] ?? '');
@@ -260,10 +260,13 @@ final class AggregatorPublisher
     }
 
     /**
+     * The entry that answers for the target.
+     *
      * @param  list<array<string, mixed>> $entries
+     * @param  list<SocialPostTarget>     $targets
      * @return array<string, mixed>
      */
-    private function entryFor(array $entries, SocialPostTarget $target, int $index, int $targetCount): array
+    private function entryFor(array $entries, SocialPostTarget $target, int $index, array $targets): array
     {
         $accountId = (string) ($target->account->external_id ?? '');
 
@@ -275,7 +278,7 @@ final class AggregatorPublisher
 
         // The entries mirror the request entries, so the order answers
         // when no account id does.
-        if (count($entries) === $targetCount) {
+        if (count($entries) === count($targets)) {
             $entry = $entries[$index] ?? null;
 
             if ($entry !== null) {
@@ -283,13 +286,37 @@ final class AggregatorPublisher
             }
         }
 
-        foreach ($entries as $entry) {
-            if ((string) ($entry['platform'] ?? '') === (string) $target->platform) {
-                return $entry;
+        // The network alone answers only when it is unambiguous. Two
+        // accounts of one network would both take the first entry of
+        // that network, and a wrong url and a wrong status are worse
+        // than none at all.
+        if ($this->onNetwork($target, $targets) === 1) {
+            foreach ($entries as $entry) {
+                if ((string) ($entry['platform'] ?? '') === (string) $target->platform) {
+                    return $entry;
+                }
             }
         }
 
         return [];
+    }
+
+    /**
+     * How many targets of the group go out on the target's network.
+     *
+     * @param list<SocialPostTarget> $targets
+     */
+    private function onNetwork(SocialPostTarget $target, array $targets): int
+    {
+        $count = 0;
+
+        foreach ($targets as $other) {
+            if ((string) $other->platform === (string) $target->platform) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     /**
