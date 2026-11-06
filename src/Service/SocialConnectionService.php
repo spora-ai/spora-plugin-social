@@ -7,6 +7,7 @@ namespace Spora\Plugins\Social\Service;
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialConnection;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\OAuthAccountIdentity;
@@ -311,6 +312,7 @@ final class SocialConnectionService
     {
         $account = SocialAccount::query()
             ->where('connection_id', $connection->id)
+            ->where('via', SocialChannel::DIRECT)
             ->where('platform', $identity->platform->value)
             ->where('external_id', $identity->externalId)
             ->first();
@@ -320,6 +322,10 @@ final class SocialConnectionService
             $account->principal_id = $connection->principal_id;
             $account->connection_id = $connection->id;
             $account->platform = $identity->platform->value;
+            // A native account is on the plugin's own route; the account
+            // it would share a network with on another route is another
+            // account, with another token.
+            $account->via = SocialChannel::DIRECT;
             $account->external_id = $identity->externalId;
         }
 

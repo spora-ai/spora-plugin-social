@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
@@ -266,7 +267,7 @@ final class SocialPublisher
                 throw SocialException::validation('This target has an unknown platform.');
             }
 
-            $body = $this->bodyFor($post, $platform);
+            $body = $this->bodyFor($post, $target->channel());
 
             // The text is judged against the platform it is going to, with
             // that platform's own body: one post aimed at Instagram and
@@ -430,14 +431,14 @@ final class SocialPublisher
         );
     }
 
-    private function bodyFor(SocialPost $post, SocialPlatform $platform): string
+    private function bodyFor(SocialPost $post, SocialChannel $channel): string
     {
         $bodies = $post->platform_bodies;
 
         $body = (string) $post->body;
 
         if (is_array($bodies)) {
-            $specific = $bodies[$platform->value] ?? null;
+            $specific = $bodies[$channel->key()] ?? null;
             if (is_string($specific) && $specific !== '') {
                 $body = $specific;
             }

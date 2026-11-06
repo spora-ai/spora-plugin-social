@@ -22,7 +22,7 @@ it('has no hashtags when the post names none', function () {
         ->and((new PostInput(['hashtags' => [42]]))->hashtags())->toBeNull();
 });
 
-it('names the platform a body belongs to, whatever the caller spelled it', function () {
+it('names the channel a body belongs to, whatever the caller spelled it', function () {
     $fields = new PostInput([
         'platform_bodies' => [
             'LinkedIn' => 'The LinkedIn copy',
@@ -33,8 +33,25 @@ it('names the platform a body belongs to, whatever the caller spelled it', funct
     ]);
 
     expect($fields->platformBodies())->toBe([
-        'linkedin' => 'The LinkedIn copy',
-        'facebook' => 'The Facebook copy',
+        'direct:linkedin' => 'The LinkedIn copy',
+        'direct:facebook' => 'The Facebook copy',
+    ]);
+});
+
+it('keeps a body that names the route itself', function () {
+    $fields = new PostInput([
+        'platform_bodies' => [
+            'direct:linkedin' => 'The LinkedIn copy',
+            'zernio:bluesky' => 'The Bluesky copy',
+            'Zernio:BlueSky' => 'The same copy again',
+        ],
+    ]);
+
+    // The same channel twice is one body: the copy of the channel that
+    // reaches the network through the aggregator.
+    expect($fields->platformBodies())->toBe([
+        'direct:linkedin' => 'The LinkedIn copy',
+        'zernio:bluesky' => 'The same copy again',
     ]);
 });
 

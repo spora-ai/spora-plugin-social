@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Service;
 
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 
@@ -39,12 +40,12 @@ final class PostInput
     }
 
     /**
-     * A platform's own body, for the platforms whose copy differs.
+     * A channel's own body, for the channels whose copy differs.
      *
-     * The key is normalised through the platform's own name, because the
-     * publisher looks a body up by that name: a key spelled `LinkedIn`
-     * would be stored and then never found, and the shared body would go
-     * out instead of the one the caller wrote.
+     * The key is normalised into the channel's key, because the
+     * publisher looks a body up by that: a key spelled `LinkedIn` would
+     * be stored and then never found, and the shared body would go out
+     * instead of the one the caller wrote.
      *
      * @return array<string, string>|null
      */
@@ -56,20 +57,42 @@ final class PostInput
         }
 
         $bodies = [];
-        foreach ($raw as $platform => $body) {
-            if (!is_string($platform) || !is_string($body)) {
+        foreach ($raw as $key => $body) {
+            if (!is_string($key) || !is_string($body)) {
                 continue;
             }
 
-            $name = SocialPlatform::tryFromName($platform);
-            if ($name === null) {
+            $channel = $this->channelOf($key);
+            if ($channel === null) {
                 continue;
             }
 
-            $bodies[$name->value] = $body;
+            $bodies[$channel->key()] = $body;
         }
 
         return $bodies !== [] ? $bodies : null;
+    }
+
+    /**
+     * The channel a body key names.
+     *
+     * A bare network name is the plugin's own route to it — the model
+     * writes "linkedin" and means "direct:linkedin" — and a key names
+     * the route and the network both.
+     *
+     * A bare name of a network the plugin does not publish to natively
+     * names no channel: there is no direct route to it, and a body
+     * nobody would publish is a body the operator did not mean.
+     */
+    private function channelOf(string $key): ?SocialChannel
+    {
+        if (str_contains($key, ':')) {
+            return SocialChannel::fromKey($key);
+        }
+
+        $network = SocialPlatform::tryFromName($key);
+
+        return $network === null ? null : SocialChannel::direct($network->value);
     }
 
     /**

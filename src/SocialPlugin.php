@@ -210,7 +210,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
     public function schemaVersion(): int
     {
-        return 8;
+        return 9;
     }
 
     /**

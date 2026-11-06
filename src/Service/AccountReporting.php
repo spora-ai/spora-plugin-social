@@ -39,7 +39,7 @@ final class AccountReporting
     public const INSTAGRAM_INSIGHTS_NOTE = 'This connection\'s token does not carry the instagram_manage_insights permission, so the account\'s media insights cannot be read.';
 
     /**
-     * The scope that reads an account's numbers, per platform and kind.
+     * The scope that reads an account's numbers, per network and kind.
      *
      * @var array<string, string>
      */
@@ -82,7 +82,7 @@ final class AccountReporting
      */
     private static function noteFor(SocialAccount $account, array $grantedScopes): ?string
     {
-        $scope = self::SCOPES[$account->platform . '|' . $account->kind] ?? null;
+        $scope = self::SCOPES[$account->channel()->network . '|' . $account->kind] ?? null;
 
         // The scopes are only known when the platform reported them. An
         // empty list means "not known", not "not granted" — a Meta
@@ -102,16 +102,18 @@ final class AccountReporting
      */
     private static function platformNote(SocialAccount $account): ?string
     {
+        $network = $account->channel()->network;
+
         $isMember = $account->kind === SocialAccountKind::Member->value;
 
         // A personal Instagram account has no insights at all: no scope
         // gives it any.
-        if ($isMember && $account->platform === SocialPlatform::Instagram->value) {
+        if ($isMember && $network === SocialPlatform::Instagram->value) {
             return self::PERSONAL_INSTAGRAM_NOTE;
         }
 
         // A LinkedIn member post reports reactions and nothing else.
-        if ($isMember && $account->platform === SocialPlatform::LinkedIn->value) {
+        if ($isMember && $network === SocialPlatform::LinkedIn->value) {
             return self::MEMBER_NOTE;
         }
 

@@ -577,7 +577,7 @@ it('accepts a post that only has a body for one platform', function () {
         'account_ids'     => [$account->id],
     ]);
 
-    expect($post->platform_bodies)->toBe(['linkedin' => 'Only LinkedIn']);
+    expect($post->platform_bodies)->toBe(['direct:linkedin' => 'Only LinkedIn']);
 });
 
 it('accepts a post that carries media and no message', function () {
