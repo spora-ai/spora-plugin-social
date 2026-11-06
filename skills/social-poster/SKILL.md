@@ -123,7 +123,7 @@ publishes to them directly.
 **Everything else goes through an aggregator.** The operator adds Zernio on
 the Accounts screen, pastes the API key, and Zernio's own accounts become
 publishable targets: Bluesky, Threads, TikTok, YouTube, Pinterest, Reddit,
-X, Google Business, Snapchat. `social_connections` with action `list` shows
+X, Google Business, Telegram. `social_connections` with action `list` shows
 them like any other account, and `social_connections` with action `sync`
 reads the accounts Zernio holds again. The operator manages them in Zernio's
 own dashboard — the plugin never creates, renames or disconnects one.
@@ -145,7 +145,7 @@ route; this one is Zernio's:
 | Bluesky | optional | JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB | up to 300 characters |
 | Threads | optional | JPEG or PNG up to 8 MB, or an MP4 video up to 1 GB | up to 500 characters |
 | Google Business | optional | JPEG or PNG up to 5 MB, no video | up to 1,500 characters |
-| Snapchat | **required** | JPEG or PNG up to 20 MB, or an MP4 video up to 500 MB | up to 160 characters |
+| Telegram | optional | JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB | up to 4,096 characters |
 
 So a LinkedIn post through Zernio may carry several images and a video, where
 the plugin's own LinkedIn route carries one image and no video. **X counts

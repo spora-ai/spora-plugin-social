@@ -45,6 +45,13 @@ use Spora\Plugins\Social\Model\SocialChannel;
  * the copy is behind until someone reads the changelog. A stale row
  * produces a wrong warning and not a failed post — the publish-time
  * refusal is Zernio's own error, which the target carries.
+ *
+ * **The aggregator's rows are also the set of networks a post can
+ * target.** Zernio's own specification names them — `PlatformTarget.platform`
+ * in `https://zernio.com/openapi.json` — and the table carries a row for
+ * each of them and for nothing else. An account may exist on a network
+ * outside that set, and one without a row is a network the plugin does
+ * not offer.
  */
 final class PlatformFit
 {
@@ -376,16 +383,24 @@ final class PlatformFit
                 'size_remedy'    => self::REMEDY_COMPRESS,
                 'counting_note'  => null,
             ],
-            'zernio:snapchat' => [
-                'label'          => 'Snapchat',
-                'media_required' => true,
+            'zernio:telegram' => [
+                'label'          => 'Telegram',
+                'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
                 'fetches_media'  => true,
-                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, self::MIME_MP4],
-                'max_bytes'      => 500 * self::MEGABYTE,
-                'max_characters' => 160,
-                'visible_chars'  => 160,
-                'media'          => 'JPEG or PNG up to 20 MB, or an MP4 video up to 500 MB.',
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_GIF,
+                    self::MIME_WEBP,
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                ],
+                'max_bytes'      => 50 * self::MEGABYTE,
+                'max_characters' => 4096,
+                'visible_chars'  => 4096,
+                'media'          => 'JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB. '
+                    . 'Up to 10 images or videos in an album.',
                 'media_remedy'   => self::REMEDY_CONVERT_JPEG,
                 'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
                 'size_remedy'    => self::REMEDY_COMPRESS,

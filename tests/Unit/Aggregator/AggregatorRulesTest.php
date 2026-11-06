@@ -13,14 +13,95 @@ use Spora\Plugins\Social\Service\PlatformFit;
  * **Zernio's** limits, not the plugin's, and they differ — so a row of
  * its own, not an alias of the native one.
  */
-it('has a row for every network the aggregator reaches', function () {
+
+/**
+ * The platforms a post can target, as Zernio's own specification names
+ * them.
+ *
+ * `PlatformTarget.platform` in `https://zernio.com/openapi.json` lists
+ * them, and that list is the authority: the table carries a row for each
+ * of them and for nothing else, so a network Zernio adds is one the
+ * plugin can publish to and one Zernio drops is one it cannot.
+ *
+ * @return list<string>
+ */
+function zernioPublishablePlatforms(): array
+{
+    $platforms = [
+        'twitter',
+        'threads',
+        'instagram',
+        'youtube',
+        'facebook',
+        'linkedin',
+        'pinterest',
+        'reddit',
+        'tiktok',
+        'bluesky',
+        'googlebusiness',
+        'telegram',
+    ];
+
+    sort($platforms);
+
+    return $platforms;
+}
+
+/**
+ * The aggregator's rows, by the network they are for.
+ *
+ * @return list<string>
+ */
+function zernioRuleNetworks(): array
+{
     $networks = array_map(
         static fn(SocialChannel $channel): string => $channel->network,
         array_filter(PlatformFit::channels(), static fn(SocialChannel $channel): bool => !$channel->isDirect()),
     );
 
-    expect($networks)->toContain('bluesky', 'threads', 'tiktok', 'youtube', 'pinterest', 'reddit', 'twitter')
-        ->and($networks)->toContain('instagram', 'facebook', 'linkedin', 'googlebusiness', 'snapchat');
+    sort($networks);
+
+    return $networks;
+}
+
+it('has a row for every platform Zernio can publish to, and for no other', function () {
+    expect(zernioRuleNetworks())->toBe(zernioPublishablePlatforms());
+});
+
+it('offers no network a post cannot target', function () {
+    $rules = PlatformFit::rules();
+
+    // An account may exist on a network a post cannot name — Snapchat is
+    // a closed beta, Discord and Slack are messaging networks and the
+    // ads platforms are no post at all — and a row for one would offer a
+    // network the publish can only fail on.
+    foreach (['snapchat', 'discord', 'slack', 'whatsapp', 'shopify', 'wordpress', 'metaads', 'googleads'] as $network) {
+        expect($rules)->not->toHaveKey('zernio:' . $network);
+    }
+});
+
+it("carries Telegram's own limits", function () {
+    $telegram = PlatformFit::rule(SocialChannel::tryFrom('zernio', 'telegram'));
+
+    // A Telegram post is a message: 4,096 characters, an image up to
+    // 10 MB, a video up to 50 MB and ten items in an album.
+    expect($telegram['label'])->toBe('Telegram')
+        ->and($telegram['max_characters'])->toBe(4096)
+        ->and($telegram['max_bytes'])->toBe(50 * 1024 * 1024)
+        ->and($telegram['media_required'])->toBeFalse()
+        ->and($telegram['mime_types'])->toContain('image/webp')
+        ->and($telegram['mime_types'])->toContain('video/quicktime')
+        ->and($telegram['media'])->toContain('10 MB')
+        ->and($telegram['media'])->toContain('50 MB');
+});
+
+it('names the networks the aggregator reaches in the skill', function () {
+    $prose = socialSkill()['body'];
+
+    // The skill is the agent's only description of what the plugin can
+    // reach, and a network it names is a network the agent will try.
+    expect($prose)->toContain('Telegram')
+        ->and($prose)->not->toContain('Snapchat');
 });
 
 it('does not alias the aggregator linkedin to the native one', function () {
@@ -81,4 +162,14 @@ it('refuses an over-limit body on a network whose count it can compute', functio
     expect($fit['fits'])->toBeFalse()
         ->and($fit['reasons'][0])->toContain('Over the limit')
         ->and($fit['reasons'][0])->toContain('Bluesky');
+});
+
+it('refuses an over-limit body on Telegram', function () {
+    // 4,096 characters is the message limit, and the row carries
+    // Telegram's own number rather than another network's.
+    $fit = PlatformFit::checkBody(SocialChannel::tryFrom('zernio', 'telegram'), str_repeat('a', 4097));
+
+    expect($fit['fits'])->toBeFalse()
+        ->and($fit['reasons'][0])->toContain('Over the limit')
+        ->and($fit['reasons'][0])->toContain('Telegram');
 });
