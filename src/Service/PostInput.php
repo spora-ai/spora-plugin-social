@@ -7,7 +7,6 @@ namespace Spora\Plugins\Social\Service;
 use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialChannel;
-use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 
 /**
@@ -63,8 +62,9 @@ final class PostInput
             }
 
             $channel = $this->channelOf($key);
+
             if ($channel === null) {
-                continue;
+                throw SocialException::validation($this->unknownBodyKey($key));
             }
 
             $bodies[$channel->key()] = $body;
@@ -76,13 +76,14 @@ final class PostInput
     /**
      * The channel a body key names.
      *
-     * A bare network name is the plugin's own route to it — the model
-     * writes "linkedin" and means "direct:linkedin" — and a key names
-     * the route and the network both.
+     * A bare network name is the route the plugin has for it: its own
+     * route when the plugin reaches the network itself, and the
+     * aggregator's when the network is only reached that way. A key that
+     * names a route names the channel both ways.
      *
-     * A bare name of a network the plugin does not publish to natively
-     * names no channel: there is no direct route to it, and a body
-     * nobody would publish is a body the operator did not mean.
+     * A name that is neither names no channel: there is no route to
+     * send it to, and a body nobody publishes is a body the operator
+     * did not mean.
      */
     private function channelOf(string $key): ?SocialChannel
     {
@@ -90,9 +91,41 @@ final class PostInput
             return SocialChannel::fromKey($key);
         }
 
-        $network = SocialPlatform::tryFromName($key);
+        return $this->channelForNetwork($key);
+    }
 
-        return $network === null ? null : SocialChannel::direct($network->value);
+    /**
+     * The channel a bare network name is.
+     */
+    private function channelForNetwork(string $network): ?SocialChannel
+    {
+        $network = strtolower(trim($network));
+
+        $channels = array_values(array_filter(
+            PlatformFit::channels(),
+            static fn(SocialChannel $channel): bool => $channel->network === $network,
+        ));
+
+        // The plugin's own route wins: a bare name means the plugin's
+        // own route whenever the plugin has one, and the aggregator has
+        // the other one for that network.
+        foreach ($channels as $channel) {
+            if ($channel->isDirect()) {
+                return $channel;
+            }
+        }
+
+        return $channels[0] ?? null;
+    }
+
+    /**
+     * The refusal for a body key that names no channel.
+     */
+    private function unknownBodyKey(string $key): string
+    {
+        return 'The body key `' . $key . '` names no network the plugin publishes to. '
+            . 'Use the channel key — `direct:linkedin`, `zernio:bluesky` — '
+            . 'or the bare network name — `linkedin`, `bluesky`.';
     }
 
     /**

@@ -548,7 +548,7 @@ it('gives a platform the body written for it, whatever the key was spelled', fun
     expect($captured['commentary'])->toBe('The LinkedIn copy');
 });
 
-it('drops a body written for a platform the plugin does not publish to', function () {
+it('keeps a body written for a network the plugin reaches through the aggregator', function () {
     $captured = null;
 
     $publisher = postPublisher([
@@ -566,14 +566,32 @@ it('drops a body written for a platform the plugin does not publish to', functio
 
     $post = $service->create($principalId, [
         'body'           => 'The general copy',
-        'platform_bodies' => ['twitter' => 'Not a platform'],
+        'platform_bodies' => ['twitter' => 'The Twitter copy'],
         'account_ids'    => [$linkedIn->id],
     ]);
 
     $publisher->publish((int) $post->id, $principalId);
 
-    expect($post->platform_bodies)->toBeNull()
+    // A bare name is the route the plugin has for the network, and the
+    // plugin reaches Twitter through the aggregator.
+    expect($post->platform_bodies)->toBe(['zernio:twitter' => 'The Twitter copy'])
         ->and($captured['commentary'])->toBe('The general copy');
+});
+
+it('refuses a body written for a network the plugin does not publish to', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $linkedIn = publishableAccount($principalId, 'linkedin', 'organization');
+
+    // A body nobody would publish is a body the operator did not mean,
+    // and the shared body would go out in its place.
+    expect(fn() => $service->create($principalId, [
+        'body'           => 'The general copy',
+        'platform_bodies' => ['myspace' => 'Not a network'],
+        'account_ids'    => [$linkedIn->id],
+    ]))->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'names no network the plugin publishes to');
 });
 
 it('refuses a post that says nothing and carries nothing', function () {

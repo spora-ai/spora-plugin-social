@@ -119,6 +119,39 @@ it('maps each result of one network to its own row', function () {
         ->and($targets[1]->status)->toBe(SocialPostTarget::STATUS_PUBLISHED);
 });
 
+it('sends the body written for the network to that network', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('create-post'), 'status' => 201],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = zernioAccount($principalId, 'bluesky', 'id_002');
+
+    $post = postService()->create($principalId, [
+        'body'            => 'We shipped…',
+        'account_ids'     => [$account->id],
+        'platform_bodies' => ['bluesky' => 'The Bluesky copy'],
+    ]);
+
+    $publisher->publish((int) $post->id, $principalId);
+
+    $posts = array_values(array_filter(
+        zernioRequests($recorder),
+        static fn(array $request): bool => str_ends_with($request['url'], '/posts'),
+    ));
+
+    $body = (array) json_decode((string) $posts[0]['options']['body'], true);
+
+    // The copy written for the network goes out with it — the shared
+    // body would have gone out instead, and the operator would have
+    // read the wrong words on the network.
+    expect($body['platforms'][0]['customContent'])->toBe('The Bluesky copy')
+        ->and($body['content'])->toBe('We shipped…');
+});
+
 it('writes the key to the target rows before the call', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post'), 'status' => 201],

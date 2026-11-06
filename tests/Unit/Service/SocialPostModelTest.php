@@ -27,14 +27,18 @@ it('names the channel a body belongs to, whatever the caller spelled it', functi
         'platform_bodies' => [
             'LinkedIn' => 'The LinkedIn copy',
             ' FACEBOOK ' => 'The Facebook copy',
-            'twitter' => 'Not a platform',
+            'twitter' => 'The Twitter copy',
             'instagram' => 42,
         ],
     ]);
 
+    // A bare name is the route the plugin has for the network: its own
+    // route for LinkedIn and Facebook, and the aggregator's for a
+    // network only the aggregator reaches.
     expect($fields->platformBodies())->toBe([
         'direct:linkedin' => 'The LinkedIn copy',
         'direct:facebook' => 'The Facebook copy',
+        'zernio:twitter' => 'The Twitter copy',
     ]);
 });
 
