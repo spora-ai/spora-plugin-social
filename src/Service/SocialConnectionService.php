@@ -223,7 +223,6 @@ final class SocialConnectionService
     public function health(int $connectionId, int $principalId): array
     {
         $connection = $this->find($connectionId, $principalId);
-        $checkedAt = gmdate('c');
 
         // An aggregator's connection has no OAuth grant and no accounts to
         // resolve: a cheap authenticated call answers whether the key is
@@ -232,6 +231,18 @@ final class SocialConnectionService
         if (AggregatorService::providerOf($connection) !== null) {
             return $this->aggregators->health($connection);
         }
+
+        return $this->platformHealth($connection);
+    }
+
+    /**
+     * The platform's own answer about the connection's token.
+     *
+     * @return array{status: string, message: string, checked_at: string}
+     */
+    private function platformHealth(SocialConnection $connection): array
+    {
+        $checkedAt = gmdate('c');
 
         try {
             $token = $this->tokens->accessToken($connection);

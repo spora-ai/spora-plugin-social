@@ -207,11 +207,9 @@ final class AggregatorService
             return null;
         }
 
-        if ($response->isSuccessful()) {
-            return null;
-        }
-
-        if ($response->status === 401 || $response->status === 403) {
+        // Only a refusal of the key itself is a refusal: an outage is
+        // not the operator's fault.
+        if (!$response->isSuccessful() && ($response->status === 401 || $response->status === 403)) {
             return 'Zernio refused that API key: ' . ($response->errorMessage() ?? 'the key was not accepted.');
         }
 

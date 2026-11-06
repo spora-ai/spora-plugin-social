@@ -120,20 +120,16 @@ final class AggregatorPublisher
             return 'This target has no published id to delete.';
         }
 
-        $key = $this->aggregators->apiKey($account->connection);
-
         $response = $this->client->unpublish(
-            $key,
+            $this->aggregators->apiKey($account->connection),
             (string) $target->external_id,
             (string) $target->platform,
             (string) $account->external_id,
         );
 
-        if ($response->isSuccessful()) {
-            return null;
-        }
-
-        return $response->errorMessage() ?? 'The aggregator refused to delete the post.';
+        return $response->isSuccessful()
+            ? null
+            : ($response->errorMessage() ?? 'The aggregator refused to delete the post.');
     }
 
     /**
@@ -352,35 +348,47 @@ final class AggregatorPublisher
     {
         $accountId = (string) ($target->account->external_id ?? '');
 
-        foreach ($entries as $entry) {
-            if ($accountId !== '' && (string) ($entry['accountId'] ?? '') === $accountId) {
-                return $entry;
-            }
-        }
+        $byAccount = $accountId === ''
+            ? null
+            : $this->firstMatch(
+                $entries,
+                static fn(array $entry): bool => (string) ($entry['accountId'] ?? '') === $accountId,
+            );
 
         // The entries mirror the request entries, so the order answers
         // when no account id does.
-        if (count($entries) === count($targets)) {
-            $entry = $entries[$index] ?? null;
-
-            if ($entry !== null) {
-                return $entry;
-            }
-        }
+        $byOrder = count($entries) === count($targets) ? ($entries[$index] ?? null) : null;
 
         // The network alone answers only when it is unambiguous. Two
         // accounts of one network would both take the first entry of
         // that network, and a wrong url and a wrong status are worse
         // than none at all.
-        if ($this->onNetwork($target, $targets) === 1) {
-            foreach ($entries as $entry) {
-                if ((string) ($entry['platform'] ?? '') === (string) $target->platform) {
-                    return $entry;
-                }
+        $byNetwork = $this->onNetwork($target, $targets) === 1
+            ? $this->firstMatch(
+                $entries,
+                static fn(array $entry): bool => (string) ($entry['platform'] ?? '') === (string) $target->platform,
+            )
+            : null;
+
+        return $byAccount ?? $byOrder ?? $byNetwork ?? [];
+    }
+
+    /**
+     * The first entry that matches.
+     *
+     * @param  list<array<string, mixed>>            $entries
+     * @param  callable(array<string, mixed>): bool  $matches
+     * @return array<string, mixed>|null
+     */
+    private function firstMatch(array $entries, callable $matches): ?array
+    {
+        foreach ($entries as $entry) {
+            if ($matches($entry)) {
+                return $entry;
             }
         }
 
-        return [];
+        return null;
     }
 
     /**
@@ -412,6 +420,32 @@ final class AggregatorPublisher
      */
     private function duplicateOf(ZernioResponse $response, array $targets): ?SocialPostTarget
     {
+        $details = $this->duplicateDetails($response);
+
+        if ($details === null) {
+            return null;
+        }
+
+        foreach ($targets as $target) {
+            if ((string) ($target->account->external_id ?? '') !== $details['accountId']) {
+                continue;
+            }
+
+            if (strtolower((string) $target->platform) === $details['platform']) {
+                return $target;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The account and the platform a duplicate refusal is about.
+     *
+     * @return array{accountId: string, platform: string}|null
+     */
+    private function duplicateDetails(ZernioResponse $response): ?array
+    {
         if ($response->status !== 409) {
             return null;
         }
@@ -425,19 +459,7 @@ final class AggregatorPublisher
             return null;
         }
 
-        foreach ($targets as $target) {
-            if ((string) ($target->account->external_id ?? '') !== $accountId) {
-                continue;
-            }
-
-            if (strtolower((string) $target->platform) !== $platform) {
-                continue;
-            }
-
-            return $target;
-        }
-
-        return null;
+        return ['accountId' => $accountId, 'platform' => $platform];
     }
 
     /**

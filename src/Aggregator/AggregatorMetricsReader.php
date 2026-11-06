@@ -88,26 +88,52 @@ final class AggregatorMetricsReader
     {
         $label = AggregatorProvider::tryFromName($channel->via)?->label() ?? 'the aggregator';
 
-        if ($response->status === 402) {
-            return new MetricSnapshot(platformMetrics: [
-                'note' => sprintf(self::ADDON_NOTE, $label),
-            ]);
-        }
-
+        // Still syncing: the reading is skipped, and the daily job picks
+        // it up tomorrow.
         if ($response->status === 202) {
             return null;
         }
 
+        $note = $this->noteFor($response, $label);
+
+        if ($note !== null) {
+            return new MetricSnapshot(platformMetrics: ['note' => $note]);
+        }
+
+        return $this->readingOf($channel, $account, $response, $label);
+    }
+
+    /**
+     * The note the answer carries, when it is not a reading.
+     *
+     * @return string|null
+     */
+    private function noteFor(ZernioResponse $response, string $label): ?string
+    {
+        if ($response->status === 402) {
+            return sprintf(self::ADDON_NOTE, $label);
+        }
+
         if ($response->status === 424) {
-            return new MetricSnapshot(platformMetrics: ['note' => self::FAILED_NOTE]);
+            return self::FAILED_NOTE;
         }
 
         if (!$response->isSuccessful()) {
-            return new MetricSnapshot(platformMetrics: [
-                'note' => $response->errorMessage() ?? 'The aggregator refused the analytics.',
-            ]);
+            return $response->errorMessage() ?? 'The aggregator refused the analytics.';
         }
 
+        return null;
+    }
+
+    /**
+     * The numbers, as a reading.
+     */
+    private function readingOf(
+        SocialChannel $channel,
+        SocialAccount $account,
+        ZernioResponse $response,
+        string $label,
+    ): MetricSnapshot {
         $body = $response->body;
         $aggregate = is_array($body['analytics'] ?? null) ? $body['analytics'] : [];
 

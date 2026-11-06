@@ -140,10 +140,6 @@ final class AggregatorAccountSync
      * is a failure of the sync: the accounts are still accounts, and the
      * count stays empty with the reason on the account.
      *
-     * The call is made once per account, and the first refusal ends the
-     * round: the add-on is a property of the plan, so every account
-     * would answer the same way.
-     *
      * @param  list<AggregatorAccount> $accounts
      * @param  bool|null               $analyticsAccess what the accounts list said about the add-on
      * @return array{counts: array<string, int>, available: bool}
@@ -176,11 +172,29 @@ final class AggregatorAccountSync
             return ['counts' => $counts, 'available' => true];
         }
 
+        $fetched = $this->fetchFollowerCounts($key, $missing, $counts);
+
+        return $fetched ?? ['counts' => [], 'available' => false];
+    }
+
+    /**
+     * The counts the calls bring.
+     *
+     * The call is made once per account, and the first refusal ends the
+     * round: the add-on is a property of the plan, so every account
+     * would answer the same way.
+     *
+     * @param  list<AggregatorAccount> $missing
+     * @param  array<string, int>        $counts
+     * @return array{counts: array<string, int>, available: bool}|null null when the plan has no add-on
+     */
+    private function fetchFollowerCounts(string $key, array $missing, array $counts): ?array
+    {
         foreach ($missing as $account) {
             $response = $this->client->followerStats($key, ['accountIds' => $account->externalId]);
 
             if ($response->status === 403 || $response->status === 402) {
-                return ['counts' => [], 'available' => false];
+                return null;
             }
 
             if (!$response->isSuccessful()) {

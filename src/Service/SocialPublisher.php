@@ -121,11 +121,9 @@ final class SocialPublisher
 
         $published = $this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHED);
 
-        if ($published > 0) {
-            return $this->publishedStatus($published, $targets->count());
-        }
-
-        return $this->unpublishedStatus($targets);
+        return $published > 0
+            ? $this->publishedStatus($published, $targets->count())
+            : $this->unpublishedStatus($targets);
     }
 
     /**

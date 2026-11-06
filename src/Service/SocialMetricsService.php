@@ -62,10 +62,14 @@ final class SocialMetricsService
 
         // The reading is skipped: the aggregator is still syncing, and
         // the daily job picks it up tomorrow.
-        if ($snapshot === null) {
-            return null;
-        }
+        return $snapshot === null ? null : $this->store($target, $snapshot);
+    }
 
+    /**
+     * The reading, written down as the day's snapshot.
+     */
+    private function store(SocialPostTarget $target, MetricSnapshot $snapshot): SocialPostMetric
+    {
         $date = DateTimeParser::nowUtc()->format('Y-m-d');
 
         $row = SocialPostMetric::query()
@@ -402,8 +406,17 @@ final class SocialMetricsService
             return $note;
         }
 
+        return $this->accountNoteFor($target);
+    }
+
+    /**
+     * The note the account's own kind carries.
+     */
+    private function accountNoteFor(SocialPostTarget $target): ?string
+    {
         $account = $target->account;
-        if ($account === null) {
+
+        if ($account === null || $account->kind !== SocialAccountKind::Member->value) {
             return null;
         }
 
@@ -411,10 +424,6 @@ final class SocialMetricsService
             SocialPlatform::LinkedIn->value => AccountReporting::MEMBER_NOTE,
             SocialPlatform::Instagram->value => AccountReporting::PERSONAL_INSTAGRAM_NOTE,
         ];
-
-        if ($account->kind !== SocialAccountKind::Member->value) {
-            return null;
-        }
 
         return $notes[$target->platform] ?? null;
     }
