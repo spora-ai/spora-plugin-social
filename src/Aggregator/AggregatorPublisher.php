@@ -32,6 +32,11 @@ use Spora\Plugins\Social\Service\PreparedMedia;
  */
 final class AggregatorPublisher
 {
+    /**
+     * The aggregator's refusal, when it does not say more.
+     */
+    private const REFUSED = 'The aggregator refused the post.';
+
     public function __construct(
         private readonly AggregatorService $aggregators,
         private readonly ZernioClient $client,
@@ -226,14 +231,6 @@ final class AggregatorPublisher
      */
     private function outcomes(ZernioResponse $response, array $targets): array
     {
-        $post = is_array($response->body['post'] ?? null) ? $response->body['post'] : [];
-        $entries = is_array($post['platforms'] ?? null) ? array_values($post['platforms']) : [];
-        $results = is_array($response->body['platformResults'] ?? null)
-            ? array_values($response->body['platformResults'])
-            : [];
-
-        $postId = is_string($post['_id'] ?? null) ? $post['_id'] : null;
-
         // A server error and a rate limit are not refusals: the
         // aggregator did not say no, it did not say. The targets stay in
         // `publishing` with their key, and the replay asks again.
@@ -245,22 +242,52 @@ final class AggregatorPublisher
         // targets it names — including the duplicate-content refusal,
         // which the operator is shown as it is.
         if (!$response->isSuccessful()) {
-            $error = $response->errorMessage() ?? 'The aggregator refused the post.';
-
-            // A duplicate names the account it is about: that target
-            // fails, and the rest of the group is not its business.
-            $duplicate = $this->duplicateOf($response, $targets);
-
-            $outcomes = [];
-
-            foreach ($targets as $target) {
-                $outcomes[$target->id] = $duplicate !== null && (int) $target->id !== (int) $duplicate->id
-                    ? AggregatorOutcome::pending(null)
-                    : AggregatorOutcome::failed($error);
-            }
-
-            return $outcomes;
+            return $this->refusedFor($response, $targets);
         }
+
+        return $this->publishedFor($response, $targets);
+    }
+
+    /**
+     * The refusal, mapped onto the targets.
+     *
+     * @param  list<SocialPostTarget> $targets
+     * @return array<int, AggregatorOutcome>
+     */
+    private function refusedFor(ZernioResponse $response, array $targets): array
+    {
+        $error = $response->errorMessage() ?? self::REFUSED;
+
+        // A duplicate names the account it is about: that target fails,
+        // and the rest of the group is not its business.
+        $duplicate = $this->duplicateOf($response, $targets);
+
+        $outcomes = [];
+
+        foreach ($targets as $target) {
+            $outcomes[$target->id] = $duplicate !== null && (int) $target->id !== (int) $duplicate->id
+                ? AggregatorOutcome::pending(null)
+                : AggregatorOutcome::failed($error);
+        }
+
+        return $outcomes;
+    }
+
+    /**
+     * The publish, mapped onto the targets.
+     *
+     * @param  list<SocialPostTarget> $targets
+     * @return array<int, AggregatorOutcome>
+     */
+    private function publishedFor(ZernioResponse $response, array $targets): array
+    {
+        $post = is_array($response->body['post'] ?? null) ? $response->body['post'] : [];
+        $entries = is_array($post['platforms'] ?? null) ? array_values($post['platforms']) : [];
+        $results = is_array($response->body['platformResults'] ?? null)
+            ? array_values($response->body['platformResults'])
+            : [];
+
+        $postId = is_string($post['_id'] ?? null) ? $post['_id'] : null;
 
         $outcomes = [];
 
@@ -268,45 +295,50 @@ final class AggregatorPublisher
             $entry = $this->entryFor($entries, $target, $index, $targets);
             $result = $this->resultFor($results, $target);
 
-            $status = (string) ($entry['status'] ?? $result['status'] ?? '');
-            $error = $entry['errorMessage'] ?? $result['error'] ?? null;
-
-            if ($status === 'published') {
-                $outcomes[$target->id] = AggregatorOutcome::published(
-                    $postId,
-                    is_string($entry['platformPostUrl'] ?? null) ? $entry['platformPostUrl'] : null,
-                );
-
-                continue;
-            }
-
-            if ($status === 'failed') {
-                $outcomes[$target->id] = AggregatorOutcome::failed(
-                    is_string($error) && $error !== '' ? $error : 'The aggregator refused the post.',
-                );
-
-                continue;
-            }
-
-            // A cancelled target is not pending: the aggregator has
-            // taken it off the platform and will not come back to it, so
-            // a pending target would be replayed every cycle.
-            if ($status === 'cancelled') {
-                $outcomes[$target->id] = AggregatorOutcome::failed(
-                    is_string($error) && $error !== '' ? $error : 'The aggregator cancelled the post.',
-                );
-
-                continue;
-            }
-
-            // pending, processing, uploading: the aggregator is still
-            // working on it and retries by itself.
-            $outcomes[$target->id] = AggregatorOutcome::pending(
-                is_string($error) && $error !== '' ? $error : null,
-            );
+            $outcomes[$target->id] = $this->outcomeFor($entry, $result, $postId);
         }
 
         return $outcomes;
+    }
+
+    /**
+     * What one target's answer says.
+     *
+     * @param  array<string, mixed> $entry
+     * @param  array<string, mixed> $result
+     */
+    private function outcomeFor(array $entry, array $result, ?string $postId): AggregatorOutcome
+    {
+        $status = (string) ($entry['status'] ?? $result['status'] ?? '');
+        $error = $entry['errorMessage'] ?? $result['error'] ?? null;
+
+        if ($status === 'published') {
+            return AggregatorOutcome::published(
+                $postId,
+                is_string($entry['platformPostUrl'] ?? null) ? $entry['platformPostUrl'] : null,
+            );
+        }
+
+        if ($status === 'failed') {
+            return AggregatorOutcome::failed(
+                is_string($error) && $error !== '' ? $error : self::REFUSED,
+            );
+        }
+
+        // A cancelled target is not pending: the aggregator has taken it
+        // off the platform and will not come back to it, so a pending
+        // target would be replayed every cycle.
+        if ($status === 'cancelled') {
+            return AggregatorOutcome::failed(
+                is_string($error) && $error !== '' ? $error : 'The aggregator cancelled the post.',
+            );
+        }
+
+        // pending, processing, uploading: the aggregator is still working
+        // on it and retries by itself.
+        return AggregatorOutcome::pending(
+            is_string($error) && $error !== '' ? $error : null,
+        );
     }
 
     /**
@@ -481,7 +513,7 @@ final class AggregatorPublisher
             }
 
             $target->status = SocialPostTarget::STATUS_FAILED;
-            $target->error = $outcome->error ?? 'The aggregator refused the post.';
+            $target->error = $outcome->error ?? self::REFUSED;
             $target->save();
             $changed = true;
         }
