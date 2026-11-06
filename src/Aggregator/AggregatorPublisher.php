@@ -59,7 +59,40 @@ final class AggregatorPublisher
 
         $response = $this->client->createPost($key, $body, $idempotencyKey);
 
-        return $this->outcomes($response, $targets);
+        $outcomes = $this->outcomes($response, $targets);
+
+        $duplicate = $this->duplicateOf($response, $targets);
+
+        if ($duplicate === null) {
+            return $outcomes;
+        }
+
+        // The duplicate is one account's: it fails on its own, and the
+        // rest of the group goes out without it. A cross-post that one
+        // account has already published is still a cross-post for the
+        // others.
+        $rest = array_values(array_filter(
+            $targets,
+            static fn(SocialPostTarget $target): bool => (int) $target->id !== (int) $duplicate->id,
+        ));
+
+        if ($rest === []) {
+            return $outcomes;
+        }
+
+        $retryBody = $this->requestBody($post, $rest);
+
+        if ($media !== null) {
+            $retryBody['mediaItems'] = $body['mediaItems'];
+        }
+
+        // The first attempt created no post, so the aggregator takes
+        // this one as a new request under the same key.
+        $retry = $this->client->createPost($key, $retryBody, $idempotencyKey);
+
+        // `array_replace`, not `array_merge`: the outcomes are keyed by
+        // the target's id, and a merge would renumber those keys.
+        return array_replace($outcomes, $this->outcomes($retry, $rest));
     }
 
     /**
@@ -214,10 +247,16 @@ final class AggregatorPublisher
         if (!$response->isSuccessful()) {
             $error = $response->errorMessage() ?? 'The aggregator refused the post.';
 
+            // A duplicate names the account it is about: that target
+            // fails, and the rest of the group is not its business.
+            $duplicate = $this->duplicateOf($response, $targets);
+
             $outcomes = [];
 
             foreach ($targets as $target) {
-                $outcomes[$target->id] = AggregatorOutcome::failed($error);
+                $outcomes[$target->id] = $duplicate !== null && (int) $target->id !== (int) $duplicate->id
+                    ? AggregatorOutcome::pending(null)
+                    : AggregatorOutcome::failed($error);
             }
 
             return $outcomes;
@@ -317,6 +356,45 @@ final class AggregatorPublisher
         }
 
         return $count;
+    }
+
+    /**
+     * The target a duplicate refusal is about.
+     *
+     * The body names the account and the platform the duplicate is on.
+     * Without them the refusal is the whole group's, and the group fails
+     * as it does for every other refusal.
+     *
+     * @param  list<SocialPostTarget> $targets
+     */
+    private function duplicateOf(ZernioResponse $response, array $targets): ?SocialPostTarget
+    {
+        if ($response->status !== 409) {
+            return null;
+        }
+
+        $details = is_array($response->body['details'] ?? null) ? $response->body['details'] : [];
+
+        $accountId = (string) ($details['accountId'] ?? '');
+        $platform = strtolower(trim((string) ($details['platform'] ?? '')));
+
+        if ($accountId === '' || $platform === '') {
+            return null;
+        }
+
+        foreach ($targets as $target) {
+            if ((string) ($target->account->external_id ?? '') !== $accountId) {
+                continue;
+            }
+
+            if (strtolower((string) $target->platform) !== $platform) {
+                continue;
+            }
+
+            return $target;
+        }
+
+        return null;
     }
 
     /**

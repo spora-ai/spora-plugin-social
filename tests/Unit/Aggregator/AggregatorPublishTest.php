@@ -275,6 +275,47 @@ it('fails a target whose channel the plugin has no rules for, and publishes the 
     expect($posts)->toHaveCount(1);
 });
 
+it('fails the duplicate account alone, and publishes the rest of the group', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('duplicate-post'), 'status' => 409],
+        ['body' => zernioFixture('create-post-twitter'), 'status' => 201],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $bluesky = zernioAccount($principalId, 'bluesky', 'id_002');
+    $twitter = zernioAccount($principalId, 'twitter', 'id_003');
+
+    $post = aPostTo($principalId, [$bluesky, $twitter]);
+
+    $post = $publisher->publish((int) $post->id, $principalId);
+
+    $targets = $post->targets()->orderBy('id')->get();
+
+    // The duplicate is the aggregator's own message, on the account it
+    // is about — and the other network is not taken down with it.
+    expect($targets[0]->status)->toBe(SocialPostTarget::STATUS_FAILED)
+        ->and($targets[0]->error)->toContain('already scheduled, publishing')
+        ->and($targets[1]->status)->toBe(SocialPostTarget::STATUS_PUBLISHED)
+        ->and($targets[1]->external_url)->toBe('https://twitter.com/redacted');
+
+    // And the group went out without the duplicate: two calls, the
+    // second one carrying the account that was not a duplicate.
+    $posts = array_values(array_filter(
+        zernioRequests($recorder),
+        static fn(array $request): bool => str_ends_with($request['url'], '/posts'),
+    ));
+
+    expect($posts)->toHaveCount(2);
+
+    $body = (array) json_decode((string) $posts[1]['options']['body'], true);
+
+    expect($body['platforms'])->toHaveCount(1)
+        ->and($body['platforms'][0]['platform'])->toBe('twitter');
+});
+
 it('writes partial on the post and failed on the network that was refused', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post-partial'), 'status' => 207],

@@ -1,0 +1,20 @@
+{
+    "post": {
+        "_id": "id_002",
+        "content": "We shipped…",
+        "status": "published",
+        "platforms": [
+            {
+                "platform": "twitter",
+                "accountId": "id_003",
+                "status": "published",
+                "platformPostId": "name_002",
+                "platformPostUrl": "https://twitter.com/redacted",
+                "publishedAt": "2026-11-01T10:00:05.000Z"
+            }
+        ],
+        "createdAt": "2026-11-01T10:00:00.000Z",
+        "updatedAt": "2026-11-01T10:00:05.000Z"
+    },
+    "message": "Post published successfully"
+}
