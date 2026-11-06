@@ -316,6 +316,29 @@ it('fails the duplicate account alone, and publishes the rest of the group', fun
         ->and($body['platforms'][0]['platform'])->toBe('twitter');
 });
 
+it('fails a cancelled target, because it will never publish', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('create-post-cancelled'), 'status' => 207],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = zernioAccount($principalId, 'bluesky', 'id_002');
+
+    $post = aPostTo($principalId, [$account]);
+
+    $post = $publisher->publish((int) $post->id, $principalId);
+
+    $target = $post->targets()->first();
+
+    // A cancelled target is not pending: the aggregator has taken it off
+    // the platform, and a pending target would be replayed every cycle.
+    expect($target?->status)->toBe(SocialPostTarget::STATUS_FAILED)
+        ->and($target?->error)->toContain('taken down on the platform');
+});
+
 it('writes partial on the post and failed on the network that was refused', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post-partial'), 'status' => 207],
