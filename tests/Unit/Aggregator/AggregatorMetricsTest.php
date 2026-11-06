@@ -139,6 +139,27 @@ it('skips the reading while the aggregator is still syncing', function () {
         ->and(SocialPostMetric::query()->where('target_id', $target->id)->count())->toBe(0);
 });
 
+it('writes no numbers while the analytics are still syncing', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('analytics-pending')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = zernioTarget($principalId);
+
+    $row = aggregatorMetricsService($recorder)->collect($target);
+
+    // Zeros would read as "nobody saw it" — the one thing the plugin
+    // promised not to show. The numbers are not in yet, and the daily
+    // job picks them up.
+    expect($row)->not->toBeNull()
+        ->and($row?->reach)->toBeNull()
+        ->and($row?->impressions)->toBeNull()
+        ->and($row?->likes)->toBeNull()
+        ->and($row?->platform_metrics['note'] ?? null)->toContain('not in yet');
+});
+
 it('gives each account of a network its own numbers', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('analytics-two-accounts')],

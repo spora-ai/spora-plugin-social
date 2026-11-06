@@ -49,6 +49,11 @@ final class AggregatorMetricsReader
      */
     public const AGGREGATE_NOTE = 'These are the numbers for the whole %s post — they cover every network it reached, not this account alone.';
 
+    /**
+     * The numbers are not in yet.
+     */
+    public const PENDING_NOTE = 'The numbers for this platform are not in yet — the aggregator is still syncing them, and the daily reading picks them up.';
+
     public function __construct(
         private readonly ZernioClient $client,
         private readonly AggregatorService $aggregators,
@@ -111,8 +116,16 @@ final class AggregatorMetricsReader
 
         // The aggregator breaks the post down per account when it can,
         // and the numbers are then that account's own.
-        if ($numbers !== null) {
+        if ($numbers !== null && $this->isSynced($own)) {
             return $this->snapshotOf($numbers, ['analytics' => $numbers]);
+        }
+
+        // A platform whose analytics are still syncing would be written
+        // as zeros, and zeros read as "nobody saw it" — the one thing
+        // the plugin promised not to show. The reading is picked up by
+        // the daily job.
+        if (!$this->isSynced($own) || !$this->isSynced($body)) {
+            return new MetricSnapshot(platformMetrics: ['note' => self::PENDING_NOTE]);
         }
 
         // One aggregate for the whole post: the note says so, because a
@@ -121,6 +134,22 @@ final class AggregatorMetricsReader
             'analytics' => $aggregate,
             'note'      => sprintf(self::AGGREGATE_NOTE, $label),
         ]);
+    }
+
+    /**
+     * Whether the answer's numbers are in.
+     *
+     * An answer that does not say is taken as in: the aggregator has
+     * always reported a sync state, and a missing one is no reason to
+     * throw the numbers away.
+     *
+     * @param array<string, mixed> $answer
+     */
+    private function isSynced(array $answer): bool
+    {
+        $status = $answer['syncStatus'] ?? 'synced';
+
+        return is_string($status) && $status === 'synced';
     }
 
     /**
