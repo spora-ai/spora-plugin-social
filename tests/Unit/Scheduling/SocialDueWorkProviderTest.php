@@ -35,6 +35,7 @@ function dueWorkProvider(array $answers = [], array $containers = []): SocialDue
                     new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
                     securityManager(),
                 ),
+                aggregatorService(),
             ),
             apiVersions(),
         ),

@@ -207,6 +207,10 @@ final class LiveContext
             new SocialStateCodec($this->security()),
             new SocialAppUrlProbe(HttpClient::create()),
             new SocialConnectionTokens($this->settings(), new FakeProviderResolver([]), $this->security()),
+            new \Spora\Plugins\Social\Aggregator\AggregatorService(
+                new \Spora\Plugins\Social\Aggregator\Zernio\ZernioClient(HttpClient::create()),
+                new SocialConnectionTokens($this->settings(), new FakeProviderResolver([]), $this->security()),
+            ),
         );
     }
 

@@ -6,6 +6,8 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
 use Spora\Auth\AuthService;
 use Spora\Core\SecurityManager;
+use Spora\Plugins\Social\Aggregator\AggregatorService;
+use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\OAuth\OAuthProviderResolver;
@@ -199,6 +201,7 @@ function createSocialAccount(
     $account->principal_id = $principalId;
     $account->connection_id = $connection->id;
     $account->platform = $platform;
+    $account->via = $overrides['via'] ?? 'direct';
     $account->kind = $kind;
     $account->external_id = $overrides['external_id'] ?? ('urn:li:organization:' . $principalId);
     $account->display_name = $overrides['display_name'] ?? 'Fabeat GmbH';
@@ -295,6 +298,7 @@ function connectionService(
     ?OAuthProviderResolver $resolver = null,
     ?string $appUrl = 'https://spora.test',
     array $overrides = [],
+    ?AggregatorService $aggregators = null,
 ): SocialConnectionService {
     $probe = new SocialAppUrlProbe(new MockHttpClient([
         new MockResponse('', ['http_code' => 200]),
@@ -308,6 +312,46 @@ function connectionService(
         new SocialStateCodec(securityManager()),
         $probe,
         new SocialConnectionTokens($settings, $resolver ?? new FakeProviderResolver([]), securityManager()),
+        $aggregators ?? aggregatorService(),
+    );
+}
+
+/**
+ * A recorded Zernio response.
+ *
+ * The files under `tests/Fixtures/Zernio/` are what `bin/zernio-probe`
+ * recorded. A real run replaces them, and a difference shows up as a
+ * failing test rather than as a rewrite of the test.
+ */
+function zernioFixture(string $name): string
+{
+    return (string) file_get_contents(BASE_PATH . '/tests/Fixtures/Zernio/' . $name . '.json');
+}
+
+/**
+ * The aggregator's client, against a mocked HTTP client.
+ *
+ * The plugin's tests never talk to Zernio: the mock answers with what
+ * `bin/zernio-probe` recorded, and the recorded answers live in the
+ * fixture files.
+ */
+function zernioClient(?Symfony\Contracts\HttpClient\HttpClientInterface $client = null): ZernioClient
+{
+    return new ZernioClient($client ?? new MockHttpClient([]));
+}
+
+/**
+ * The aggregator's own service.
+ */
+function aggregatorService(?Symfony\Contracts\HttpClient\HttpClientInterface $client = null): AggregatorService
+{
+    return new AggregatorService(
+        zernioClient($client),
+        new SocialConnectionTokens(
+            new SocialSettings(socialConfig()),
+            new FakeProviderResolver([]),
+            securityManager(),
+        ),
     );
 }
 
@@ -484,6 +528,7 @@ function postPublisher(array $answers = []): SocialPublisher
             new FakeProviderResolver([]),
             securityManager(),
         ),
+        aggregatorService(),
     );
 
     $paths = new Spora\Core\Paths(BASE_PATH);

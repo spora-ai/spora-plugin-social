@@ -38,6 +38,16 @@ final class SocialAccount extends Model
     public const STATUS_REVOKED = 'revoked';
     public const STATUS_ERROR = 'error';
 
+    /**
+     * The account is gone from the aggregator.
+     *
+     * Not a failure and not a deletion: the account is still in the
+     * aggregator's own UI, it is just no longer one the key reaches. A
+     * post's history keeps its target, and the target reads as "this
+     * account is no longer in Zernio" rather than as a hole.
+     */
+    public const STATUS_DISCONNECTED = 'disconnected';
+
     protected $table = 'social_accounts';
 
     /**

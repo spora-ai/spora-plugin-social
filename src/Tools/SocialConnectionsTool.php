@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
+use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Http\SocialConnectionResource;
 use Spora\Plugins\Social\Model\SocialConnection;
 use Spora\Plugins\Social\Model\SocialProvider;
@@ -177,7 +178,8 @@ final class SocialConnectionsTool extends AbstractSocialTool
      *
      * A Meta token has no refresh grant — it is renewed by connecting
      * again, not by a refresh — so an answer that said "refreshed" would
-     * be claiming something that did not happen.
+     * be claiming something that did not happen. An aggregator's key has
+     * no grant either: it is replaced by pasting a new one.
      */
     private function refreshedMessage(SocialConnection $connection): string
     {
@@ -186,6 +188,11 @@ final class SocialConnectionsTool extends AbstractSocialTool
                 . ($connection->expires_at === null
                     ? 'This one never expires.'
                     : 'This one expires on ' . $connection->expires_at->toIso8601String() . '.');
+        }
+
+        if (AggregatorService::providerOf($connection) !== null) {
+            return 'An aggregator key has no refresh grant: it is replaced by pasting a new one on the Accounts screen, '
+                . 'not by refreshing. This one never expires.';
         }
 
         return 'Refreshed the token of connection ' . $connection->id . '.';

@@ -9,7 +9,10 @@ use Spora\Events\RoutesRegisteringEvent;
 use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
+use Spora\Plugins\Social\Aggregator\AggregatorService;
+use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Http\OAuthCallbackController;
+use Spora\Plugins\Social\Http\SocialAggregatorController;
 use Spora\Plugins\Social\Http\SocialCalendarController;
 use Spora\Plugins\Social\Http\SocialConnectionController;
 use Spora\Plugins\Social\Http\SocialMediaController;
@@ -114,7 +117,10 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             SocialMetricsService::class      => \DI\autowire(),
             SocialDueWorkProvider::class     => \DI\autowire(),
             SocialSettingsProvider::class    => \DI\autowire(),
+            ZernioClient::class              => \DI\autowire(),
+            AggregatorService::class          => \DI\autowire(),
             SocialConnectionController::class => \DI\autowire(),
+            SocialAggregatorController::class => \DI\autowire(),
             SocialPostController::class      => \DI\autowire(),
             SocialCalendarController::class  => \DI\autowire(),
             SocialMediaController::class     => \DI\autowire(),
@@ -140,6 +146,12 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
         $routes->addRoute('DELETE', $base . '/connections/{id}', [SocialConnectionController::class, 'disconnect'], self::AUTH);
         $routes->addRoute('POST', $base . '/connections/{id}/refresh', [SocialConnectionController::class, 'refresh'], self::AUTH);
         $routes->addRoute('POST', $base . '/connections/{id}/health', [SocialConnectionController::class, 'health'], self::AUTH);
+
+        // The aggregator's own routes: an aggregator is not an OAuth
+        // provider, so it does not belong in the connections loop. The key
+        // is written here and nowhere else.
+        $routes->addRoute('POST', $base . '/aggregators', [SocialAggregatorController::class, 'setAggregator'], self::AUTH);
+        $routes->addRoute('DELETE', $base . '/aggregators/{slug}', [SocialAggregatorController::class, 'forgetAggregator'], self::AUTH);
 
         $routes->addRoute('GET', $base . '/posts', [SocialPostController::class, 'posts'], self::AUTH);
         $routes->addRoute('POST', $base . '/posts', [SocialPostController::class, 'createPost'], self::AUTH);

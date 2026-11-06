@@ -43,7 +43,7 @@ function metricsConnectionService(): SocialConnectionService
 {
     return new SocialConnectionService(new SocialSettings(socialConfig()), new FakeProviderResolver([]), new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()), new SocialAppUrlProbe(new MockHttpClient([
         new MockResponse('', ['http_code' => 200]),
-    ])), new SocialConnectionTokens(new SocialSettings(socialConfig()), new FakeProviderResolver([]), securityManager()));
+    ])), new SocialConnectionTokens(new SocialSettings(socialConfig()), new FakeProviderResolver([]), securityManager()), aggregatorService());
 }
 
 /**

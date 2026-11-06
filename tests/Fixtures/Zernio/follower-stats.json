@@ -1,0 +1,25 @@
+{
+    "accounts": [
+        {
+            "_id": "id_001",
+            "platform": "bluesky",
+            "profileId": "id_010",
+            "username": "name_001",
+            "displayName": "name_002",
+            "isActive": true,
+            "currentFollowers": 1234,
+            "lastUpdated": "2026-11-01T00:00:00.000Z",
+            "growth": 12,
+            "growthPercentage": 0.98,
+            "dataPoints": 30
+        }
+    ],
+    "stats": {
+        "totalAccounts": 1
+    },
+    "dateRange": {
+        "from": "2026-10-02T00:00:00.000Z",
+        "to": "2026-11-01T00:00:00.000Z"
+    },
+    "granularity": "day"
+}
