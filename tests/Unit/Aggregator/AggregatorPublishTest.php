@@ -349,6 +349,100 @@ it('fails the duplicate account alone, and publishes the rest of the group', fun
         ->and($body['platforms'][0]['platform'])->toBe('twitter');
 });
 
+it('leaves the targets publishing when the key is still being processed', function () {
+    // The request under this key is still running: the aggregator has
+    // not said no, it has said "not yet".
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('idempotency-conflict'), 'status' => 409],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = zernioAccount($principalId, 'bluesky', 'id_002');
+
+    $post = aPostTo($principalId, [$account]);
+
+    $post = $publisher->publish((int) $post->id, $principalId);
+
+    $target = $post->fresh()?->targets()->first();
+
+    // `failed` means the aggregator answered and refused. It did not, and
+    // a failed target invites a retry under a fresh key — which is a
+    // second post.
+    expect($target?->status)->toBe(SocialPostTarget::STATUS_PUBLISHING)
+        ->and($target?->idempotency_key)->not->toBeNull()
+        ->and($target?->error)->toBeNull();
+
+    // And the group was not sent again: the request under this key is
+    // still running, and a second one would be a second post.
+    $posts = array_values(array_filter(
+        zernioRequests($recorder),
+        static fn(array $request): bool => str_ends_with($request['url'], '/posts'),
+    ));
+
+    expect($posts)->toHaveCount(1);
+});
+
+it('replays a key that is still processing with the same key, and publishes nothing twice', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('idempotency-conflict'), 'status' => 409],
+        ['body' => zernioFixture('create-post'), 'status' => 200],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = zernioAccount($principalId, 'bluesky', 'id_002');
+
+    $post = aPostTo($principalId, [$account]);
+
+    $publisher->publish((int) $post->id, $principalId);
+
+    $target = $post->fresh()?->targets()->first();
+
+    expect($target?->status)->toBe(SocialPostTarget::STATUS_PUBLISHING);
+
+    $key = (string) $target?->idempotency_key;
+
+    // The reconciliation replays the publish with that key, so the
+    // aggregator answers with the original post instead of publishing a
+    // second one.
+    $reconciliation = new Spora\Plugins\Social\Aggregator\AggregatorReconciliation(
+        new Spora\Plugins\Social\Aggregator\AggregatorPublisher(
+            aggregatorService($recorder->client()),
+            zernioClient($recorder->client()),
+        ),
+        new Spora\Plugins\Social\Service\PostMedia(mediaPipeline()),
+    );
+
+    expect($reconciliation->resolve($target))->toBeTrue();
+
+    $requests = zernioRequests($recorder);
+
+    expect($requests)->toHaveCount(2);
+
+    $keys = [];
+
+    foreach ($requests as $request) {
+        foreach ($request['options']['headers'] ?? [] as $header) {
+            [$name, $value] = explode(': ', (string) $header, 2);
+
+            if (strtolower($name) === 'idempotency-key') {
+                $keys[] = $value;
+            }
+        }
+    }
+
+    expect($keys)->toHaveCount(2)
+        ->and($keys[0])->toBe($key)
+        ->and($keys[1])->toBe($key)
+        ->and($target?->fresh()?->status)->toBe(SocialPostTarget::STATUS_PUBLISHED)
+        ->and($target?->fresh()?->external_id)->toBe('id_001');
+});
+
 it('fails a cancelled target, because it will never publish', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post-cancelled'), 'status' => 207],

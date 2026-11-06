@@ -227,10 +227,11 @@ final class AggregatorPublisher
      */
     private function outcomes(ZernioResponse $response, array $targets): array
     {
-        // A server error and a rate limit are not refusals: the
-        // aggregator did not say no, it did not say. The targets stay in
-        // `publishing` with their key, and the replay asks again.
-        if ($response->status >= 500 || $response->status === 429) {
+        // A server error, a rate limit and a key that is still being
+        // processed are not refusals: the aggregator did not say no, it
+        // did not say. The targets stay in `publishing` with their key,
+        // and the replay asks again.
+        if ($response->status >= 500 || $response->status === 429 || $this->isStillProcessing($response)) {
             return $this->pendingFor($targets, $response->errorMessage());
         }
 
@@ -242,6 +243,27 @@ final class AggregatorPublisher
         }
 
         return $this->publishedFor($response, $targets);
+    }
+
+    /**
+     * Whether the aggregator is still working on the request under this key.
+     *
+     * `POST /v1/posts` answers `409` for two different things: a
+     * duplicate post, which names the account it is about, and an
+     * **idempotency conflict**, which says a request under the same
+     * `Idempotency-Key` is still being processed and asks for a retry
+     * after a delay.
+     *
+     * The second is not a refusal. The aggregator has not said no — it
+     * has said "not yet" — and a target marked `failed` would invite a
+     * retry under a fresh key, which is a second post. The targets stay
+     * in `publishing` with the key they went out under, and the
+     * reconciliation replays the call with it: Zernio answers `200`
+     * with the original post.
+     */
+    private function isStillProcessing(ZernioResponse $response): bool
+    {
+        return $response->status === 409 && $response->errorCode() === 'idempotency_conflict';
     }
 
     /**
@@ -452,6 +474,12 @@ final class AggregatorPublisher
     private function duplicateDetails(ZernioResponse $response): ?array
     {
         if ($response->status !== 409) {
+            return null;
+        }
+
+        // A conflict on the key is not a duplicate: nothing is published
+        // yet, so there is no account to fail and no group to send again.
+        if ($this->isStillProcessing($response)) {
             return null;
         }
 
