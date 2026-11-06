@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\PlatformFit;
 use Spora\Plugins\Social\Tools\SocialPostTool;
 
@@ -15,6 +14,12 @@ use Spora\Plugins\Social\Tools\SocialPostTool;
  * quotations honest: change a limit in the table and the prose has to be
  * updated with it, or the operator and the agent are told two different
  * numbers.
+ *
+ * The quotations cover the plugin's **own** networks. The aggregator's
+ * rows are a copy of Zernio's documentation: they change when Zernio
+ * changes them, Zernio refuses the post itself, and the skill names the
+ * aggregator's networks rather than carrying a second copy of limits
+ * that rot.
  */
 it('quotes the character limits the backend enforces', function () {
     // Each reader of the table quotes it: the tool description the model
@@ -26,8 +31,8 @@ it('quotes the character limits the backend enforces', function () {
         'the skill'                        => socialSkill()['body'],
     ];
 
-    foreach (SocialPlatform::cases() as $platform) {
-        $limit = number_format(PlatformFit::characterLimit($platform));
+    foreach (PlatformFit::nativeChannels() as $channel) {
+        $limit = number_format(PlatformFit::characterLimit($channel));
 
         foreach ($readers as $prose) {
             expect($prose)->toContain($limit);
@@ -48,11 +53,11 @@ it('quotes the characters a platform shows before it hides the rest', function (
     $rulesOf = static function (string $prose): array {
         $starts = [];
 
-        foreach (SocialPlatform::cases() as $platform) {
-            $position = strpos($prose, number_format(PlatformFit::characterLimit($platform)));
+        foreach (PlatformFit::nativeChannels() as $channel) {
+            $position = strpos($prose, number_format(PlatformFit::characterLimit($channel)));
 
             if ($position !== false) {
-                $starts[$platform->value] = $position;
+                $starts[$channel->network] = $position;
             }
         }
 
@@ -72,12 +77,12 @@ it('quotes the characters a platform shows before it hides the rest', function (
     foreach ($readers as $prose) {
         $blocks = $rulesOf($prose);
 
-        foreach (SocialPlatform::cases() as $platform) {
-            $visible = (string) PlatformFit::rule($platform)['visible_chars'];
+        foreach (PlatformFit::nativeChannels() as $channel) {
+            $visible = (string) PlatformFit::rule($channel)['visible_chars'];
 
             // The count has to stand on its own, or the cap of one
             // platform passes for the fold of another.
-            expect($blocks[$platform->value] ?? '')->toMatch('/(?<![\d,])' . $visible . '(?![\d,])/');
+            expect($blocks[$channel->network] ?? '')->toMatch('/(?<![\d,])' . $visible . '(?![\d,])/');
         }
     }
 });
@@ -118,6 +123,60 @@ it('does not claim the backend leaves the limits to the agent', function () {
     expect($prose)->not->toContain('does not enforce')
         ->and($prose)->toContain('enforce');
 });
+
+it('quotes the aggregator networks and their limits in the skill', function () {
+    // The skill is the agent's only description of what the plugin can
+    // do, and the aggregator's limits are not the plugin's own: the
+    // agent has to know them to write a body that fits.
+    $prose = socialSkill()['body'];
+
+    foreach (PlatformFit::channels() as $channel) {
+        if ($channel->isDirect()) {
+            continue;
+        }
+
+        $rule = PlatformFit::rule($channel);
+
+        expect($prose)->toMatch('/\b' . preg_quote($rule['label'], '/') . '\b/')
+            ->and($prose)->toContain(number_format($rule['max_characters']));
+    }
+});
+
+it('says which networks need the aggregator, and what its rules are', function () {
+    $prose = socialSkill()['body'];
+
+    // Which networks are the plugin's own and which are not.
+    expect($prose)->toContain('Zernio')
+        ->and($prose)->toContain('Everything else goes through an aggregator');
+
+    // The limits are the aggregator's, and they differ from the native
+    // ones for the same network.
+    expect($prose)->toContain("limits are Zernio's")
+        ->and($prose)->toContain('differ');
+
+    // It publishes at the moment it is due, not when the aggregator says
+    // so.
+    expect($prose)->toContain('at the moment it is due');
+
+    // And it may refuse the same content again within a day.
+    expect($prose)->toContain('duplicate')
+        ->and($prose)->toContain('24 hours');
+});
+
+it('does not claim again what the code does not do', function (string $claim) {
+    // The skill is the operating manual the model reads, and a claim in
+    // it that the plugin does not honour is a claim the model acts on:
+    // it would attach a second file, or promise a remedy that is not
+    // one. Each phrase below was wrong once, and the correction is the
+    // fix — so the phrase must not come back.
+    $prose = strtolower(socialSkill()['body']);
+
+    expect($prose)->not->toContain($claim);
+})->with([
+    'a post may carry several images through the aggregator' => 'may carry several images',
+    'deleting the post in Zernio frees the content' => 'which frees the content',
+    "the aggregator's numbers are an add-on on its plan" => "numbers are an add-on on its plan",
+]);
 
 it('declares the skill the tools bundle', function () {
     foreach ((new Spora\Plugins\Social\SocialPlugin())->tools() as $class) {

@@ -75,7 +75,7 @@ it('judges an asset by what the platform receives, not by its own mime', functio
     $result = $tool->execute([
         'action'         => 'check_fit',
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ], 1, null, principalContext($principalId));
 
     // Instagram takes no PNG, but the backend converts one before it
@@ -83,10 +83,11 @@ it('judges an asset by what the platform receives, not by its own mime', functio
     // that goes out.
     expect($result->success)->toBeTrue()
         ->and($result->data['fits'])->toBeTrue()
-        ->and($result->data['per_platform'][0]['platform'])->toBe('instagram')
-        ->and($result->data['per_platform'][0]['mime_type'])->toBe(SocialFixtures::MIME_JPEG)
-        ->and($result->data['per_platform'][0]['converted_from'])->toBe(SocialFixtures::MIME_PNG)
-        ->and($result->content)->toContain('is converted to image/jpeg for instagram');
+        ->and($result->data['per_channel'][0]['channel'])->toBe('direct:instagram')
+        ->and($result->data['per_channel'][0]['network'])->toBe('instagram')
+        ->and($result->data['per_channel'][0]['mime_type'])->toBe(SocialFixtures::MIME_JPEG)
+        ->and($result->data['per_channel'][0]['converted_from'])->toBe(SocialFixtures::MIME_PNG)
+        ->and($result->content)->toContain('is converted to image/jpeg for direct:instagram');
 });
 
 it('names the remedy for a media the platform cannot take at all', function () {
@@ -99,13 +100,59 @@ it('names the remedy for a media the platform cannot take at all', function () {
     $result = $tool->execute([
         'action'         => 'check_fit',
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ], 1, null, principalContext($principalId));
 
     expect($result->success)->toBeTrue()
         ->and($result->data['fits'])->toBeFalse()
-        ->and($result->data['per_platform'][0]['remedy'])->toBe('Convert to JPEG')
+        ->and($result->data['per_channel'][0]['remedy'])->toBe('Convert to JPEG')
         ->and($result->content)->toContain('does not fit');
+});
+
+it('answers about the native channels when the agent names none', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
+
+    $tool = new SocialMediaTool(mediaPipeline(), postService());
+
+    $result = $tool->execute([
+        'action'         => 'check_fit',
+        'media_asset_id' => $asset->id,
+    ], 1, null, principalContext($principalId));
+
+    // The three the plugin publishes on itself, and not the fifteen: the
+    // aggregator's `zernio:youtube` takes no image, so the default
+    // answer for an ordinary image would flip from "fits" to "does not
+    // fit".
+    expect($result->success)->toBeTrue()
+        ->and($result->data['fits'])->toBeTrue()
+        ->and($result->data['per_channel'])->toHaveCount(3)
+        ->and(array_column($result->data['per_channel'], 'channel'))
+        ->toBe(['direct:linkedin', 'direct:facebook', 'direct:instagram']);
+});
+
+it('still answers the old platforms argument, for one release', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => SocialFixtures::MIME_PNG, 'payload' => pngBytes()]);
+
+    $tool = new SocialMediaTool(mediaPipeline(), postService());
+
+    $result = $tool->execute([
+        'action'         => 'check_fit',
+        'media_asset_id' => $asset->id,
+        'platforms'      => ['instagram'],
+    ], 1, null, principalContext($principalId));
+
+    // A bare network name in the old argument means the plugin's own
+    // route to it — the route it meant before the rename.
+    expect($result->success)->toBeTrue()
+        ->and($result->data['per_channel'])->toHaveCount(1)
+        ->and($result->data['per_channel'][0]['channel'])->toBe('direct:instagram')
+        // And the old answer key is still there.
+        ->and($result->data['per_platform'])->toHaveCount(1)
+        ->and($result->data['per_platform'][0]['platform'])->toBe('instagram');
 });
 
 it('prepares an asset for instagram', function () {

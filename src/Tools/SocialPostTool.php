@@ -59,7 +59,7 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'list',
-    description: 'List the posts of this principal, newest first. Filter by status, platform, account, or by the window of days the post is due or went out in — use that to see what is already going out and not post it twice. At most 100 posts at a time; the result carries the total, so a longer list is known.',
+    description: 'List the posts of this principal, newest first. Filter by status, network, account, or by the window of days the post is due or went out in — use that to see what is already going out and not post it twice. At most 100 posts at a time; the result carries the total, so a longer list is known.',
     operatorDescription: 'List social posts',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
@@ -97,14 +97,14 @@ use Throwable;
 #[ToolParameter(name: 'post_id', type: 'integer', description: 'The post id. Required for publish, inspect, update, retry and delete.', required: ['publish', 'inspect', 'update', 'retry', 'delete'])]
 #[ToolParameter(name: 'title', type: 'string', description: 'An internal label for the post. It is never published.', required: false)]
 #[ToolParameter(name: 'body', type: 'string', description: 'The post text. Every platform publishes it, unless that platform carries a text of its own in platform_bodies.', required: ['create', 'schedule', 'update'])]
-#[ToolParameter(name: 'platform_bodies', type: 'object', description: 'The text for the platforms whose copy differs, keyed by platform name: linkedin, facebook, instagram. A platform that is not in here uses `body`.', required: false)]
+#[ToolParameter(name: 'platform_bodies', type: 'object', description: 'The text for the channels whose copy differs. Key it by the network\'s name — linkedin, facebook, instagram — which means the plugin\'s own route to that network, or by the channel\'s key — direct:linkedin, zernio:bluesky — when the same network is reached through two routes in one post. A channel that is not in here uses `body`.', required: false)]
 #[ToolParameter(name: 'hashtags', type: 'array', description: 'The hashtags the post carries, without the hashes: they are added under the body when the post goes out, on every platform. Keep it to a few.', required: false, items: ['type' => 'string'])]
 #[ToolParameter(name: 'account_ids', type: 'array', description: 'The ids of the connected accounts the post goes to. Use `social_connections` with action `list` to find them. A draft may be written without one — the accounts are what name the platforms — but a scheduled post needs at least one.', required: ['schedule'], items: ['type' => 'integer'])]
 #[ToolParameter(name: 'media_asset_ids', type: 'array', description: 'The Media Archive assets to attach. Instagram cannot publish without one, so an Instagram post needs an attachment.', required: false, items: ['type' => 'string'])]
 #[ToolParameter(name: 'scheduled_for', type: 'string', description: 'When the post should go out, as an ISO 8601 timestamp. Required by schedule.', required: ['schedule'])]
 #[ToolParameter(name: 'timezone', type: 'string', description: 'The timezone the schedule is written in, e.g. Europe/Zurich.', required: false)]
 #[ToolParameter(name: 'status', type: 'string', description: 'Filter the list by status: draft, scheduled, publishing, published, partial, failed or cancelled.', required: false)]
-#[ToolParameter(name: 'platform', type: 'string', description: 'Filter the list by platform: linkedin, facebook or instagram.', required: false)]
+#[ToolParameter(name: 'platform', type: 'string', description: 'Filter the list by the network the post goes to: linkedin, facebook or instagram.', required: false)]
 #[ToolParameter(name: 'account_id', type: 'integer', description: 'Filter the list by the connected account the post goes to.', required: false)]
 #[ToolParameter(name: 'from', type: 'string', description: 'Only the posts due or published from this day on, as YYYY-MM-DD.', required: false)]
 #[ToolParameter(name: 'to', type: 'string', description: 'Only the posts due or published up to this day, as YYYY-MM-DD.', required: false)]

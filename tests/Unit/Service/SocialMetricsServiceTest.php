@@ -33,6 +33,10 @@ function recordingMetricsService(array &$seen, array $bodies = ['{}']): SocialMe
         new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
         metricsConnectionService(),
         apiVersions(),
+        new Spora\Plugins\Social\Aggregator\AggregatorMetricsReader(
+            zernioClient(),
+            aggregatorService(),
+        ),
     );
 }
 
@@ -43,7 +47,7 @@ function metricsConnectionService(): SocialConnectionService
 {
     return new SocialConnectionService(new SocialSettings(socialConfig()), new FakeProviderResolver([]), new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()), new SocialAppUrlProbe(new MockHttpClient([
         new MockResponse('', ['http_code' => 200]),
-    ])), new SocialConnectionTokens(new SocialSettings(socialConfig()), new FakeProviderResolver([]), securityManager()));
+    ])), new SocialConnectionTokens(new SocialSettings(socialConfig()), new FakeProviderResolver([]), securityManager()), aggregatorService());
 }
 
 /**
@@ -471,4 +475,117 @@ it('leaves the platform out of a day it reported no reach for', function () {
     $summary = metricsService([])->summary($principalId, 1);
 
     expect($summary['by_network'])->toBe([]);
+});
+
+it('gives two routes to one network two rows and two series segments', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // A LinkedIn member profile directly and a LinkedIn organisation page
+    // through the aggregator: one network, two routes, two accounts.
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'linkedin', 'zernio', 'urn:li:organization:2');
+
+    $post = postService()->create($principalId, [
+        'title'       => 'Q4 release',
+        'body'        => 'We shipped…',
+        'account_ids' => [$direct->id, $aggregated->id],
+    ]);
+
+    $reach = ['direct' => 100, 'zernio' => 40];
+
+    foreach ($post->targets()->get() as $target) {
+        $row = new Spora\Plugins\Social\Model\SocialPostMetric();
+        $row->post_id = $post->id;
+        $row->target_id = $target->id;
+        $row->metric_date = gmdate('Y-m-d');
+        $row->reach = $reach[(string) $target->via];
+        $row->impressions = $row->reach * 2;
+        $row->likes = 5;
+        $row->measured_at = Carbon::now();
+        $row->save();
+    }
+
+    $summary = metricsService([])->summary($principalId);
+
+    // One row per route. A row that merged the two would carry 140, and
+    // the reader would not know which of the two produced the numbers.
+    expect($summary['by_network'])->toHaveCount(2);
+
+    $rows = [];
+    foreach ($summary['by_network'] as $row) {
+        $rows[$row['channel']] = $row;
+    }
+
+    expect($rows)->toHaveKeys(['direct:linkedin', 'zernio:linkedin'])
+        ->and($rows['direct:linkedin']['reach'])->toBe(100)
+        ->and($rows['zernio:linkedin']['reach'])->toBe(40)
+        ->and($rows['direct:linkedin']['impressions'])->toBe(200)
+        ->and($rows['zernio:linkedin']['impressions'])->toBe(80)
+        ->and($rows['direct:linkedin']['likes'])->toBe(5)
+        ->and($rows['zernio:linkedin']['likes'])->toBe(5)
+        ->and($rows['direct:linkedin']['posts'])->toBe(1)
+        ->and($rows['zernio:linkedin']['posts'])->toBe(1)
+        ->and($rows['direct:linkedin']['platform'])->toBe('linkedin')
+        ->and($rows['zernio:linkedin']['platform'])->toBe('linkedin')
+        ->and($rows['direct:linkedin']['via'])->toBe('direct')
+        ->and($rows['zernio:linkedin']['via'])->toBe('zernio');
+
+    // The chart gets a segment per route, and the two are not one.
+    expect($summary['series'])->toHaveCount(1)
+        ->and($summary['series'][0]['direct:linkedin'])->toBe(100)
+        ->and($summary['series'][0]['zernio:linkedin'])->toBe(40);
+
+    // The period's totals are still the sum of both.
+    expect($summary['totals']['reach'])->toBe(140)
+        ->and($summary['totals']['impressions'])->toBe(280);
+});
+
+it('answers with one row per post, not one per reading', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $target = publishedTarget($principalId, 'linkedin', 'organization', 'urn:li:share:9');
+
+    // Ten daily readings of one post: the readings table holds one row
+    // per target per day.
+    for ($day = 9; $day >= 0; $day--) {
+        $row = new Spora\Plugins\Social\Model\SocialPostMetric();
+        $row->post_id = $target->post_id;
+        $row->target_id = $target->id;
+        $row->metric_date = gmdate('Y-m-d', strtotime('-' . $day . ' days'));
+        $row->reach = 109 - $day;
+        $row->measured_at = Carbon::now();
+        $row->save();
+    }
+
+    $summary = metricsService([])->summary($principalId);
+
+    // One row, carrying the latest reading's numbers, and the target's
+    // id so the reader can tell two targets of one post apart.
+    expect($summary['top_posts'])->toHaveCount(1)
+        ->and($summary['top_posts'][0]['reach'])->toBe(109)
+        ->and($summary['top_posts'][0]['target_id'])->toBe((int) $target->id);
+});
+
+it('names the route of every target it reports the numbers of', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'linkedin', 'zernio', 'urn:li:organization:2');
+
+    $post = postService()->create($principalId, [
+        'title'       => 'Q4 release',
+        'body'        => 'We shipped…',
+        'account_ids' => [$direct->id, $aggregated->id],
+    ]);
+
+    $analytics = metricsService([])->postAnalytics((int) $post->id, $principalId);
+
+    $targets = [];
+    foreach ($analytics['targets'] as $target) {
+        $targets[(string) $target['via']] = $target;
+    }
+
+    expect($targets)->toHaveKeys(['direct', 'zernio'])
+        ->and($targets['direct']['platform'])->toBe('linkedin')
+        ->and($targets['zernio']['platform'])->toBe('linkedin');
 });

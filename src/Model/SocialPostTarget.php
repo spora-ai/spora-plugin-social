@@ -15,10 +15,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $post_id
  * @property int $account_id
  * @property string $platform
+ * @property string $via
  * @property string $status
  * @property string|null $external_id
  * @property string|null $external_url
  * @property string|null $container_id
+ * @property string|null $idempotency_key
  * @property string|null $error
  * @property \Carbon\Carbon|null $published_at
  * @property ?\Carbon\Carbon $created_at
@@ -43,14 +45,23 @@ final class SocialPostTarget extends Model
 
     protected $table = 'social_post_targets';
 
+    /**
+     * The route a target takes unless it is told otherwise.
+     */
+    protected $attributes = [
+        'via' => SocialChannel::DIRECT,
+    ];
+
     /** @var list<string> */
     protected $fillable = [
         'account_id',
         'platform',
+        'via',
         'status',
         'external_id',
         'external_url',
         'container_id',
+        'idempotency_key',
         'error',
         'published_at',
     ];
@@ -61,6 +72,20 @@ final class SocialPostTarget extends Model
         'account_id'   => 'integer',
         'published_at' => 'datetime',
     ];
+
+    /**
+     * The channel this target goes out through.
+     *
+     * The route and the network together are the target's identity: the
+     * same network on two routes is two accounts with two tokens.
+     */
+    public function channel(): SocialChannel
+    {
+        // A row written before the route column existed carries none, and
+        // the plugin's own route is the only one such a row can have.
+        return SocialChannel::tryFrom((string) $this->via, (string) $this->platform)
+            ?? SocialChannel::direct((string) $this->platform);
+    }
 
     public function account(): BelongsTo
     {

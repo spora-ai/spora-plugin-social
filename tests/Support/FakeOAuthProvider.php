@@ -22,6 +22,8 @@ final class FakeOAuthProvider implements OAuthProviderInterface
 {
     public int $refreshCalls = 0;
 
+    public int $resolveCalls = 0;
+
     /**
      * @param list<OAuthAccountIdentity> $accounts
      */
@@ -57,6 +59,8 @@ final class FakeOAuthProvider implements OAuthProviderInterface
 
     public function resolveAccounts(OAuthTokenSet $tokens): array
     {
+        $this->resolveCalls++;
+
         if ($this->refusal !== null) {
             throw new \Spora\Plugins\Social\Exception\SocialException('platform', $this->refusal);
         }

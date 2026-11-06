@@ -6,6 +6,9 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
 use Spora\Auth\AuthService;
 use Spora\Core\SecurityManager;
+use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
+use Spora\Plugins\Social\Aggregator\AggregatorService;
+use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\OAuth\OAuthProviderResolver;
@@ -26,6 +29,8 @@ use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
+use Spora\Plugins\Social\Tests\Support\ZernioRecorder;
+use Spora\Plugins\Social\Tools\SocialConnectionsTool;
 use Spora\Services\PrincipalContext;
 use Spora\Services\PrincipalResolver;
 use Spora\Services\PrincipalService;
@@ -199,6 +204,7 @@ function createSocialAccount(
     $account->principal_id = $principalId;
     $account->connection_id = $connection->id;
     $account->platform = $platform;
+    $account->via = $overrides['via'] ?? 'direct';
     $account->kind = $kind;
     $account->external_id = $overrides['external_id'] ?? ('urn:li:organization:' . $principalId);
     $account->display_name = $overrides['display_name'] ?? 'Fabeat GmbH';
@@ -295,6 +301,7 @@ function connectionService(
     ?OAuthProviderResolver $resolver = null,
     ?string $appUrl = 'https://spora.test',
     array $overrides = [],
+    ?AggregatorService $aggregators = null,
 ): SocialConnectionService {
     $probe = new SocialAppUrlProbe(new MockHttpClient([
         new MockResponse('', ['http_code' => 200]),
@@ -308,6 +315,77 @@ function connectionService(
         new SocialStateCodec(securityManager()),
         $probe,
         new SocialConnectionTokens($settings, $resolver ?? new FakeProviderResolver([]), securityManager()),
+        $aggregators ?? aggregatorService(),
+    );
+}
+
+/**
+ * A recorded Zernio response.
+ *
+ * The files under `tests/Fixtures/Zernio/` are what `bin/zernio-probe`
+ * recorded. A real run replaces them, and a difference shows up as a
+ * failing test rather than as a rewrite of the test.
+ */
+function zernioFixture(string $name): string
+{
+    return (string) file_get_contents(BASE_PATH . '/tests/Fixtures/Zernio/' . $name . '.json');
+}
+
+/**
+ * The aggregator's client, against a mocked HTTP client.
+ *
+ * The plugin's tests never talk to Zernio: the mock answers with what
+ * `bin/zernio-probe` recorded, and the recorded answers live in the
+ * fixture files.
+ */
+function zernioClient(?Symfony\Contracts\HttpClient\HttpClientInterface $client = null): ZernioClient
+{
+    return new ZernioClient($client ?? new MockHttpClient([]));
+}
+
+/**
+ * The aggregator's own service.
+ */
+function aggregatorService(?Symfony\Contracts\HttpClient\HttpClientInterface $client = null): AggregatorService
+{
+    return new AggregatorService(
+        zernioClient($client),
+        new SocialConnectionTokens(
+            new SocialSettings(socialConfig()),
+            new FakeProviderResolver([]),
+            securityManager(),
+        ),
+    );
+}
+
+/**
+ * An account the aggregator holds.
+ */
+function zernioAccount(int $principalId, string $network = 'bluesky', string $externalId = 'id_002'): Spora\Plugins\Social\Model\SocialAccount
+{
+    $connection = createSocialConnection($principalId, 'zernio', ['access_token' => 'the-key']);
+
+    return createSocialAccount($principalId, $network, 'aggregator', [
+        'connection' => $connection,
+        'external_id' => $externalId,
+        'via'        => 'zernio',
+    ]);
+}
+
+/**
+ * The connections tool, with the aggregator's own collaborators.
+ */
+function connectionsTool(
+    ?SocialConnectionService $connections = null,
+    ?AggregatorService $aggregators = null,
+    ?Symfony\Contracts\HttpClient\HttpClientInterface $client = null,
+): SocialConnectionsTool {
+    $aggregators ??= aggregatorService($client);
+
+    return new SocialConnectionsTool(
+        $connections ?? connectionService(),
+        $aggregators,
+        new AggregatorAccountSync(zernioClient($client), $aggregators),
     );
 }
 
@@ -454,7 +532,7 @@ function principalContext(int $principalId): PrincipalContext
  *
  * @param array<string, list<array{body: string, status?: int}>|Closure> $answers
  */
-function postPublisher(array $answers = []): SocialPublisher
+function postPublisher(array $answers = [], ?ZernioRecorder $zernio = null): SocialPublisher
 {
     $client = static function (string $platform) use ($answers): PlatformHttpClient {
         $handler = $answers[$platform] ?? null;
@@ -484,6 +562,7 @@ function postPublisher(array $answers = []): SocialPublisher
             new FakeProviderResolver([]),
             securityManager(),
         ),
+        aggregatorService(),
     );
 
     $paths = new Spora\Core\Paths(BASE_PATH);
@@ -499,6 +578,8 @@ function postPublisher(array $answers = []): SocialPublisher
 
     $posts = new SocialPostService(new SocialPostAccounts($connections));
 
+    $aggregators = aggregatorService($zernio?->client());
+
     return new SocialPublisher(
         $posts,
         $connections,
@@ -507,6 +588,10 @@ function postPublisher(array $answers = []): SocialPublisher
             new LinkedInAdapter(new PlatformApi($client('linkedin'), apiVersions())),
             new FacebookAdapter(new PlatformApi($client('facebook'), apiVersions())),
             new InstagramAdapter(new PlatformApi($client('instagram'), apiVersions())),
+        ),
+        new Spora\Plugins\Social\Aggregator\AggregatorRoute(
+            new Spora\Plugins\Social\Aggregator\AggregatorPublisher($aggregators, zernioClient($zernio?->client())),
+            new Spora\Plugins\Social\Service\PostMedia($media),
         ),
     );
 }
@@ -551,7 +636,15 @@ function metricsService(array $responses): SocialMetricsService
         $responses,
     ));
 
-    return new SocialMetricsService(new PlatformHttpClient($http), connectionService(), apiVersions());
+    return new SocialMetricsService(
+        new PlatformHttpClient($http),
+        connectionService(),
+        apiVersions(),
+        new Spora\Plugins\Social\Aggregator\AggregatorMetricsReader(
+            zernioClient(),
+            aggregatorService(),
+        ),
+    );
 }
 
 /**
@@ -577,6 +670,41 @@ function publishedTarget(int $principalId, string $platform, string $kind, strin
     $target->save();
 
     return $target;
+}
+
+/**
+ * A connected account on a given route.
+ *
+ * The route decides where the account comes from: the plugin's own route
+ * needs a native account, and an aggregator's route needs one of the
+ * aggregator's. Two accounts on one network on two routes are two
+ * accounts, and each needs its own external id.
+ */
+function accountOnRoute(
+    int $principalId,
+    string $network,
+    string $via,
+    string $externalId,
+): Spora\Plugins\Social\Model\SocialAccount {
+    if ($via === 'direct') {
+        $connection = createSocialConnection($principalId, $network === 'linkedin' ? 'linkedin' : 'meta', [
+            'access_token' => $network . '-token',
+            'expires_at'   => new DateTimeImmutable('+50 days'),
+        ]);
+
+        return createSocialAccount($principalId, $network, 'organization', [
+            'connection'  => $connection,
+            'external_id' => $externalId,
+        ]);
+    }
+
+    $connection = createSocialConnection($principalId, $via, ['access_token' => 'the-key']);
+
+    return createSocialAccount($principalId, $network, 'aggregator', [
+        'connection'  => $connection,
+        'external_id' => $externalId,
+        'via'         => $via,
+    ]);
 }
 
 /**

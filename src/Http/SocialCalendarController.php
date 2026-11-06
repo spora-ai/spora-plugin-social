@@ -53,6 +53,10 @@ final class SocialCalendarController extends AbstractSocialController
     /**
      * The posts, with the day each one is due or went out on.
      *
+     * The channels go along: the calendar answers what is going out and
+     * where, and a post that names only the network cannot say which of
+     * the two routes to it goes out through.
+     *
      * @param  list<SocialPost> $items
      * @return list<array<string, mixed>>
      */
@@ -66,6 +70,7 @@ final class SocialCalendarController extends AbstractSocialController
                 'status'        => (string) $post->status,
                 'scheduled_for' => $post->scheduled_for?->toIso8601String(),
                 'published_at'  => $post->published_at?->toIso8601String(),
+                'channels'      => SocialPostResource::channelsOf($post),
             ];
         }
 

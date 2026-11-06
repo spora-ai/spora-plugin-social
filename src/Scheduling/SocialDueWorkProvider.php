@@ -7,6 +7,7 @@ namespace Spora\Plugins\Social\Scheduling;
 use Illuminate\Support\Carbon;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Spora\Plugins\Social\Aggregator\AggregatorReconciliation;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\Service\ContainerReconciliation;
@@ -34,11 +35,12 @@ use Throwable;
 final class SocialDueWorkProvider implements DueWorkProviderInterface
 {
     /**
-     * The three kinds of work this provider produces.
+     * The four kinds of work this provider produces.
      */
     public const KIND_POST = 'post';
     public const KIND_METRIC = 'metric';
     public const KIND_CONTAINER = 'container';
+    public const KIND_AGGREGATOR = 'aggregator';
 
     /**
      * How long after a publish the first reading happens, and how often
@@ -53,6 +55,7 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
         private readonly SocialMetricsService $metrics,
         private readonly SocialPublisher $publisher,
         private readonly ContainerReconciliation $reconciliation,
+        private readonly AggregatorReconciliation $aggregatorReconciliation,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
@@ -96,6 +99,16 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
             );
         }
 
+        foreach ($this->aggregatorReconciliation->dueTargets($principalIds) as $target) {
+            $post = $target->post;
+
+            $work[] = $this->unit(
+                $post instanceof SocialPost ? (int) $post->principal_id : 0,
+                gmdate(self::DB_DATETIME_FORMAT),
+                ['kind' => self::KIND_AGGREGATOR, 'target_id' => (int) $target->id],
+            );
+        }
+
         return $work;
     }
 
@@ -108,6 +121,7 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
                 self::KIND_POST     => $this->runPost((int) ($work->payload['post_id'] ?? 0)),
                 self::KIND_METRIC   => $this->runMetric((int) ($work->payload['target_id'] ?? 0)),
                 self::KIND_CONTAINER => $this->runContainer((int) ($work->payload['target_id'] ?? 0)),
+                self::KIND_AGGREGATOR => $this->runAggregator((int) ($work->payload['target_id'] ?? 0)),
                 default             => null,
             };
         } catch (Throwable $e) {
@@ -175,6 +189,39 @@ final class SocialDueWorkProvider implements DueWorkProviderInterface
         }
 
         if (!$this->reconciliation->resolve($target)) {
+            return;
+        }
+
+        $post = $target->post;
+        if (!$post instanceof SocialPost) {
+            return;
+        }
+
+        $post->status = $this->publisher->deriveStatus($post);
+
+        if ($post->status === SocialPost::STATUS_PUBLISHED || $post->status === SocialPost::STATUS_PARTIAL) {
+            $post->published_at = Carbon::now();
+        }
+
+        $post->save();
+    }
+
+    /**
+     * Replay the publish that never finished.
+     *
+     * The key it went out under is still on the target, so the
+     * aggregator answers with the original post instead of publishing a
+     * second one.
+     */
+    private function runAggregator(int $targetId): void
+    {
+        $target = $this->targetOf($targetId);
+
+        if ($target === null) {
+            return;
+        }
+
+        if (!$this->aggregatorReconciliation->resolve($target)) {
             return;
         }
 

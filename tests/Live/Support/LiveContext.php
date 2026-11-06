@@ -207,6 +207,26 @@ final class LiveContext
             new SocialStateCodec($this->security()),
             new SocialAppUrlProbe(HttpClient::create()),
             new SocialConnectionTokens($this->settings(), new FakeProviderResolver([]), $this->security()),
+            new \Spora\Plugins\Social\Aggregator\AggregatorService(
+                new \Spora\Plugins\Social\Aggregator\Zernio\ZernioClient(HttpClient::create()),
+                new SocialConnectionTokens($this->settings(), new FakeProviderResolver([]), $this->security()),
+            ),
+        );
+    }
+
+    /**
+     * The aggregator's reader, for the metrics service the live run
+     * wires. The live run never reaches it — it reads the networks the
+     * plugin talks to natively — but the service takes one.
+     */
+    public function aggregatorMetricsReader(): \Spora\Plugins\Social\Aggregator\AggregatorMetricsReader
+    {
+        return new \Spora\Plugins\Social\Aggregator\AggregatorMetricsReader(
+            new \Spora\Plugins\Social\Aggregator\Zernio\ZernioClient(HttpClient::create()),
+            new \Spora\Plugins\Social\Aggregator\AggregatorService(
+                new \Spora\Plugins\Social\Aggregator\Zernio\ZernioClient(HttpClient::create()),
+                new SocialConnectionTokens($this->settings(), new FakeProviderResolver([]), $this->security()),
+            ),
         );
     }
 

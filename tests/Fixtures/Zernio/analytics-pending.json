@@ -1,0 +1,41 @@
+{
+    "postId": "id_001",
+    "status": "published",
+    "content": "We shipped…",
+    "publishedAt": "2026-11-01T10:00:05.000Z",
+    "analytics": {
+        "impressions": 0,
+        "reach": 0,
+        "likes": 0,
+        "comments": 0,
+        "shares": 0,
+        "saves": 0,
+        "clicks": 0,
+        "views": 0
+    },
+    "platformAnalytics": [
+        {
+            "platform": "bluesky",
+            "status": "published",
+            "platformPostId": "name_001",
+            "accountId": "id_002",
+            "accountUsername": "name_001",
+            "analytics": {
+                "impressions": 0,
+                "reach": 0,
+                "likes": 0,
+                "comments": 0,
+                "shares": 0,
+                "saves": 0,
+                "clicks": 0,
+                "views": 0
+            },
+            "syncStatus": "pending",
+            "platformPostUrl": "https://bsky.app/redacted",
+            "errorMessage": null,
+            "errorCode": null
+        }
+    ],
+    "syncStatus": "pending",
+    "message": "The analytics are still syncing."
+}

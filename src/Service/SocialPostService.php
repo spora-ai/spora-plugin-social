@@ -64,6 +64,9 @@ final class SocialPostService
             $target->post_id = $post->id;
             $target->account_id = $account->id;
             $target->platform = (string) $account->platform;
+            // The target goes out the way its account does: the route is
+            // the account's, and the target only names the network.
+            $target->via = (string) $account->via;
             $target->status = SocialPostTarget::STATUS_PENDING;
             $target->save();
         }
@@ -94,10 +97,10 @@ final class SocialPostService
         }
 
         $platform = $filters['platform'] ?? null;
-        if (is_string($platform) && $platform !== '') {
+        if (is_string($platform) && trim($platform) !== '') {
             $query->whereIn('id', SocialPostTarget::query()
                 ->select('post_id')
-                ->where('platform', $platform));
+                ->where('platform', strtolower(trim($platform))));
         }
 
         $this->applyWindow($query, $filters);
@@ -430,6 +433,7 @@ final class SocialPostService
             $target->post_id = $post->id;
             $target->account_id = $account->id;
             $target->platform = (string) $account->platform;
+            $target->via = (string) $account->via;
             $target->status = SocialPostTarget::STATUS_PENDING;
             $target->save();
         }

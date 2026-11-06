@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Spora\Plugins\Social\Service;
 
 use Illuminate\Support\Carbon;
+use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialConnection;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\OAuthAccountIdentity;
@@ -43,6 +45,7 @@ final class SocialConnectionService
         private readonly SocialStateCodec $stateCodec,
         private readonly SocialAppUrlProbe $appUrlProbe,
         private readonly SocialConnectionTokens $tokens,
+        private readonly AggregatorService $aggregators,
     ) {}
 
     /**
@@ -171,17 +174,41 @@ final class SocialConnectionService
         ];
     }
 
+    /**
+     * Forget a connection.
+     *
+     * An aggregator's connection forgets the key and keeps its accounts:
+     * they live in the aggregator, and the operator removes them there.
+     */
     public function disconnect(int $connectionId, int $principalId): void
     {
-        $this->find($connectionId, $principalId)->delete();
+        $connection = $this->find($connectionId, $principalId);
+
+        if (AggregatorService::providerOf($connection) !== null) {
+            $this->aggregators->forget($connection);
+
+            return;
+        }
+
+        $connection->delete();
     }
 
     /**
      * Renew the connection's token now.
+     *
+     * An aggregator's key has no refresh grant: there is nothing to
+     * renew, and an answer that said "refreshed" would be claiming
+     * something that did not happen.
      */
     public function refresh(int $connectionId, int $principalId): SocialConnection
     {
-        return $this->tokens->refresh($this->find($connectionId, $principalId));
+        $connection = $this->find($connectionId, $principalId);
+
+        if (AggregatorService::providerOf($connection) !== null) {
+            return $connection;
+        }
+
+        return $this->tokens->refresh($connection);
     }
 
     /**
@@ -196,6 +223,25 @@ final class SocialConnectionService
     public function health(int $connectionId, int $principalId): array
     {
         $connection = $this->find($connectionId, $principalId);
+
+        // An aggregator's connection has no OAuth grant and no accounts to
+        // resolve: a cheap authenticated call answers whether the key is
+        // still good, which is the same question the native path asks of
+        // the platform.
+        if (AggregatorService::providerOf($connection) !== null) {
+            return $this->aggregators->health($connection);
+        }
+
+        return $this->platformHealth($connection);
+    }
+
+    /**
+     * The platform's own answer about the connection's token.
+     *
+     * @return array{status: string, message: string, checked_at: string}
+     */
+    private function platformHealth(SocialConnection $connection): array
+    {
         $checkedAt = gmdate('c');
 
         try {
@@ -311,6 +357,7 @@ final class SocialConnectionService
     {
         $account = SocialAccount::query()
             ->where('connection_id', $connection->id)
+            ->where('via', SocialChannel::DIRECT)
             ->where('platform', $identity->platform->value)
             ->where('external_id', $identity->externalId)
             ->first();
@@ -320,6 +367,10 @@ final class SocialConnectionService
             $account->principal_id = $connection->principal_id;
             $account->connection_id = $connection->id;
             $account->platform = $identity->platform->value;
+            // A native account is on the plugin's own route; the account
+            // it would share a network with on another route is another
+            // account, with another token.
+            $account->via = SocialChannel::DIRECT;
             $account->external_id = $identity->externalId;
         }
 

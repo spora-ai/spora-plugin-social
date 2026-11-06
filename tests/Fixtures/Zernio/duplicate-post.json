@@ -1,0 +1,9 @@
+{
+    "error": "This exact content is already scheduled, publishing, or was posted to this account within the last 24 hours.",
+    "code": "duplicate_content",
+    "details": {
+        "accountId": "id_002",
+        "platform": "bluesky",
+        "existingPostId": "id_001"
+    }
+}

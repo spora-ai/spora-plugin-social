@@ -1,0 +1,64 @@
+{
+    "postId": "id_001",
+    "latePostId": null,
+    "status": "published",
+    "content": "We shipped…",
+    "publishedAt": "2026-11-01T10:00:05.000Z",
+    "analytics": {
+        "impressions": 300,
+        "reach": 250,
+        "likes": 60,
+        "comments": 10,
+        "shares": 12,
+        "saves": 3,
+        "clicks": 25,
+        "views": 0,
+        "lastUpdated": "2026-11-02T00:00:00.000Z"
+    },
+    "platformAnalytics": [
+        {
+            "platform": "bluesky",
+            "status": "published",
+            "platformPostId": "name_001",
+            "accountId": "id_002",
+            "accountUsername": "name_001",
+            "analytics": {
+                "impressions": 100,
+                "reach": 80,
+                "likes": 20,
+                "comments": 4,
+                "shares": 5,
+                "saves": 1,
+                "clicks": 9,
+                "views": 0
+            },
+            "syncStatus": "synced",
+            "platformPostUrl": "https://bsky.app/redacted",
+            "errorMessage": null,
+            "errorCode": null
+        },
+        {
+            "platform": "bluesky",
+            "status": "published",
+            "platformPostId": "name_002",
+            "accountId": "id_004",
+            "accountUsername": "name_002",
+            "analytics": {
+                "impressions": 200,
+                "reach": 170,
+                "likes": 40,
+                "comments": 6,
+                "shares": 7,
+                "saves": 2,
+                "clicks": 16,
+                "views": 0
+            },
+            "syncStatus": "synced",
+            "platformPostUrl": "https://bsky.app/redacted",
+            "errorMessage": null,
+            "errorCode": null
+        }
+    ],
+    "syncStatus": "synced",
+    "message": null
+}

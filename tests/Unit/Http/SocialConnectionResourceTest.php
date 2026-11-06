@@ -39,6 +39,7 @@ it('carries the connection health and the accounts it covers', function () {
     expect($payload['accounts'])->toHaveCount(1)
         ->and($payload['accounts'][0]['id'])->toBe((int) $account->id)
         ->and($payload['accounts'][0]['platform'])->toBe('instagram')
+        ->and($payload['accounts'][0]['via'])->toBe('direct')
         ->and($payload['accounts'][0]['kind'])->toBe('business')
         ->and($payload['accounts'][0]['display_name'])->toBe('Fabeat Studio')
         ->and($payload['accounts'][0]['followers'])->toBe(18750)

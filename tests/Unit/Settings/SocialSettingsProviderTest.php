@@ -168,6 +168,7 @@ it('refuses a meta provider that has an app id and a secret but no configuration
             new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
             securityManager(),
         ),
+        aggregatorService(),
     );
 
     expect($settings->needsSetup(Spora\Plugins\Social\Model\SocialProvider::Meta))->toBeTrue()
@@ -194,6 +195,7 @@ it('refuses to connect with the setup sentence, not a technical one', function (
             new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]),
             securityManager(),
         ),
+        aggregatorService(),
     );
 
     expect(fn() => $service->startConnect(1, Spora\Plugins\Social\Model\SocialProvider::Meta))

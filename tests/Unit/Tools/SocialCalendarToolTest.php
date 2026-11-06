@@ -36,6 +36,36 @@ it('lists the posts of a month with their dates', function () {
         ->and($result->data['posts'][0]['scheduled_for'])->toStartWith('2026-11-02');
 });
 
+it('carries the channels every post goes to, so the same thing is not posted twice', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'bluesky', 'zernio', 'id_002');
+
+    postService()->create($principalId, [
+        'title'         => SocialFixtures::POST_TITLE,
+        'body'          => SocialFixtures::POST_BODY,
+        'account_ids'   => [$direct->id, $aggregated->id],
+        'scheduled_for' => SocialFixtures::CALENDAR_MOMENT,
+    ]);
+
+    $result = calendarTool()->execute(
+        ['action' => 'list_month', 'month' => SocialFixtures::CALENDAR_MONTH],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeTrue()
+        ->and($result->data['posts'][0]['channels'])->toHaveCount(2)
+        ->and($result->data['posts'][0]['channels'][0]['key'])->toBe('direct:linkedin')
+        ->and($result->data['posts'][0]['channels'][1]['key'])->toBe('zernio:bluesky')
+        // The model reads the content and not the data, so the channels
+        // have to be in the answer too.
+        ->and($result->content)->toContain('direct:linkedin')
+        ->and($result->content)->toContain('zernio:bluesky');
+});
+
 it('leaves the posts of another month out', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

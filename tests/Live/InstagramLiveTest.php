@@ -322,6 +322,7 @@ it('reads the insights of the published media', function () {
                 new PlatformHttpClient($context->http(SocialPlatform::Instagram)),
                 $context->accountService(),
                 $context->versions(),
+                $context->aggregatorMetricsReader(),
             );
 
             $row = $service->collect($target);

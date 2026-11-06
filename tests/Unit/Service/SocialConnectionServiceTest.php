@@ -291,6 +291,7 @@ it('refuses to connect when the app url is not publicly reachable', function () 
         new SocialStateCodec(securityManager()),
         $probe,
         new SocialConnectionTokens($settings, new FakeProviderResolver([]), securityManager()),
+        aggregatorService(),
     );
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
@@ -342,6 +343,7 @@ it('refuses to connect Meta without a configuration id', function () {
         new SocialStateCodec(securityManager()),
         new SocialAppUrlProbe(new MockHttpClient([new MockResponse('', ['http_code' => 200])])),
         new SocialConnectionTokens($settings, new FakeProviderResolver([]), securityManager()),
+        aggregatorService(),
     );
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))

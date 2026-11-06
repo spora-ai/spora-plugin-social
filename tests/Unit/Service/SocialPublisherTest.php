@@ -127,6 +127,30 @@ it('keeps the container id of an instagram publish, so the container can be aske
         ->and($target?->container_id)->toBe('17900000000000001');
 });
 
+it('refuses a target whose channel nothing can publish', function () {
+    $publisher = postPublisher();
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // A network the plugin does not reach: the target names a channel
+    // that no adapter publishes on.
+    $account = publishableAccount($principalId, 'twitter', 'member');
+
+    $post = $service->create($principalId, [
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$account->id],
+    ]);
+
+    $published = $publisher->publish((int) $post->id, $principalId);
+
+    $target = $published->targets()->first();
+
+    expect($target?->status)->toBe('failed')
+        ->and($target?->error)->toBe('This target\'s channel is one nothing can publish.')
+        ->and($published->status)->toBe('failed');
+});
+
 it('refuses to publish a post that carries a second attachment', function () {
     $publisher = postPublisher([
         'linkedin' => [['body' => SocialFixtures::LINKEDIN_SHARE]],

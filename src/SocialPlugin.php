@@ -9,7 +9,15 @@ use Spora\Events\RoutesRegisteringEvent;
 use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
+use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
+use Spora\Plugins\Social\Aggregator\AggregatorMetricsReader;
+use Spora\Plugins\Social\Aggregator\AggregatorPublisher;
+use Spora\Plugins\Social\Aggregator\AggregatorReconciliation;
+use Spora\Plugins\Social\Aggregator\AggregatorRoute;
+use Spora\Plugins\Social\Aggregator\AggregatorService;
+use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Http\OAuthCallbackController;
+use Spora\Plugins\Social\Http\SocialAggregatorController;
 use Spora\Plugins\Social\Http\SocialCalendarController;
 use Spora\Plugins\Social\Http\SocialConnectionController;
 use Spora\Plugins\Social\Http\SocialMediaController;
@@ -28,6 +36,7 @@ use Spora\Plugins\Social\Service\ApiVersions;
 use Spora\Plugins\Social\Service\ContainerReconciliation;
 use Spora\Plugins\Social\Service\LinkedInPermissionSettings;
 use Spora\Plugins\Social\Service\MediaPipeline;
+use Spora\Plugins\Social\Service\PostMedia;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialConnectionTokens;
@@ -102,6 +111,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             SocialConnectionTokens::class    => \DI\autowire(),
             SocialAppUrlProbe::class         => \DI\autowire(),
             MediaPipeline::class             => \DI\autowire(),
+            PostMedia::class                 => \DI\autowire(),
             PlatformHttpClient::class        => \DI\autowire(),
             LinkedInAdapter::class           => \DI\autowire(),
             FacebookAdapter::class           => \DI\autowire(),
@@ -114,7 +124,15 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             SocialMetricsService::class      => \DI\autowire(),
             SocialDueWorkProvider::class     => \DI\autowire(),
             SocialSettingsProvider::class    => \DI\autowire(),
+            ZernioClient::class              => \DI\autowire(),
+            AggregatorService::class          => \DI\autowire(),
+            AggregatorAccountSync::class      => \DI\autowire(),
+            AggregatorPublisher::class         => \DI\autowire(),
+            AggregatorRoute::class             => \DI\autowire(),
+            AggregatorMetricsReader::class     => \DI\autowire(),
+            AggregatorReconciliation::class    => \DI\autowire(),
             SocialConnectionController::class => \DI\autowire(),
+            SocialAggregatorController::class => \DI\autowire(),
             SocialPostController::class      => \DI\autowire(),
             SocialCalendarController::class  => \DI\autowire(),
             SocialMediaController::class     => \DI\autowire(),
@@ -140,6 +158,13 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
         $routes->addRoute('DELETE', $base . '/connections/{id}', [SocialConnectionController::class, 'disconnect'], self::AUTH);
         $routes->addRoute('POST', $base . '/connections/{id}/refresh', [SocialConnectionController::class, 'refresh'], self::AUTH);
         $routes->addRoute('POST', $base . '/connections/{id}/health', [SocialConnectionController::class, 'health'], self::AUTH);
+
+        // The aggregator's own routes: an aggregator is not an OAuth
+        // provider, so it does not belong in the connections loop. The key
+        // is written here and nowhere else.
+        $routes->addRoute('POST', $base . '/aggregators', [SocialAggregatorController::class, 'setAggregator'], self::AUTH);
+        $routes->addRoute('DELETE', $base . '/aggregators/{slug}', [SocialAggregatorController::class, 'forgetAggregator'], self::AUTH);
+        $routes->addRoute('POST', $base . '/aggregators/{slug}/sync', [SocialAggregatorController::class, 'syncAggregator'], self::AUTH);
 
         $routes->addRoute('GET', $base . '/posts', [SocialPostController::class, 'posts'], self::AUTH);
         $routes->addRoute('POST', $base . '/posts', [SocialPostController::class, 'createPost'], self::AUTH);
@@ -210,7 +235,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
     public function schemaVersion(): int
     {
-        return 8;
+        return 11;
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Tools;
 
 use Spora\Models\MediaAsset;
 use Spora\Plugins\Social\Http\SocialPostResource;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\PlatformFit;
@@ -28,7 +29,7 @@ use Throwable;
  */
 #[Tool(
     name: 'social_media',
-    description: 'Work with the media a post carries. List this principal\'s Media Archive assets, check whether an asset fits a platform, prepare it for Instagram as a JPEG with a public URL, or attach and detach it on a post. The rules: LinkedIn takes JPEG, PNG or GIF up to 8 MB and no video; Facebook takes JPEG, PNG, GIF, BMP or MP4 up to 1 GB; Instagram REQUIRES media, takes only JPEG or MP4 up to 100 MB and rejects PNG — attach the original asset id and the backend converts it for you.',
+    description: 'Work with the media a post carries. List this principal\'s Media Archive assets, check whether an asset fits a channel, prepare it for Instagram as a JPEG with a public URL, or attach and detach it on a post. The rules: LinkedIn takes JPEG, PNG or GIF up to 8 MB and no video; Facebook takes JPEG, PNG, GIF, BMP or MP4 up to 1 GB; Instagram REQUIRES media, takes only JPEG or MP4 up to 100 MB and rejects PNG — attach the original asset id and the backend converts it for you.',
     displayName: 'Social Media',
     category: 'social',
     icon: 'globe',
@@ -43,8 +44,8 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'check_fit',
-    description: 'Check whether an asset fits a platform, and say what to do about it when it does not. The asset is judged as the platform receives it, so a PNG fits Instagram — the backend converts it to a JPEG before it publishes. Instagram needs media and cannot publish without one.',
-    operatorDescription: 'Check a media asset against a platform',
+    description: 'Check whether an asset fits a channel, and say what to do about it when it does not. The asset is judged as the channel receives it, so a PNG fits Instagram — the backend converts it to a JPEG before it publishes. Instagram needs media and cannot publish without one.',
+    operatorDescription: 'Check a media asset against a channel',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
 )]
@@ -71,7 +72,7 @@ use Throwable;
 )]
 #[ToolParameter(name: 'media_asset_id', type: 'string', description: 'The Media Archive asset id (a UUID). Required for check_fit, prepare, attach and detach.', required: ['check_fit', 'prepare', 'attach', 'detach'])]
 #[ToolParameter(name: 'post_id', type: 'integer', description: 'The post the attachment belongs to.', required: ['attach', 'detach'])]
-#[ToolParameter(name: 'platforms', type: 'array', description: 'The platforms to check against: linkedin, facebook, instagram.', required: false, items: ['type' => 'string'])]
+#[ToolParameter(name: 'channels', type: 'array', description: 'The channels to check against: the network\'s name (linkedin, facebook, instagram) or the channel\'s key (direct:linkedin).', required: false, items: ['type' => 'string'])]
 #[ToolParameter(name: 'media_kind', type: 'string', description: 'Filter the asset list by kind: image, video, audio or document.', required: false)]
 #[ToolParameter(name: 'limit', type: 'integer', description: 'How many assets to return (default 20, capped at 100).', required: false, default: 20)]
 final class SocialMediaTool extends AbstractSocialTool
@@ -162,29 +163,83 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $platforms = $this->platformList($arguments['platforms'] ?? null, SocialPlatform::values());
-        $perPlatform = [];
+        $channels = $this->channels($arguments);
+        $perChannel = [];
 
-        foreach ($platforms as $name) {
-            $platform = SocialPlatform::tryFromName($name);
-            if ($platform === null) {
-                continue;
-            }
-
-            $perPlatform[] = $this->fitOf($platform, $asset);
+        foreach ($channels as $channel) {
+            $perChannel[] = $this->fitOf($channel, $asset);
         }
 
         $fits = true;
-        foreach ($perPlatform as $entry) {
+        foreach ($perChannel as $entry) {
             if ($entry['fits'] === false) {
                 $fits = false;
             }
         }
 
         return ToolResult::ok(
-            SocialToolPresenter::fit($fits, $perPlatform),
-            ['fits' => $fits, 'per_platform' => $perPlatform],
+            SocialToolPresenter::fit($fits, $perChannel),
+            [
+                'fits'        => $fits,
+                'per_channel' => $perChannel,
+                // The key this tool answered with before the channels had
+                // names of their own. It is kept for one more release, so
+                // a caller that still reads it is not left with nothing.
+                'per_platform' => array_map(
+                    static fn(array $entry): array => [
+                        'platform'  => $entry['network'],
+                        'fits'      => $entry['fits'],
+                        'reasons'   => $entry['reasons'],
+                        'remedy'    => $entry['remedy'],
+                        'mime_type' => $entry['mime_type'],
+                    ],
+                    $perChannel,
+                ),
+            ],
         );
+    }
+
+    /**
+     * The channels to check against.
+     *
+     * A bare network name is the plugin's own route to it, and a key
+     * names the route and the network both.
+     *
+     * The `platforms` argument is the one this tool carried before the
+     * channels had names of their own. It is accepted for one more
+     * release, and a bare network name in it means the plugin's own
+     * route to that network — the route it meant before the rename.
+     *
+     * @param  array<string, mixed> $arguments
+     * @return list<SocialChannel>
+     */
+    private function channels(array $arguments): array
+    {
+        $named = $this->keyList($arguments['channels'] ?? null);
+
+        if ($named === []) {
+            $named = $this->keyList($arguments['platforms'] ?? null);
+        }
+
+        $channels = [];
+
+        foreach ($named as $name) {
+            $channel = SocialChannel::fromKey($name);
+
+            if ($channel !== null) {
+                $channels[] = $channel;
+            }
+        }
+
+        if ($channels !== []) {
+            return $channels;
+        }
+
+        // The channels the plugin publishes on itself. The aggregator's
+        // own are not the default: `zernio:youtube` takes no image, so
+        // the default answer for an ordinary image would flip from
+        // "fits" to "does not fit".
+        return PlatformFit::nativeChannels();
     }
 
     /**
@@ -196,11 +251,11 @@ final class SocialMediaTool extends AbstractSocialTool
      *
      * @return array<string, mixed>
      */
-    private function fitOf(SocialPlatform $platform, MediaAsset $asset): array
+    private function fitOf(SocialChannel $channel, MediaAsset $asset): array
     {
-        $prepared = $this->media->prepareForFit($asset, $platform);
+        $prepared = $this->media->prepareForFit($asset, $channel);
 
-        $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+        $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
 
         $convertedFrom = null;
         if ($prepared->mimeType !== (string) $asset->mime_type) {
@@ -208,7 +263,9 @@ final class SocialMediaTool extends AbstractSocialTool
         }
 
         return [
-            'platform'       => $platform->value,
+            'channel'        => $channel->key(),
+            'network'        => $channel->network,
+            'via'            => $channel->via,
             'fits'           => $fit['fits'],
             'reasons'        => $fit['reasons'],
             'remedy'         => $fit['remedy'],
@@ -229,7 +286,7 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $prepared = $this->media->prepare($asset, SocialPlatform::Instagram);
+        $prepared = $this->media->prepare($asset, SocialChannel::direct(SocialPlatform::Instagram->value));
 
         return ToolResult::ok(
             SocialToolPresenter::prepared((string) $asset->id, $prepared),

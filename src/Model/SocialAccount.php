@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $principal_id
  * @property int|null $connection_id
  * @property string $platform
+ * @property string $via
  * @property string $kind
  * @property string $external_id
  * @property string|null $display_name
@@ -37,11 +38,32 @@ final class SocialAccount extends Model
     public const STATUS_REVOKED = 'revoked';
     public const STATUS_ERROR = 'error';
 
+    /**
+     * The account is gone from the aggregator.
+     *
+     * Not a failure and not a deletion: the account is still in the
+     * aggregator's own UI, it is just no longer one the key reaches. A
+     * post's history keeps its target, and the target reads as "this
+     * account is no longer in Zernio" rather than as a hole.
+     */
+    public const STATUS_DISCONNECTED = 'disconnected';
+
     protected $table = 'social_accounts';
+
+    /**
+     * The route an account takes unless it is told otherwise.
+     *
+     * The column's own default, carried by the model so an account that
+     * was never written still says which route it is on.
+     */
+    protected $attributes = [
+        'via' => SocialChannel::DIRECT,
+    ];
 
     /** @var list<string> */
     protected $fillable = [
         'platform',
+        'via',
         'kind',
         'external_id',
         'display_name',
@@ -57,6 +79,20 @@ final class SocialAccount extends Model
         'followers'     => 'integer',
         'connected_at'  => 'datetime',
     ];
+
+    /**
+     * The channel this account publishes through.
+     *
+     * The route and the network together are the account's identity: the
+     * same network on two routes is two accounts with two tokens.
+     */
+    public function channel(): SocialChannel
+    {
+        // A row written before the route column existed carries none, and
+        // the plugin's own route is the only one such a row can have.
+        return SocialChannel::tryFrom((string) $this->via, (string) $this->platform)
+            ?? SocialChannel::direct((string) $this->platform);
+    }
 
     /**
      * The login this account belongs to.

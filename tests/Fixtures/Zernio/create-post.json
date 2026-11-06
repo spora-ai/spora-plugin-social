@@ -1,0 +1,20 @@
+{
+    "post": {
+        "_id": "id_001",
+        "content": "We shipped…",
+        "status": "published",
+        "platforms": [
+            {
+                "platform": "bluesky",
+                "accountId": "id_002",
+                "status": "published",
+                "platformPostId": "name_001",
+                "platformPostUrl": "https://bsky.app/redacted",
+                "publishedAt": "2026-11-01T10:00:05.000Z"
+            }
+        ],
+        "createdAt": "2026-11-01T10:00:00.000Z",
+        "updatedAt": "2026-11-01T10:00:05.000Z"
+    },
+    "message": "Post published successfully"
+}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Publish;
 
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 
 /**
@@ -26,9 +27,9 @@ final class LinkedInAdapter implements PublisherInterface
         private readonly PlatformApi $api,
     ) {}
 
-    public function platform(): SocialPlatform
+    public function channel(): SocialChannel
     {
-        return SocialPlatform::LinkedIn;
+        return SocialChannel::direct(SocialPlatform::LinkedIn->value);
     }
 
     public function publish(PublishRequest $request): PublishResult

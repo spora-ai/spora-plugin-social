@@ -75,7 +75,7 @@ it('refuses to connect when the instance has no public address', function () {
     // The connect flow is what says it plainly.
     $service = new SocialConnectionService($settings, new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]), new Spora\Plugins\Social\OAuth\SocialStateCodec(securityManager()), new Spora\Plugins\Social\Service\SocialAppUrlProbe(new Symfony\Component\HttpClient\MockHttpClient([
         new Symfony\Component\HttpClient\Response\MockResponse('', ['http_code' => 200]),
-    ])), new SocialConnectionTokens($settings, new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]), securityManager()));
+    ])), new SocialConnectionTokens($settings, new Spora\Plugins\Social\Tests\Support\FakeProviderResolver([]), securityManager()), aggregatorService());
 
     expect(fn() => $service->startConnect(1, SocialProvider::Meta))
         ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'no public address')
