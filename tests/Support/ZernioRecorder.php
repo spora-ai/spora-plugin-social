@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tests\Support;
 
+use Symfony\Component\HttpClient\Exception\TransportException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
@@ -26,7 +27,7 @@ final class ZernioRecorder
     public array $requests = [];
 
     /**
-     * @param list<array{body: string, status?: int}> $answers
+     * @param list<array{body: string, status?: int, transport?: bool}> $answers
      */
     public function __construct(private readonly array $answers = []) {}
 
@@ -36,6 +37,12 @@ final class ZernioRecorder
             $this->requests[] = ['method' => $method, 'url' => $url, 'options' => $options];
 
             $answer = $this->answers[count($this->requests) - 1] ?? ['body' => '{}'];
+
+            // A call that never landed: the request never reaches
+            // Zernio, and the outcome is unknown.
+            if (($answer['transport'] ?? false) === true) {
+                throw new TransportException('Connection refused');
+            }
 
             return new MockResponse($answer['body'], ['http_code' => $answer['status'] ?? 200]);
         });

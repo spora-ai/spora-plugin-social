@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $external_id
  * @property string|null $external_url
  * @property string|null $container_id
+ * @property string|null $idempotency_key
  * @property string|null $error
  * @property \Carbon\Carbon|null $published_at
  * @property ?\Carbon\Carbon $created_at
@@ -60,6 +61,7 @@ final class SocialPostTarget extends Model
         'external_id',
         'external_url',
         'container_id',
+        'idempotency_key',
         'error',
         'published_at',
     ];

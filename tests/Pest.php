@@ -29,6 +29,7 @@ use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
+use Spora\Plugins\Social\Tests\Support\ZernioRecorder;
 use Spora\Plugins\Social\Tools\SocialConnectionsTool;
 use Spora\Services\PrincipalContext;
 use Spora\Services\PrincipalResolver;
@@ -517,7 +518,7 @@ function principalContext(int $principalId): PrincipalContext
  *
  * @param array<string, list<array{body: string, status?: int}>|Closure> $answers
  */
-function postPublisher(array $answers = []): SocialPublisher
+function postPublisher(array $answers = [], ?ZernioRecorder $zernio = null): SocialPublisher
 {
     $client = static function (string $platform) use ($answers): PlatformHttpClient {
         $handler = $answers[$platform] ?? null;
@@ -563,6 +564,8 @@ function postPublisher(array $answers = []): SocialPublisher
 
     $posts = new SocialPostService(new SocialPostAccounts($connections));
 
+    $aggregators = aggregatorService($zernio?->client());
+
     return new SocialPublisher(
         $posts,
         $connections,
@@ -572,6 +575,8 @@ function postPublisher(array $answers = []): SocialPublisher
             new FacebookAdapter(new PlatformApi($client('facebook'), apiVersions())),
             new InstagramAdapter(new PlatformApi($client('instagram'), apiVersions())),
         ),
+        new Spora\Plugins\Social\Aggregator\AggregatorPublisher($aggregators, zernioClient($zernio?->client())),
+        new Spora\Plugins\Social\Service\PostMedia($media),
     );
 }
 

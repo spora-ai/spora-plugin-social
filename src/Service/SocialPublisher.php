@@ -7,6 +7,8 @@ namespace Spora\Plugins\Social\Service;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
+use Spora\Plugins\Social\Aggregator\AggregatorPublisher;
+use Spora\Plugins\Social\Aggregator\Zernio\ZernioTransportException;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
 use Spora\Plugins\Social\Model\SocialChannel;
@@ -41,6 +43,8 @@ final class SocialPublisher
         private readonly SocialConnectionService $connections,
         private readonly MediaPipeline $media,
         private readonly PublisherRegistry $publishers,
+        private readonly AggregatorPublisher $aggregator,
+        private readonly PostMedia $postMedia,
     ) {}
 
     /**
@@ -221,6 +225,9 @@ final class SocialPublisher
         $post->status = SocialPost::STATUS_PUBLISHING;
         $post->save();
 
+        $direct = [];
+        $aggregated = [];
+
         foreach ($targets as $target) {
             if ($onlyFailed && $target->status !== SocialPostTarget::STATUS_FAILED) {
                 continue;
@@ -230,7 +237,24 @@ final class SocialPublisher
                 continue;
             }
 
+            // The plugin's own networks publish one target at a time, as
+            // they always did. The aggregator's targets go out together:
+            // one cross-post, one call.
+            if ($target->channel()->isDirect()) {
+                $direct[] = $target;
+
+                continue;
+            }
+
+            $aggregated[] = $target;
+        }
+
+        foreach ($direct as $target) {
             $this->publishTarget($post, $target);
+        }
+
+        if ($aggregated !== []) {
+            $this->publishAggregatorGroup($post, $aggregated);
         }
 
         $post = $post->fresh() ?? $post;
@@ -243,6 +267,145 @@ final class SocialPublisher
         $post->save();
 
         return $post;
+    }
+
+    /**
+     * The aggregator's targets, in one call.
+     *
+     * The key is minted once for the attempt and written to every target
+     * of the group **before** the call: that is what makes a crash
+     * survivable, because the targets that are still `publishing` carry
+     * the key that was used and the replay uses it again.
+     *
+     * @param list<SocialPostTarget> $targets
+     */
+    private function publishAggregatorGroup(SocialPost $post, array $targets): void
+    {
+        try {
+            $media = $this->originalMedia($post);
+        } catch (Throwable $e) {
+            // The attachment cannot be read: every target of the group
+            // fails with the same reason, the way the native path fails
+            // one target and leaves the others alone.
+            foreach ($targets as $target) {
+                $this->failTarget($target, $e->getMessage());
+            }
+
+            return;
+        }
+
+        $going = [];
+
+        foreach ($targets as $target) {
+            $channel = $target->channel();
+
+            $bodyFit = PlatformFit::checkBody($channel, $this->bodyFor($post, $channel));
+            if (!$bodyFit['fits']) {
+                $this->failTarget($target, trim(
+                    implode(' ', $bodyFit['reasons']) . ' ' . (string) $bodyFit['remedy'],
+                ));
+
+                continue;
+            }
+
+            $mediaProblem = $this->mediaProblem($channel, $media);
+            if ($mediaProblem !== null) {
+                $this->failTarget($target, $mediaProblem);
+
+                continue;
+            }
+
+            $going[] = $target;
+        }
+
+        if ($going === []) {
+            return;
+        }
+
+        $key = $this->idempotencyKey();
+
+        foreach ($going as $target) {
+            $target->status = SocialPostTarget::STATUS_PUBLISHING;
+            $target->idempotency_key = $key;
+            $target->error = null;
+            $target->save();
+        }
+
+        try {
+            $outcomes = $this->aggregator->publish($post, $going, $key, $media);
+        } catch (ZernioTransportException $e) {
+            // The call never landed, or its answer never came back. The
+            // publish may still have happened, so the targets stay in
+            // `publishing` with their key: a `failed` would invite a
+            // retry, and a retry mints a new key — which is a new post,
+            // which is a double-publish.
+            return;
+        } catch (Throwable $e) {
+            foreach ($going as $target) {
+                $this->failTarget($target, $e->getMessage());
+            }
+
+            return;
+        }
+
+        $this->aggregator->write($going, $outcomes);
+    }
+
+    /**
+     * The attachment as it is.
+     */
+    private function originalMedia(SocialPost $post): ?PreparedMedia
+    {
+        return $this->postMedia->original($post);
+    }
+
+    /**
+     * Why the attachment does not fit the channel, when it does not.
+     */
+    private function mediaProblem(SocialChannel $channel, ?PreparedMedia $media): ?string
+    {
+        if ($media === null) {
+            $rule = PlatformFit::rule($channel);
+
+            if (!$rule['media_required']) {
+                return null;
+            }
+
+            return $rule['label'] . ' cannot publish a post without media. ' . PlatformFit::REMEDY_ATTACH_MEDIA . '.';
+        }
+
+        $fit = PlatformFit::check($channel, $media->mimeType, $media->sizeBytes);
+
+        if ($fit['fits']) {
+            return null;
+        }
+
+        return trim(implode(' ', $fit['reasons']) . ' ' . (string) $fit['remedy']);
+    }
+
+    /**
+     * The key the group's publish goes out under.
+     *
+     * A version-4 UUID: the aggregator's window is 24 hours, and the
+     * key has to be new for every attempt so a retry is a new post.
+     */
+    private function idempotencyKey(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+    }
+
+    /**
+     * The target failed, and why.
+     */
+    private function failTarget(SocialPostTarget $target, string $error): void
+    {
+        $target->status = SocialPostTarget::STATUS_FAILED;
+        $target->error = $error;
+        $target->save();
     }
 
     /**
@@ -349,6 +512,25 @@ final class SocialPublisher
             }
 
             $channel = $target->channel();
+
+            // The aggregator takes the post down itself, and it needs the
+            // account id: the endpoint refuses a post that reached
+            // several accounts of one network with `409
+            // ambiguous_account`, and the operator must never see that.
+            if (!$channel->isDirect()) {
+                $error = $this->aggregator->unpublish($target);
+
+                if ($error !== null) {
+                    throw SocialException::platform($error, 'PLATFORM_REQUEST_FAILED');
+                }
+
+                $target->status = SocialPostTarget::STATUS_DELETED;
+                $target->error = null;
+                $target->save();
+
+                return;
+            }
+
             $publisher = $this->publishers->for($channel);
 
             if ($target->external_id === null || $target->external_id === '') {
@@ -430,17 +612,6 @@ final class SocialPublisher
 
     private function bodyFor(SocialPost $post, SocialChannel $channel): string
     {
-        $bodies = $post->platform_bodies;
-
-        $body = (string) $post->body;
-
-        if (is_array($bodies)) {
-            $specific = $bodies[$channel->key()] ?? null;
-            if (is_string($specific) && $specific !== '') {
-                $body = $specific;
-            }
-        }
-
-        return PlatformFit::composeText($body, is_array($post->hashtags) ? $post->hashtags : []);
+        return (new PostBodies($post))->for($channel);
     }
 }

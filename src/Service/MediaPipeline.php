@@ -118,6 +118,19 @@ final class MediaPipeline
     }
 
     /**
+     * The asset as it is.
+     *
+     * The aggregator takes the original bytes: it accepts JPEG, PNG, GIF
+     * and WebP, and it compresses above a network's limit itself. The
+     * preparation the native path does exists for Instagram, which takes
+     * no PNG at all.
+     */
+    public function prepareOriginal(MediaAsset $asset): PreparedMedia
+    {
+        return $this->prepareWithBytes($asset);
+    }
+
+    /**
      * Whether the channel is the one that fetches the media itself.
      *
      * Instagram is the native case: it rejects a PNG and fetches the

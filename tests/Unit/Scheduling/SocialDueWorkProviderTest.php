@@ -51,6 +51,13 @@ function dueWorkProvider(array $answers = [], array $containers = []): SocialDue
                 $containers !== [] ? $containers : [['body' => '{}']],
             ))),
         ),
+        new Spora\Plugins\Social\Aggregator\AggregatorReconciliation(
+            new Spora\Plugins\Social\Aggregator\AggregatorPublisher(
+                aggregatorService(),
+                zernioClient(),
+            ),
+            new Spora\Plugins\Social\Service\PostMedia(mediaPipeline()),
+        ),
     );
 }
 
@@ -390,4 +397,64 @@ it('resolves a container once, whatever two workers ask at the same time', funct
 
     expect($target->status)->toBe(SocialPostTarget::STATUS_PUBLISHED)
         ->and($target->external_id)->toBe('container-1');
+});
+
+/**
+ * A publish that started and never finished: the key was written down
+ * and the call's outcome never came back.
+ */
+function halfFinishedAggregatorTarget(int $principalId, string $key): SocialPostTarget
+{
+    $account = zernioAccount($principalId, 'bluesky', 'id_002');
+
+    $post = new Spora\Plugins\Social\Model\SocialPost();
+    $post->principal_id = $principalId;
+    $post->body = 'We shipped…';
+    $post->status = Spora\Plugins\Social\Model\SocialPost::STATUS_PUBLISHING;
+    $post->save();
+
+    $target = new SocialPostTarget();
+    $target->post_id = $post->id;
+    $target->account_id = $account->id;
+    $target->platform = 'bluesky';
+    $target->via = 'zernio';
+    $target->status = SocialPostTarget::STATUS_PUBLISHING;
+    $target->idempotency_key = $key;
+    $target->save();
+
+    SocialPostTarget::query()
+        ->where('id', $target->id)
+        ->update(['updated_at' => gmdate(SocialFixtures::DB_DATETIME, time() - 3600)]);
+
+    return $target;
+}
+
+it('answers with the aggregator publishes that never finished', function () {
+    $provider = dueWorkProvider();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    halfFinishedAggregatorTarget($principalId, 'spora-key-1');
+
+    $work = $provider->dueWork([$principalId]);
+
+    $kinds = array_map(static fn($unit): string => (string) $unit->payload['kind'], $work);
+
+    expect($kinds)->toContain(SocialDueWorkProvider::KIND_AGGREGATOR);
+});
+
+it('leaves an aggregator target without a key alone', function () {
+    $provider = dueWorkProvider();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // A target that never went out under a key is not a publish that
+    // started: there is nothing to replay.
+    halfFinishedAggregatorTarget($principalId, '');
+
+    $work = $provider->dueWork([$principalId]);
+
+    $kinds = array_map(static fn($unit): string => (string) $unit->payload['kind'], $work);
+
+    expect($kinds)->not->toContain(SocialDueWorkProvider::KIND_AGGREGATOR);
 });

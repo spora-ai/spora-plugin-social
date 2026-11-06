@@ -10,6 +10,8 @@ use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
 use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
+use Spora\Plugins\Social\Aggregator\AggregatorPublisher;
+use Spora\Plugins\Social\Aggregator\AggregatorReconciliation;
 use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Http\OAuthCallbackController;
@@ -32,6 +34,7 @@ use Spora\Plugins\Social\Service\ApiVersions;
 use Spora\Plugins\Social\Service\ContainerReconciliation;
 use Spora\Plugins\Social\Service\LinkedInPermissionSettings;
 use Spora\Plugins\Social\Service\MediaPipeline;
+use Spora\Plugins\Social\Service\PostMedia;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialConnectionTokens;
@@ -106,6 +109,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             SocialConnectionTokens::class    => \DI\autowire(),
             SocialAppUrlProbe::class         => \DI\autowire(),
             MediaPipeline::class             => \DI\autowire(),
+            PostMedia::class                 => \DI\autowire(),
             PlatformHttpClient::class        => \DI\autowire(),
             LinkedInAdapter::class           => \DI\autowire(),
             FacebookAdapter::class           => \DI\autowire(),
@@ -121,6 +125,8 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             ZernioClient::class              => \DI\autowire(),
             AggregatorService::class          => \DI\autowire(),
             AggregatorAccountSync::class      => \DI\autowire(),
+            AggregatorPublisher::class         => \DI\autowire(),
+            AggregatorReconciliation::class    => \DI\autowire(),
             SocialConnectionController::class => \DI\autowire(),
             SocialAggregatorController::class => \DI\autowire(),
             SocialPostController::class      => \DI\autowire(),
@@ -225,7 +231,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
     public function schemaVersion(): int
     {
-        return 10;
+        return 11;
     }
 
     /**
