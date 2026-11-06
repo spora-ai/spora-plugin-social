@@ -247,6 +247,44 @@ it('leaves the follower count empty when the add-on is not there, and does not f
         ->and($reporting['report_note'])->toContain('add-on');
 });
 
+it('leaves the follower count empty when the endpoint refuses the add-on, and does not fail the sync', function () {
+    // `GET /v1/accounts/follower-stats` answers `403` when the plan
+    // carries no analytics add-on. `/v1/analytics` answers `402` for the
+    // same condition — the two endpoints differ.
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('accounts-with-analytics-access')],
+        ['body' => zernioFixture('follower-stats-addon-required'), 'status' => 403],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $connection = zernioConnection($principalId);
+
+    $sync = accountSync($recorder);
+    $result = $sync->read($connection);
+    $sync->apply($connection, $result);
+
+    $account = SocialAccount::query()
+        ->where('principal_id', $principalId)
+        ->where('via', 'zernio')
+        ->where('platform', 'bluesky')
+        ->first();
+
+    // The account is still an account: only the count is missing.
+    expect($account)->not->toBeNull()
+        ->and($account?->followers)->toBeNull();
+
+    // And the reason is on the account, because the answer is the
+    // aggregator's plan and not a scope of ours.
+    $reporting = Spora\Plugins\Social\Service\AccountReporting::of($account, []);
+
+    expect($reporting['can_report'])->toBeFalse()
+        ->and($reporting['report_note'])->toContain('add-on');
+
+    // And the connection says the plan carries no add-on, rather than
+    // claiming it does because the call simply failed.
+    expect($connection->fresh()?->analytics_available)->toBeFalse();
+});
+
 it('marks an account the aggregator no longer reports disconnected, and does not delete it', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('accounts')],

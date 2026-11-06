@@ -117,11 +117,13 @@ final class AggregatorAccountSync
      * call: one call per account is a call per account, and the count is
      * only fetched for the accounts whose object does not carry one.
      *
-     * The count needs the add-on, so the call can answer `402`. That is
-     * not a failure of the sync: the accounts are still accounts, and the
+     * The count needs the add-on, so the call can be refused: **this
+     * endpoint answers `403` without it**, and `/v1/analytics` answers
+     * `402` for the same condition — the two endpoints differ. Neither
+     * is a failure of the sync: the accounts are still accounts, and the
      * count stays empty with the reason on the account.
      *
-     * The call is made once per account, and the first `402` ends the
+     * The call is made once per account, and the first refusal ends the
      * round: the add-on is a property of the plan, so every account
      * would answer the same way.
      *
@@ -152,7 +154,7 @@ final class AggregatorAccountSync
         foreach ($missing as $account) {
             $response = $this->client->followerStats($key, ['accountIds' => $account->externalId]);
 
-            if ($response->status === 402) {
+            if ($response->status === 403 || $response->status === 402) {
                 return ['counts' => [], 'available' => false];
             }
 
