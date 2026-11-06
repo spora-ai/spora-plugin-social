@@ -118,11 +118,9 @@ final class AggregatorMetricsReader
             return self::FAILED_NOTE;
         }
 
-        if (!$response->isSuccessful()) {
-            return $response->errorMessage() ?? 'The aggregator refused the analytics.';
-        }
-
-        return null;
+        return $response->isSuccessful()
+            ? null
+            : ($response->errorMessage() ?? 'The aggregator refused the analytics.');
     }
 
     /**

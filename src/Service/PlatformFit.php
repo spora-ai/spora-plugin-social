@@ -74,6 +74,18 @@ use Spora\Plugins\Social\Model\SocialChannel;
  *     size_remedy: string,
  *     counting_note: ?string
  * }
+ * @phpstan-type Row array{
+ *     label: string,
+ *     mimeTypes: list<string>,
+ *     maxBytes: int,
+ *     maxCharacters: int,
+ *     visibleChars: int,
+ *     media: string,
+ *     mediaRequired?: bool,
+ *     fetchesMedia?: bool,
+ *     videoRemedy?: string,
+ *     countingNote?: string
+ * }
  */
 final class PlatformFit
 {
@@ -133,49 +145,49 @@ final class PlatformFit
     private static function directRules(): array
     {
         return [
-            'direct:linkedin' => self::row(
-                label: 'LinkedIn',
-                mimeTypes: [
+            'direct:linkedin' => self::row([
+                'label' => 'LinkedIn',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_GIF,
                 ],
-                maxBytes: 8 * self::MEGABYTE,
-                maxCharacters: 3000,
-                visibleChars: 200,
-                media: 'JPEG, PNG or GIF, up to 8 MB.',
-                fetchesMedia: false,
-            ),
-            'direct:facebook' => self::row(
-                label: 'Facebook',
-                mimeTypes: [
+                'maxBytes' => 8 * self::MEGABYTE,
+                'maxCharacters' => 3000,
+                'visibleChars' => 200,
+                'media' => 'JPEG, PNG or GIF, up to 8 MB.',
+                'fetchesMedia' => false,
+            ]),
+            'direct:facebook' => self::row([
+                'label' => 'Facebook',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_GIF,
                     'image/bmp',
                     self::MIME_MP4,
                 ],
-                maxBytes: 1024 * self::MEGABYTE,
-                maxCharacters: 63206,
-                visibleChars: 125,
-                media: 'JPEG, PNG, GIF, BMP or MP4, up to 1 GB.',
-                fetchesMedia: false,
+                'maxBytes' => 1024 * self::MEGABYTE,
+                'maxCharacters' => 63206,
+                'visibleChars' => 125,
+                'media' => 'JPEG, PNG, GIF, BMP or MP4, up to 1 GB.',
+                'fetchesMedia' => false,
                 // This row names the same remedy for a video as for an
                 // image, and the other rows do not.
-                videoRemedy: self::REMEDY_CONVERT_JPEG,
-            ),
-            'direct:instagram' => self::row(
-                label: 'Instagram',
-                mimeTypes: [
+                'videoRemedy' => self::REMEDY_CONVERT_JPEG,
+            ]),
+            'direct:instagram' => self::row([
+                'label' => 'Instagram',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_MP4,
                 ],
-                maxBytes: 100 * self::MEGABYTE,
-                maxCharacters: 2200,
-                visibleChars: 125,
-                media: 'JPEG or MP4, up to 100 MB.',
-                mediaRequired: true,
-            ),
+                'maxBytes' => 100 * self::MEGABYTE,
+                'maxCharacters' => 2200,
+                'visibleChars' => 125,
+                'media' => 'JPEG or MP4, up to 100 MB.',
+                'mediaRequired' => true,
+            ]),
         ];
     }
 
@@ -198,9 +210,9 @@ final class PlatformFit
     private static function zernioMainstreamRules(): array
     {
         return [
-            'zernio:twitter' => self::row(
-                label: 'X',
-                mimeTypes: [
+            'zernio:twitter' => self::row([
+                'label' => 'X',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_WEBP,
@@ -208,43 +220,43 @@ final class PlatformFit
                     self::MIME_MP4,
                     self::MIME_MOV,
                 ],
-                maxBytes: 512 * self::MEGABYTE,
-                maxCharacters: 280,
-                visibleChars: 280,
-                media: 'JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB.',
-                countingNote: 'X counts a URL as 23 characters whatever its length, and an emoji as 2, so the number of characters in the body is not the number X counts.',
-            ),
-            'zernio:instagram' => self::row(
-                label: 'Instagram',
-                mimeTypes: [
+                'maxBytes' => 512 * self::MEGABYTE,
+                'maxCharacters' => 280,
+                'visibleChars' => 280,
+                'media' => 'JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB.',
+                'countingNote' => 'X counts a URL as 23 characters whatever its length, and an emoji as 2, so the number of characters in the body is not the number X counts.',
+            ]),
+            'zernio:instagram' => self::row([
+                'label' => 'Instagram',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_MP4,
                     self::MIME_MOV,
                 ],
-                maxBytes: 300 * self::MEGABYTE,
-                maxCharacters: 2200,
-                visibleChars: 125,
-                media: 'JPEG or PNG up to 8 MB, or an MP4 or MOV video up to 300 MB.',
-                mediaRequired: true,
-            ),
-            'zernio:facebook' => self::row(
-                label: 'Facebook',
-                mimeTypes: [
+                'maxBytes' => 300 * self::MEGABYTE,
+                'maxCharacters' => 2200,
+                'visibleChars' => 125,
+                'media' => 'JPEG or PNG up to 8 MB, or an MP4 or MOV video up to 300 MB.',
+                'mediaRequired' => true,
+            ]),
+            'zernio:facebook' => self::row([
+                'label' => 'Facebook',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_GIF,
                     self::MIME_MP4,
                     self::MIME_MOV,
                 ],
-                maxBytes: 4 * self::GIGABYTE,
-                maxCharacters: 63206,
-                visibleChars: 480,
-                media: 'JPEG, PNG or GIF up to 4 MB, or an MP4 or MOV video up to 4 GB.',
-            ),
-            'zernio:linkedin' => self::row(
-                label: 'LinkedIn',
-                mimeTypes: [
+                'maxBytes' => 4 * self::GIGABYTE,
+                'maxCharacters' => 63206,
+                'visibleChars' => 480,
+                'media' => 'JPEG, PNG or GIF up to 4 MB, or an MP4 or MOV video up to 4 GB.',
+            ]),
+            'zernio:linkedin' => self::row([
+                'label' => 'LinkedIn',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_GIF,
@@ -252,14 +264,14 @@ final class PlatformFit
                     self::MIME_MOV,
                     self::MIME_AVI,
                 ],
-                maxBytes: 5 * self::GIGABYTE,
-                maxCharacters: 3000,
-                visibleChars: 200,
-                media: 'JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB.',
-            ),
-            'zernio:tiktok' => self::row(
-                label: 'TikTok',
-                mimeTypes: [
+                'maxBytes' => 5 * self::GIGABYTE,
+                'maxCharacters' => 3000,
+                'visibleChars' => 200,
+                'media' => 'JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB.',
+            ]),
+            'zernio:tiktok' => self::row([
+                'label' => 'TikTok',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_WEBP,
@@ -267,15 +279,15 @@ final class PlatformFit
                     self::MIME_MOV,
                     self::MIME_WEBM,
                 ],
-                maxBytes: 4 * self::GIGABYTE,
-                maxCharacters: 2200,
-                visibleChars: 2200,
-                media: 'JPEG, PNG or WebP up to 20 MB, or an MP4, MOV or WebM video up to 4 GB.',
-                mediaRequired: true,
-            ),
-            'zernio:youtube' => self::row(
-                label: 'YouTube',
-                mimeTypes: [
+                'maxBytes' => 4 * self::GIGABYTE,
+                'maxCharacters' => 2200,
+                'visibleChars' => 2200,
+                'media' => 'JPEG, PNG or WebP up to 20 MB, or an MP4, MOV or WebM video up to 4 GB.',
+                'mediaRequired' => true,
+            ]),
+            'zernio:youtube' => self::row([
+                'label' => 'YouTube',
+                'mimeTypes' => [
                     self::MIME_MP4,
                     self::MIME_MOV,
                     self::MIME_AVI,
@@ -284,12 +296,12 @@ final class PlatformFit
                     'video/3gpp',
                     self::MIME_WEBM,
                 ],
-                maxBytes: 256 * self::GIGABYTE,
-                maxCharacters: 5000,
-                visibleChars: 5000,
-                media: 'an MP4, MOV, AVI, WMV, FLV, 3GP or WebM video up to 256 GB.',
-                mediaRequired: true,
-            ),
+                'maxBytes' => 256 * self::GIGABYTE,
+                'maxCharacters' => 5000,
+                'visibleChars' => 5000,
+                'media' => 'an MP4, MOV, AVI, WMV, FLV, 3GP or WebM video up to 256 GB.',
+                'mediaRequired' => true,
+            ]),
         ];
     }
 
@@ -302,9 +314,9 @@ final class PlatformFit
     private static function zernioCommunityRules(): array
     {
         return [
-            'zernio:pinterest' => self::row(
-                label: 'Pinterest',
-                mimeTypes: [
+            'zernio:pinterest' => self::row([
+                'label' => 'Pinterest',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_WEBP,
@@ -312,64 +324,64 @@ final class PlatformFit
                     self::MIME_MP4,
                     self::MIME_MOV,
                 ],
-                maxBytes: 2 * self::GIGABYTE,
-                maxCharacters: 800,
-                visibleChars: 800,
-                media: 'JPEG, PNG, WebP or GIF up to 32 MB, or an MP4 or MOV video up to 2 GB.',
-            ),
-            'zernio:reddit' => self::row(
-                label: 'Reddit',
-                mimeTypes: [
+                'maxBytes' => 2 * self::GIGABYTE,
+                'maxCharacters' => 800,
+                'visibleChars' => 800,
+                'media' => 'JPEG, PNG, WebP or GIF up to 32 MB, or an MP4 or MOV video up to 2 GB.',
+            ]),
+            'zernio:reddit' => self::row([
+                'label' => 'Reddit',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_GIF,
                     self::MIME_MP4,
                 ],
-                maxBytes: 1 * self::GIGABYTE,
-                maxCharacters: 40000,
-                visibleChars: 40000,
-                media: 'JPEG, PNG or GIF up to 20 MB, or an MP4 video up to 1 GB.',
-            ),
-            'zernio:bluesky' => self::row(
-                label: 'Bluesky',
-                mimeTypes: [
+                'maxBytes' => 1 * self::GIGABYTE,
+                'maxCharacters' => 40000,
+                'visibleChars' => 40000,
+                'media' => 'JPEG, PNG or GIF up to 20 MB, or an MP4 video up to 1 GB.',
+            ]),
+            'zernio:bluesky' => self::row([
+                'label' => 'Bluesky',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_WEBP,
                     self::MIME_GIF,
                     self::MIME_MP4,
                 ],
-                maxBytes: 50 * self::MEGABYTE,
-                maxCharacters: 300,
-                visibleChars: 300,
-                media: 'JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB.',
-            ),
-            'zernio:threads' => self::row(
-                label: 'Threads',
-                mimeTypes: [
+                'maxBytes' => 50 * self::MEGABYTE,
+                'maxCharacters' => 300,
+                'visibleChars' => 300,
+                'media' => 'JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB.',
+            ]),
+            'zernio:threads' => self::row([
+                'label' => 'Threads',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_MP4,
                 ],
-                maxBytes: 1 * self::GIGABYTE,
-                maxCharacters: 500,
-                visibleChars: 500,
-                media: 'JPEG or PNG up to 8 MB, or an MP4 video up to 1 GB.',
-            ),
-            'zernio:googlebusiness' => self::row(
-                label: 'Google Business',
-                mimeTypes: [
+                'maxBytes' => 1 * self::GIGABYTE,
+                'maxCharacters' => 500,
+                'visibleChars' => 500,
+                'media' => 'JPEG or PNG up to 8 MB, or an MP4 video up to 1 GB.',
+            ]),
+            'zernio:googlebusiness' => self::row([
+                'label' => 'Google Business',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                 ],
-                maxBytes: 5 * self::MEGABYTE,
-                maxCharacters: 1500,
-                visibleChars: 1500,
-                media: 'JPEG or PNG up to 5 MB. No video.',
-            ),
-            'zernio:telegram' => self::row(
-                label: 'Telegram',
-                mimeTypes: [
+                'maxBytes' => 5 * self::MEGABYTE,
+                'maxCharacters' => 1500,
+                'visibleChars' => 1500,
+                'media' => 'JPEG or PNG up to 5 MB. No video.',
+            ]),
+            'zernio:telegram' => self::row([
+                'label' => 'Telegram',
+                'mimeTypes' => [
                     self::MIME_JPEG,
                     self::MIME_PNG,
                     self::MIME_GIF,
@@ -377,12 +389,12 @@ final class PlatformFit
                     self::MIME_MP4,
                     self::MIME_MOV,
                 ],
-                maxBytes: 50 * self::MEGABYTE,
-                maxCharacters: 4096,
-                visibleChars: 4096,
-                media: 'JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB. '
+                'maxBytes' => 50 * self::MEGABYTE,
+                'maxCharacters' => 4096,
+                'visibleChars' => 4096,
+                'media' => 'JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB. '
                     . 'Zernio puts up to 10 images or videos in an album, and a post carries one attachment.',
-            ),
+            ]),
         ];
     }
 
@@ -394,35 +406,25 @@ final class PlatformFit
      * differs in. The aggregator fetches the file itself; the plugin's
      * own route hands the bytes over.
      *
-     * @param list<string> $mimeTypes
+     * @param Row $row
      * @return Rule
      */
-    private static function row(
-        string $label,
-        array $mimeTypes,
-        int $maxBytes,
-        int $maxCharacters,
-        int $visibleChars,
-        string $media,
-        bool $mediaRequired = false,
-        bool $fetchesMedia = true,
-        string $videoRemedy = self::REMEDY_CONVERT_VIDEO,
-        ?string $countingNote = null,
-    ): array {
+    private static function row(array $row): array
+    {
         return [
-            'label'          => $label,
-            'media_required' => $mediaRequired,
+            'label'          => $row['label'],
+            'media_required' => $row['mediaRequired'] ?? false,
             'media_count'    => self::MEDIA_PER_POST,
-            'fetches_media'  => $fetchesMedia,
-            'mime_types'     => $mimeTypes,
-            'max_bytes'      => $maxBytes,
-            'max_characters' => $maxCharacters,
-            'visible_chars'  => $visibleChars,
-            'media'          => $media,
+            'fetches_media'  => $row['fetchesMedia'] ?? true,
+            'mime_types'     => $row['mimeTypes'],
+            'max_bytes'      => $row['maxBytes'],
+            'max_characters' => $row['maxCharacters'],
+            'visible_chars'  => $row['visibleChars'],
+            'media'          => $row['media'],
             'media_remedy'   => self::REMEDY_CONVERT_JPEG,
-            'video_remedy'   => $videoRemedy,
+            'video_remedy'   => $row['videoRemedy'] ?? self::REMEDY_CONVERT_VIDEO,
             'size_remedy'    => self::REMEDY_COMPRESS,
-            'counting_note'  => $countingNote,
+            'counting_note'  => $row['countingNote'] ?? null,
         ];
     }
 

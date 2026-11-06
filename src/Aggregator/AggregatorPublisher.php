@@ -37,6 +37,11 @@ final class AggregatorPublisher
      */
     private const REFUSED = 'The aggregator refused the post.';
 
+    /**
+     * The aggregator's own word for a target it took off the platform.
+     */
+    private const CANCELLED = 'The aggregator cancelled the post.';
+
     public function __construct(
         private readonly AggregatorService $aggregators,
         private readonly ZernioClient $client,
@@ -329,6 +334,7 @@ final class AggregatorPublisher
     {
         $status = (string) ($entry['status'] ?? $result['status'] ?? '');
         $error = $entry['errorMessage'] ?? $result['error'] ?? null;
+        $message = is_string($error) && $error !== '' ? $error : null;
 
         if ($status === 'published') {
             return AggregatorOutcome::published(
@@ -337,26 +343,18 @@ final class AggregatorPublisher
             );
         }
 
-        if ($status === 'failed') {
-            return AggregatorOutcome::failed(
-                is_string($error) && $error !== '' ? $error : self::REFUSED,
-            );
-        }
-
         // A cancelled target is not pending: the aggregator has taken it
         // off the platform and will not come back to it, so a pending
         // target would be replayed every cycle.
-        if ($status === 'cancelled') {
+        if ($status === 'failed' || $status === 'cancelled') {
             return AggregatorOutcome::failed(
-                is_string($error) && $error !== '' ? $error : 'The aggregator cancelled the post.',
+                $message ?? ($status === 'cancelled' ? self::CANCELLED : self::REFUSED),
             );
         }
 
         // pending, processing, uploading: the aggregator is still working
         // on it and retries by itself.
-        return AggregatorOutcome::pending(
-            is_string($error) && $error !== '' ? $error : null,
-        );
+        return AggregatorOutcome::pending($message);
     }
 
     /**
