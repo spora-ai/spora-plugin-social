@@ -163,7 +163,7 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $channels = $this->channels($arguments['channels'] ?? null);
+        $channels = $this->channels($arguments);
         $perChannel = [];
 
         foreach ($channels as $channel) {
@@ -179,7 +179,23 @@ final class SocialMediaTool extends AbstractSocialTool
 
         return ToolResult::ok(
             SocialToolPresenter::fit($fits, $perChannel),
-            ['fits' => $fits, 'per_channel' => $perChannel],
+            [
+                'fits'        => $fits,
+                'per_channel' => $perChannel,
+                // The key this tool answered with before the channels had
+                // names of their own. It is kept for one more release, so
+                // a caller that still reads it is not left with nothing.
+                'per_platform' => array_map(
+                    static fn(array $entry): array => [
+                        'platform'  => $entry['network'],
+                        'fits'      => $entry['fits'],
+                        'reasons'   => $entry['reasons'],
+                        'remedy'    => $entry['remedy'],
+                        'mime_type' => $entry['mime_type'],
+                    ],
+                    $perChannel,
+                ),
+            ],
         );
     }
 
@@ -189,13 +205,25 @@ final class SocialMediaTool extends AbstractSocialTool
      * A bare network name is the plugin's own route to it, and a key
      * names the route and the network both.
      *
+     * The `platforms` argument is the one this tool carried before the
+     * channels had names of their own. It is accepted for one more
+     * release, and a bare network name in it means the plugin's own
+     * route to that network — the route it meant before the rename.
+     *
+     * @param  array<string, mixed> $arguments
      * @return list<SocialChannel>
      */
-    private function channels(mixed $raw): array
+    private function channels(array $arguments): array
     {
+        $named = $this->keyList($arguments['channels'] ?? null);
+
+        if ($named === []) {
+            $named = $this->keyList($arguments['platforms'] ?? null);
+        }
+
         $channels = [];
 
-        foreach ($this->keyList($raw) as $name) {
+        foreach ($named as $name) {
             $channel = SocialChannel::fromKey($name);
 
             if ($channel !== null) {
@@ -203,7 +231,15 @@ final class SocialMediaTool extends AbstractSocialTool
             }
         }
 
-        return $channels !== [] ? $channels : PlatformFit::channels();
+        if ($channels !== []) {
+            return $channels;
+        }
+
+        // The channels the plugin publishes on itself. The aggregator's
+        // own are not the default: `zernio:youtube` takes no image, so
+        // the default answer for an ordinary image would flip from
+        // "fits" to "does not fit".
+        return PlatformFit::nativeChannels();
     }
 
     /**

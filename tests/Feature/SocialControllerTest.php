@@ -398,6 +398,56 @@ it('names the remedy for a media Instagram cannot take at all', function () {
         ->and($body['data']['per_channel'][0]['remedy'])->toBe('Convert to JPEG');
 });
 
+it('answers about the native channels when the request names none', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+
+    $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
+        'principal_id'   => $principalId,
+        'media_asset_id' => $asset->id,
+    ]));
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $body = decode($response);
+
+    // The three the plugin publishes on itself, and not the fifteen: the
+    // aggregator's `zernio:youtube` takes no image, so the default
+    // answer for an ordinary image would flip from "fits" to "does not
+    // fit".
+    expect($body['data']['fits'])->toBeTrue()
+        ->and($body['data']['per_channel'])->toHaveCount(3)
+        ->and(array_column($body['data']['per_channel'], 'channel'))
+        ->toBe(['direct:linkedin', 'direct:facebook', 'direct:instagram']);
+});
+
+it('still answers the old platforms key, for one release', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+
+    $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
+        'principal_id'   => $principalId,
+        'media_asset_id' => $asset->id,
+        'platforms'      => ['instagram'],
+    ]));
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $body = decode($response);
+
+    // A bare network name in the old key means the plugin's own route to
+    // it — the route it meant before the rename.
+    expect($body['data']['per_channel'])->toHaveCount(1)
+        ->and($body['data']['per_channel'][0]['channel'])->toBe('direct:instagram')
+        // And the old answer key is still there.
+        ->and($body['data']['per_platform'])->toHaveCount(1)
+        ->and($body['data']['per_platform'][0]['platform'])->toBe('instagram');
+});
+
 it('answers with the month of the calendar', function () {
     $auth = bootAuthLayer();
     $principalId = createUserPrincipal(bootAuth($auth));

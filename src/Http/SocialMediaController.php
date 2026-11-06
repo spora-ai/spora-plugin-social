@@ -84,16 +84,14 @@ final class SocialMediaController extends AbstractSocialController
 
             $asset = $this->media->findAsset($this->assetId($body), $principalId);
 
-            $channels = [];
-            foreach (is_array($body['channels'] ?? null) ? $body['channels'] : [] as $key) {
-                $channel = is_string($key) ? SocialChannel::fromKey($key) : null;
-                if ($channel !== null) {
-                    $channels[] = $channel;
-                }
-            }
+            $channels = $this->channels($body);
 
             if ($channels === []) {
-                $channels = PlatformFit::channels();
+                // The channels the plugin publishes on itself. The
+                // aggregator's own are not the default: `zernio:youtube`
+                // takes no image, so the default answer for an ordinary
+                // image would flip from "fits" to "does not fit".
+                $channels = PlatformFit::nativeChannels();
             }
 
             $perChannel = [];
@@ -123,8 +121,54 @@ final class SocialMediaController extends AbstractSocialController
             return $this->ok([
                 'fits'        => $fits,
                 'per_channel' => $perChannel,
+                // The key this endpoint answered with before the channels
+                // had names of their own. It is kept for one more
+                // release, so a caller that still reads it is not left
+                // with nothing.
+                'per_platform' => array_map(
+                    static fn(array $entry): array => [
+                        'platform'  => $entry['network'],
+                        'fits'      => $entry['fits'],
+                        'reasons'   => $entry['reasons'],
+                        'remedy'    => $entry['remedy'],
+                        'mime_type' => $entry['mime_type'],
+                    ],
+                    $perChannel,
+                ),
             ]);
         });
+    }
+
+    /**
+     * The channels the request asks about.
+     *
+     * The `platforms` key is the one this endpoint carried before the
+     * channels had names of their own. It is accepted for one more
+     * release, and a bare network name in it means the plugin's own
+     * route to that network — the route it meant before the rename.
+     *
+     * @param  array<string, mixed> $body
+     * @return list<SocialChannel>
+     */
+    private function channels(array $body): array
+    {
+        $named = is_array($body['channels'] ?? null) ? $body['channels'] : [];
+
+        if ($named === []) {
+            $named = is_array($body['platforms'] ?? null) ? $body['platforms'] : [];
+        }
+
+        $channels = [];
+
+        foreach ($named as $key) {
+            $channel = is_string($key) ? SocialChannel::fromKey($key) : null;
+
+            if ($channel !== null) {
+                $channels[] = $channel;
+            }
+        }
+
+        return $channels;
     }
 
     /**
