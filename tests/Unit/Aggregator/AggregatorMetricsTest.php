@@ -139,6 +139,63 @@ it('skips the reading while the aggregator is still syncing', function () {
         ->and(SocialPostMetric::query()->where('target_id', $target->id)->count())->toBe(0);
 });
 
+it('gives each account of a network its own numbers', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('analytics-two-accounts')],
+        ['body' => zernioFixture('analytics-two-accounts')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // One post, two accounts of one network — the case the account id in
+    // the answer is there for.
+    $connection = createSocialConnection($principalId, 'zernio', ['access_token' => 'the-key']);
+
+    $first = createSocialAccount($principalId, 'bluesky', 'aggregator', [
+        'connection' => $connection,
+        'external_id' => 'id_002',
+        'via'        => 'zernio',
+    ]);
+
+    $second = createSocialAccount($principalId, 'bluesky', 'aggregator', [
+        'connection' => $connection,
+        'external_id' => 'id_004',
+        'via'        => 'zernio',
+    ]);
+
+    $post = new SocialPost();
+    $post->principal_id = $principalId;
+    $post->body = 'We shipped…';
+    $post->status = SocialPost::STATUS_PUBLISHED;
+    $post->save();
+
+    $targetOf = static function (Spora\Plugins\Social\Model\SocialAccount $account) use ($post): SocialPostTarget {
+        $target = new SocialPostTarget();
+        $target->post_id = $post->id;
+        $target->account_id = $account->id;
+        $target->platform = 'bluesky';
+        $target->via = 'zernio';
+        $target->status = SocialPostTarget::STATUS_PUBLISHED;
+        $target->external_id = 'id_001';
+        $target->published_at = Carbon::now()->subHour();
+        $target->save();
+
+        return $target;
+    };
+
+    $service = aggregatorMetricsService($recorder);
+
+    $one = $service->collect($targetOf($first));
+    $two = $service->collect($targetOf($second));
+
+    // The answer is per network **and** per account, so the network
+    // alone does not say which of the two the numbers are about.
+    expect($one?->impressions)->toBe(100)
+        ->and($one?->reach)->toBe(80)
+        ->and($two?->impressions)->toBe(200)
+        ->and($two?->reach)->toBe(170);
+});
+
 it('reads the numbers of a network the plugin does not reach natively', function () {
     // The reader is channel-aware now: the aggregator's route is not the
     // plugin's own, and it has its own reader.

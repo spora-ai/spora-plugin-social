@@ -24,11 +24,13 @@ use Spora\Plugins\Social\Service\MetricSnapshot;
  * - **`202`** — still syncing. The reading is skipped, and the daily job
  *   picks it up tomorrow.
  *
- * **One aggregate per post.** When the aggregator does not break the
- * numbers down per network, the target reports the aggregate with a note
- * saying it covers every network in that post. The post's totals stay
- * right — the aggregate is the sum the platform saw — and the per-network
- * split is simply not there.
+ * **One aggregate per post.** The aggregator breaks a post down per
+ * network **and per account** — every entry carries the account id — so
+ * the target's own entry is the one that answers for it. When there is
+ * no such entry, the target reports the aggregate with a note saying it
+ * covers every network in that post. The post's totals stay right — the
+ * aggregate is the sum the platform saw — and the per-network split is
+ * simply not there.
  */
 final class AggregatorMetricsReader
 {
@@ -71,13 +73,13 @@ final class AggregatorMetricsReader
             $externalId,
         );
 
-        return $this->snapshot($channel, $response);
+        return $this->snapshot($channel, $account, $response);
     }
 
     /**
      * The answer, as a reading.
      */
-    private function snapshot(SocialChannel $channel, ZernioResponse $response): ?MetricSnapshot
+    private function snapshot(SocialChannel $channel, SocialAccount $account, ZernioResponse $response): ?MetricSnapshot
     {
         $label = AggregatorProvider::tryFromName($channel->via)?->label() ?? 'the aggregator';
 
@@ -104,11 +106,11 @@ final class AggregatorMetricsReader
         $body = $response->body;
         $aggregate = is_array($body['analytics'] ?? null) ? $body['analytics'] : [];
 
-        $own = $this->entryFor($body, $channel);
+        $own = $this->entryFor($body, $channel, $account);
         $numbers = is_array($own['analytics'] ?? null) ? $own['analytics'] : null;
 
-        // The aggregator breaks the post down per network when it can,
-        // and the numbers are then that network's own.
+        // The aggregator breaks the post down per account when it can,
+        // and the numbers are then that account's own.
         if ($numbers !== null) {
             return $this->snapshotOf($numbers, ['analytics' => $numbers]);
         }
@@ -122,14 +124,30 @@ final class AggregatorMetricsReader
     }
 
     /**
-     * The entry of the network the target is on.
+     * The entry of the account the target is on.
+     *
+     * The aggregator breaks the post down per network **and per
+     * account** — every entry carries the account id — so two accounts
+     * of one network in one post are told apart by it. The network is
+     * the fallback, for an answer that carries no account id.
      *
      * @param  array<string, mixed> $body
      * @return array<string, mixed>
      */
-    private function entryFor(array $body, SocialChannel $channel): array
+    private function entryFor(array $body, SocialChannel $channel, SocialAccount $account): array
     {
         $entries = is_array($body['platformAnalytics'] ?? null) ? $body['platformAnalytics'] : [];
+        $accountId = (string) $account->external_id;
+
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if ($accountId !== '' && (string) ($entry['accountId'] ?? '') === $accountId) {
+                return $entry;
+            }
+        }
 
         foreach ($entries as $entry) {
             if (!is_array($entry)) {
