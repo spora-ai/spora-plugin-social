@@ -363,7 +363,7 @@ it('checks the fit of an asset as the platform receives it', function () {
     $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
         'principal_id'   => $principalId,
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ]));
 
     expect($response->getStatusCode())->toBe(200);
@@ -372,7 +372,10 @@ it('checks the fit of an asset as the platform receives it', function () {
     // publishes — so the asset fits there, as the publish will find it.
     $body = decode($response);
     expect($body['data']['fits'])->toBeTrue()
-        ->and($body['data']['per_platform'][0]['mime_type'])->toBe('image/jpeg');
+        ->and($body['data']['per_channel'][0]['channel'])->toBe('direct:instagram')
+        ->and($body['data']['per_channel'][0]['network'])->toBe('instagram')
+        ->and($body['data']['per_channel'][0]['via'])->toBe('direct')
+        ->and($body['data']['per_channel'][0]['mime_type'])->toBe('image/jpeg');
 });
 
 it('names the remedy for a media Instagram cannot take at all', function () {
@@ -384,14 +387,14 @@ it('names the remedy for a media Instagram cannot take at all', function () {
     $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
         'principal_id'   => $principalId,
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ]));
 
     expect($response->getStatusCode())->toBe(200);
 
     $body = decode($response);
     expect($body['data']['fits'])->toBeFalse()
-        ->and($body['data']['per_platform'][0]['remedy'])->toBe('Convert to JPEG');
+        ->and($body['data']['per_channel'][0]['remedy'])->toBe('Convert to JPEG');
 });
 
 it('answers with the month of the calendar', function () {

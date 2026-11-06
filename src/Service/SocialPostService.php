@@ -97,10 +97,10 @@ final class SocialPostService
         }
 
         $platform = $filters['platform'] ?? null;
-        if (is_string($platform) && $platform !== '') {
+        if (is_string($platform) && trim($platform) !== '') {
             $query->whereIn('id', SocialPostTarget::query()
                 ->select('post_id')
-                ->where('platform', $platform));
+                ->where('platform', strtolower(trim($platform))));
         }
 
         $this->applyWindow($query, $filters);

@@ -177,21 +177,21 @@ final class SocialToolPresenter
     }
 
     /**
-     * The fit of an asset, per platform.
+     * The fit of an asset, per channel.
      *
      * The verdict is the one the publish will reach: the media is
      * judged as the platform receives it, so a PNG that the backend
      * converts for Instagram fits there.
      *
-     * @param list<array<string, mixed>> $perPlatform
+     * @param list<array<string, mixed>> $perChannel
      */
-    public static function fit(bool $fits, array $perPlatform): string
+    public static function fit(bool $fits, array $perChannel): string
     {
         $lines = [$fits
-            ? 'The asset fits every platform asked about.'
-            : 'The asset does not fit every platform asked about.'];
+            ? 'The asset fits every channel asked about.'
+            : 'The asset does not fit every channel asked about.'];
 
-        foreach ($perPlatform as $entry) {
+        foreach ($perChannel as $entry) {
             $lines[] = '- ' . self::fitLine($entry);
         }
 
@@ -313,11 +313,11 @@ final class SocialToolPresenter
      */
     private static function fitLine(array $entry): string
     {
-        $platform = (string) ($entry['platform'] ?? '');
+        $channel = (string) ($entry['channel'] ?? '');
         $mime = (string) ($entry['mime_type'] ?? '');
 
         if (($entry['fits'] ?? false) === false) {
-            $line = $platform . ': does not fit — ' . implode(' ', (array) ($entry['reasons'] ?? []));
+            $line = $channel . ': does not fit — ' . implode(' ', (array) ($entry['reasons'] ?? []));
 
             $remedy = $entry['remedy'] ?? null;
             if (is_string($remedy) && $remedy !== '') {
@@ -329,14 +329,14 @@ final class SocialToolPresenter
 
         $line = sprintf(
             '%s: fits (%s, %s bytes)',
-            $platform,
+            $channel,
             $mime,
             (string) ($entry['size_bytes'] ?? 0),
         );
 
         $convertedFrom = $entry['converted_from'] ?? null;
         if (is_string($convertedFrom) && $convertedFrom !== '') {
-            $line .= ' — ' . $convertedFrom . ' is converted to ' . $mime . ' for ' . $platform;
+            $line .= ' — ' . $convertedFrom . ' is converted to ' . $mime . ' for ' . $channel;
         }
 
         return $line;

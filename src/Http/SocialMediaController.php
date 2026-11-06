@@ -73,7 +73,7 @@ final class SocialMediaController extends AbstractSocialController
     }
 
     /**
-     * Whether an asset fits a platform, and what to do about it when it
+     * Whether an asset fits a channel, and what to do about it when it
      * does not.
      */
     public function checkFit(Request $request): JsonResponse
@@ -85,10 +85,10 @@ final class SocialMediaController extends AbstractSocialController
             $asset = $this->media->findAsset($this->assetId($body), $principalId);
 
             $channels = [];
-            foreach (is_array($body['platforms'] ?? null) ? $body['platforms'] : [] as $name) {
-                $platform = is_string($name) ? SocialPlatform::tryFromName($name) : null;
-                if ($platform !== null) {
-                    $channels[] = SocialChannel::direct($platform->value);
+            foreach (is_array($body['channels'] ?? null) ? $body['channels'] : [] as $key) {
+                $channel = is_string($key) ? SocialChannel::fromKey($key) : null;
+                if ($channel !== null) {
+                    $channels[] = $channel;
                 }
             }
 
@@ -96,7 +96,7 @@ final class SocialMediaController extends AbstractSocialController
                 $channels = PlatformFit::channels();
             }
 
-            $perPlatform = [];
+            $perChannel = [];
             $fits = true;
 
             foreach ($channels as $channel) {
@@ -109,8 +109,10 @@ final class SocialMediaController extends AbstractSocialController
                 $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
                 $fits = $fits && $fit['fits'];
 
-                $perPlatform[] = [
-                    'platform'  => $channel->network,
+                $perChannel[] = [
+                    'channel'   => $channel->key(),
+                    'network'   => $channel->network,
+                    'via'       => $channel->via,
                     'fits'      => $fit['fits'],
                     'reasons'   => $fit['reasons'],
                     'remedy'    => $fit['remedy'],
@@ -119,8 +121,8 @@ final class SocialMediaController extends AbstractSocialController
             }
 
             return $this->ok([
-                'fits'         => $fits,
-                'per_platform' => $perPlatform,
+                'fits'        => $fits,
+                'per_channel' => $perChannel,
             ]);
         });
     }

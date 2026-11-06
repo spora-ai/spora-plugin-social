@@ -56,6 +56,7 @@ final class SocialPostResource
                 'id'           => (int) $target->id,
                 'account_id'   => (int) $target->account_id,
                 'platform'     => (string) $target->platform,
+                'via'          => (string) $target->via,
                 'status'       => (string) $target->status,
                 'external_id'  => $target->external_id,
                 'external_url' => $target->external_url,
@@ -142,6 +143,7 @@ final class SocialPostResource
             $accounts[] = [
                 'id'           => (int) $account->id,
                 'platform'     => (string) $account->platform,
+                'via'          => (string) $account->via,
                 'display_name' => $account->display_name,
             ];
         }

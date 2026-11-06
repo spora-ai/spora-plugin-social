@@ -29,7 +29,7 @@ use Throwable;
  */
 #[Tool(
     name: 'social_media',
-    description: 'Work with the media a post carries. List this principal\'s Media Archive assets, check whether an asset fits a platform, prepare it for Instagram as a JPEG with a public URL, or attach and detach it on a post. The rules: LinkedIn takes JPEG, PNG or GIF up to 8 MB and no video; Facebook takes JPEG, PNG, GIF, BMP or MP4 up to 1 GB; Instagram REQUIRES media, takes only JPEG or MP4 up to 100 MB and rejects PNG — attach the original asset id and the backend converts it for you.',
+    description: 'Work with the media a post carries. List this principal\'s Media Archive assets, check whether an asset fits a channel, prepare it for Instagram as a JPEG with a public URL, or attach and detach it on a post. The rules: LinkedIn takes JPEG, PNG or GIF up to 8 MB and no video; Facebook takes JPEG, PNG, GIF, BMP or MP4 up to 1 GB; Instagram REQUIRES media, takes only JPEG or MP4 up to 100 MB and rejects PNG — attach the original asset id and the backend converts it for you.',
     displayName: 'Social Media',
     category: 'social',
     icon: 'globe',
@@ -44,8 +44,8 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'check_fit',
-    description: 'Check whether an asset fits a platform, and say what to do about it when it does not. The asset is judged as the platform receives it, so a PNG fits Instagram — the backend converts it to a JPEG before it publishes. Instagram needs media and cannot publish without one.',
-    operatorDescription: 'Check a media asset against a platform',
+    description: 'Check whether an asset fits a channel, and say what to do about it when it does not. The asset is judged as the channel receives it, so a PNG fits Instagram — the backend converts it to a JPEG before it publishes. Instagram needs media and cannot publish without one.',
+    operatorDescription: 'Check a media asset against a channel',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
 )]
@@ -72,7 +72,7 @@ use Throwable;
 )]
 #[ToolParameter(name: 'media_asset_id', type: 'string', description: 'The Media Archive asset id (a UUID). Required for check_fit, prepare, attach and detach.', required: ['check_fit', 'prepare', 'attach', 'detach'])]
 #[ToolParameter(name: 'post_id', type: 'integer', description: 'The post the attachment belongs to.', required: ['attach', 'detach'])]
-#[ToolParameter(name: 'platforms', type: 'array', description: 'The platforms to check against: linkedin, facebook, instagram.', required: false, items: ['type' => 'string'])]
+#[ToolParameter(name: 'channels', type: 'array', description: 'The channels to check against: the network\'s name (linkedin, facebook, instagram) or the channel\'s key (direct:linkedin).', required: false, items: ['type' => 'string'])]
 #[ToolParameter(name: 'media_kind', type: 'string', description: 'Filter the asset list by kind: image, video, audio or document.', required: false)]
 #[ToolParameter(name: 'limit', type: 'integer', description: 'How many assets to return (default 20, capped at 100).', required: false, default: 20)]
 final class SocialMediaTool extends AbstractSocialTool
@@ -163,32 +163,31 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $channels = $this->channels($arguments['platforms'] ?? null);
-        $perPlatform = [];
+        $channels = $this->channels($arguments['channels'] ?? null);
+        $perChannel = [];
 
         foreach ($channels as $channel) {
-            $perPlatform[] = $this->fitOf($channel, $asset);
+            $perChannel[] = $this->fitOf($channel, $asset);
         }
 
         $fits = true;
-        foreach ($perPlatform as $entry) {
+        foreach ($perChannel as $entry) {
             if ($entry['fits'] === false) {
                 $fits = false;
             }
         }
 
         return ToolResult::ok(
-            SocialToolPresenter::fit($fits, $perPlatform),
-            ['fits' => $fits, 'per_platform' => $perPlatform],
+            SocialToolPresenter::fit($fits, $perChannel),
+            ['fits' => $fits, 'per_channel' => $perChannel],
         );
     }
 
     /**
      * The channels to check against.
      *
-     * The names the caller gives are the networks' names, and a network
-     * is reached through the plugin's own route unless the caller says
-     * otherwise.
+     * A bare network name is the plugin's own route to it, and a key
+     * names the route and the network both.
      *
      * @return list<SocialChannel>
      */
@@ -196,11 +195,11 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $channels = [];
 
-        foreach ($this->platformList($raw) as $name) {
-            $platform = SocialPlatform::tryFromName($name);
+        foreach ($this->keyList($raw) as $name) {
+            $channel = SocialChannel::fromKey($name);
 
-            if ($platform !== null) {
-                $channels[] = SocialChannel::direct($platform->value);
+            if ($channel !== null) {
+                $channels[] = $channel;
             }
         }
 
@@ -228,7 +227,9 @@ final class SocialMediaTool extends AbstractSocialTool
         }
 
         return [
-            'platform'       => $channel->network,
+            'channel'        => $channel->key(),
+            'network'        => $channel->network,
+            'via'            => $channel->via,
             'fits'           => $fit['fits'],
             'reasons'        => $fit['reasons'],
             'remedy'         => $fit['remedy'],

@@ -62,6 +62,7 @@ final class SocialConnectionResource
                 'id'           => (int) $account->id,
                 'account_id'   => (int) $account->id,
                 'platform'     => (string) $account->platform,
+                'via'          => (string) $account->via,
                 'kind'         => (string) $account->kind,
                 'external_id'  => $account->external_id,
                 'display_name' => $account->display_name,

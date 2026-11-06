@@ -75,7 +75,7 @@ it('judges an asset by what the platform receives, not by its own mime', functio
     $result = $tool->execute([
         'action'         => 'check_fit',
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ], 1, null, principalContext($principalId));
 
     // Instagram takes no PNG, but the backend converts one before it
@@ -83,10 +83,11 @@ it('judges an asset by what the platform receives, not by its own mime', functio
     // that goes out.
     expect($result->success)->toBeTrue()
         ->and($result->data['fits'])->toBeTrue()
-        ->and($result->data['per_platform'][0]['platform'])->toBe('instagram')
-        ->and($result->data['per_platform'][0]['mime_type'])->toBe(SocialFixtures::MIME_JPEG)
-        ->and($result->data['per_platform'][0]['converted_from'])->toBe(SocialFixtures::MIME_PNG)
-        ->and($result->content)->toContain('is converted to image/jpeg for instagram');
+        ->and($result->data['per_channel'][0]['channel'])->toBe('direct:instagram')
+        ->and($result->data['per_channel'][0]['network'])->toBe('instagram')
+        ->and($result->data['per_channel'][0]['mime_type'])->toBe(SocialFixtures::MIME_JPEG)
+        ->and($result->data['per_channel'][0]['converted_from'])->toBe(SocialFixtures::MIME_PNG)
+        ->and($result->content)->toContain('is converted to image/jpeg for direct:instagram');
 });
 
 it('names the remedy for a media the platform cannot take at all', function () {
@@ -99,12 +100,12 @@ it('names the remedy for a media the platform cannot take at all', function () {
     $result = $tool->execute([
         'action'         => 'check_fit',
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ], 1, null, principalContext($principalId));
 
     expect($result->success)->toBeTrue()
         ->and($result->data['fits'])->toBeFalse()
-        ->and($result->data['per_platform'][0]['remedy'])->toBe('Convert to JPEG')
+        ->and($result->data['per_channel'][0]['remedy'])->toBe('Convert to JPEG')
         ->and($result->content)->toContain('does not fit');
 });
 
