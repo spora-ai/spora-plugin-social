@@ -233,7 +233,7 @@ final class SocialPublisher
                 continue;
             }
 
-            if (!$onlyFailed && $target->status === SocialPostTarget::STATUS_PUBLISHED) {
+            if (!$onlyFailed && $this->isSettled($target)) {
                 continue;
             }
 
@@ -267,6 +267,29 @@ final class SocialPublisher
         $post->save();
 
         return $post;
+    }
+
+    /**
+     * Whether the target is not to be published again.
+     *
+     * A published target is done. A target in `publishing` that carries
+     * an idempotency key is a publish that started and never finished:
+     * the reconciliation owns it and replays it under the key it went
+     * out with. A second attempt here would mint a **new** key, and a
+     * new key is a new post — a double-publish.
+     *
+     * A target in `publishing` with no key is a different case: it was
+     * never given one, so there is nothing to replay, and it is
+     * publishable.
+     */
+    private function isSettled(SocialPostTarget $target): bool
+    {
+        if ($target->status === SocialPostTarget::STATUS_PUBLISHED) {
+            return true;
+        }
+
+        return $target->status === SocialPostTarget::STATUS_PUBLISHING
+            && (string) $target->idempotency_key !== '';
     }
 
     /**

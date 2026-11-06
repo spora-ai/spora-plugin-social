@@ -178,6 +178,40 @@ it('leaves the targets publishing when the call never landed', function () {
         ->and($target?->error)->toBeNull();
 });
 
+it('does not publish a target that is still publishing under its own key', function () {
+    // The first call never lands, so the target keeps the key it went
+    // out under and the reconciliation owns it.
+    $recorder = new ZernioRecorder([
+        ['body' => '', 'transport' => true],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $account = zernioAccount($principalId, 'bluesky', 'id_002');
+
+    $post = aPostTo($principalId, [$account]);
+
+    $publisher->publish((int) $post->id, $principalId);
+
+    $target = $post->fresh()?->targets()->first();
+
+    expect($target?->status)->toBe(SocialPostTarget::STATUS_PUBLISHING)
+        ->and($target?->idempotency_key)->not->toBeNull();
+
+    // The operator presses "Publish now" again.
+    $publisher->publish((int) $post->id, $principalId);
+
+    $posts = array_values(array_filter(
+        zernioRequests($recorder),
+        static fn(array $request): bool => str_ends_with($request['url'], '/posts'),
+    ));
+
+    // One cross-post, not two: a fresh key would be a fresh post.
+    expect($posts)->toHaveCount(1);
+});
+
 it('writes partial on the post and failed on the network that was refused', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post-partial'), 'status' => 207],
