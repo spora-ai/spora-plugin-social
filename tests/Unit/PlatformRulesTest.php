@@ -14,6 +14,12 @@ use Spora\Plugins\Social\Tools\SocialPostTool;
  * quotations honest: change a limit in the table and the prose has to be
  * updated with it, or the operator and the agent are told two different
  * numbers.
+ *
+ * The quotations cover the plugin's **own** networks. The aggregator's
+ * rows are a copy of Zernio's documentation: they change when Zernio
+ * changes them, Zernio refuses the post itself, and the skill names the
+ * aggregator's networks rather than carrying a second copy of limits
+ * that rot.
  */
 it('quotes the character limits the backend enforces', function () {
     // Each reader of the table quotes it: the tool description the model
@@ -25,7 +31,7 @@ it('quotes the character limits the backend enforces', function () {
         'the skill'                        => socialSkill()['body'],
     ];
 
-    foreach (PlatformFit::channels() as $channel) {
+    foreach (PlatformFit::nativeChannels() as $channel) {
         $limit = number_format(PlatformFit::characterLimit($channel));
 
         foreach ($readers as $prose) {
@@ -47,7 +53,7 @@ it('quotes the characters a platform shows before it hides the rest', function (
     $rulesOf = static function (string $prose): array {
         $starts = [];
 
-        foreach (PlatformFit::channels() as $channel) {
+        foreach (PlatformFit::nativeChannels() as $channel) {
             $position = strpos($prose, number_format(PlatformFit::characterLimit($channel)));
 
             if ($position !== false) {
@@ -71,7 +77,7 @@ it('quotes the characters a platform shows before it hides the rest', function (
     foreach ($readers as $prose) {
         $blocks = $rulesOf($prose);
 
-        foreach (PlatformFit::channels() as $channel) {
+        foreach (PlatformFit::nativeChannels() as $channel) {
             $visible = (string) PlatformFit::rule($channel)['visible_chars'];
 
             // The count has to stand on its own, or the cap of one

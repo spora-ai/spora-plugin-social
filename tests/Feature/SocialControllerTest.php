@@ -44,6 +44,7 @@ function connectionController(
         $connections ?? connectionService(),
         $settings ?? new SocialSettings(socialConfig()),
         new SocialAppUrlProbe(new MockHttpClient([new MockResponse('', ['http_code' => 200])])),
+        aggregatorService(),
     );
 }
 
@@ -148,7 +149,7 @@ it('carries the redirect uri the operator has to register', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     expect($response->getStatusCode())->toBe(200);
 
@@ -171,7 +172,7 @@ it('carries no redirect uri on an instance that cannot register one', function (
     // cannot work.
     $settings = new SocialSettings(socialConfig(['SPORA_APP_URL' => 'http://localhost:8080']));
 
-    $response = connectionController($auth, $settings)->config();
+    $response = connectionController($auth, $settings)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     $body = decode($response);
 
@@ -186,7 +187,7 @@ it('carries no setup notice for a provider that needs no setup', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     $body = decode($response);
 
@@ -204,7 +205,7 @@ it('carries the setup notice when the meta configuration id is missing', functio
         SocialSettings::KEY_META_CONFIG_ID => '',
     ]));
 
-    $response = connectionController($auth, $settings)->config();
+    $response = connectionController($auth, $settings)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     $body = decode($response);
 
@@ -218,7 +219,7 @@ it('answers with the configuration of the operator', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     expect($response->getStatusCode())->toBe(200);
 
@@ -416,13 +417,13 @@ it('carries the platform rules the frontend reads', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     expect($response->getStatusCode())->toBe(200);
 
     $rules = decode($response)['data']['rules'];
 
-    expect($rules)->toHaveKeys(['direct:linkedin', 'direct:facebook', 'direct:instagram']);
+    expect($rules)->toHaveKeys(['direct:linkedin', 'direct:facebook', 'direct:instagram', 'zernio:bluesky']);
 
     foreach (PlatformFit::channels() as $channel) {
         $rule = PlatformFit::rule($channel);
@@ -434,19 +435,64 @@ it('carries the platform rules the frontend reads', function () {
             ->and($rules[$channel->key()]['max_bytes'])->toBe($rule['max_bytes'])
             ->and($rules[$channel->key()]['max_text'])->toBe($rule['max_characters'])
             ->and($rules[$channel->key()]['media_note'])->toContain($rule['media'])
+            // The network names live in one place: the frontend stops
+            // keeping its own list of them.
+            ->and($rules[$channel->key()]['label'])->toBe($rule['label'])
+            ->and($rules[$channel->key()]['network'])->toBe($channel->network)
+            ->and($rules[$channel->key()]['via'])->toBe($channel->via)
             ->and($rules[$channel->key()])->toHaveKeys([
+                'label',
+                'network',
+                'via',
                 'media_required',
                 'media_count',
                 'fetches_media',
                 'mime_types',
                 'max_bytes',
                 'max_text',
+                'visible_chars',
                 'media_note',
                 'media_remedy',
                 'video_remedy',
                 'size_remedy',
             ]);
     }
+});
+
+it('carries the aggregators beside the oauth providers, not among them', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $response = connectionController($auth)->config(
+        jsonRequest('GET', '/api/v1/plugins/social/config' . SocialFixtures::PRINCIPAL_QUERY . $principalId),
+    );
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $body = decode($response)['data'];
+
+    // An aggregator is not an OAuth provider: it has no client id and no
+    // redirect URI, so it gets its own section.
+    expect($body['aggregators'])->toHaveKey('zernio')
+        ->and($body['aggregators']['zernio'])->toBe([
+            'configured'  => false,
+            'label'       => 'Zernio',
+            'needs_setup' => null,
+        ])
+        ->and($body['providers'])->not->toHaveKey('zernio');
+});
+
+it('says the aggregator is configured once the operator has pasted a key', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    createSocialConnection($principalId, 'zernio');
+
+    $response = connectionController($auth)->config(
+        jsonRequest('GET', '/api/v1/plugins/social/config' . SocialFixtures::PRINCIPAL_QUERY . $principalId),
+    );
+
+    expect(decode($response)['data']['aggregators']['zernio']['configured'])->toBeTrue();
 });
 
 /**

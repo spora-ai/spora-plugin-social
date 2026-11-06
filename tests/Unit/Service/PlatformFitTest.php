@@ -12,7 +12,10 @@ it('keys the rules by the channel of each network', function () {
         SocialPlatform::cases(),
     );
 
-    expect(array_keys(PlatformFit::rules()))->toBe($expected);
+    // The aggregator's rows follow the native ones: they are the same
+    // networks reached through somebody else's API.
+    expect(array_slice(array_keys(PlatformFit::rules()), 0, count($expected)))->toBe($expected)
+        ->and(array_keys(PlatformFit::rules()))->toContain('zernio:bluesky');
 });
 
 it('accepts a jpeg on linkedin', function () {
@@ -83,14 +86,14 @@ it('says the body is over the limit, and names the network', function () {
 });
 
 it('says there are no rules for a channel it does not know', function () {
-    expect(fn() => PlatformFit::rule(SocialChannel::tryFrom('zernio', 'bluesky')))
-        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'There are no rules for the channel zernio:bluesky.');
+    expect(fn() => PlatformFit::rule(SocialChannel::tryFrom('zernio', 'myspace')))
+        ->toThrow(Spora\Plugins\Social\Exception\SocialException::class, 'There are no rules for the channel zernio:myspace.');
 });
 
 it('serialises the rules for the frontend', function () {
     $rules = PlatformFit::apiRules();
 
-    expect($rules)->toHaveKeys(['direct:linkedin', 'direct:facebook', 'direct:instagram']);
+    expect($rules)->toHaveKeys(['direct:linkedin', 'direct:facebook', 'direct:instagram', 'zernio:bluesky']);
 
     foreach (PlatformFit::channels() as $channel) {
         $rule = PlatformFit::rule($channel);

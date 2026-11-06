@@ -6,6 +6,7 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
 use Spora\Auth\AuthService;
 use Spora\Core\SecurityManager;
+use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
 use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Model\SocialPost;
@@ -28,6 +29,7 @@ use Spora\Plugins\Social\Service\SocialPostService;
 use Spora\Plugins\Social\Service\SocialPublisher;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
+use Spora\Plugins\Social\Tools\SocialConnectionsTool;
 use Spora\Services\PrincipalContext;
 use Spora\Services\PrincipalResolver;
 use Spora\Services\PrincipalService;
@@ -352,6 +354,23 @@ function aggregatorService(?Symfony\Contracts\HttpClient\HttpClientInterface $cl
             new FakeProviderResolver([]),
             securityManager(),
         ),
+    );
+}
+
+/**
+ * The connections tool, with the aggregator's own collaborators.
+ */
+function connectionsTool(
+    ?SocialConnectionService $connections = null,
+    ?AggregatorService $aggregators = null,
+    ?Symfony\Contracts\HttpClient\HttpClientInterface $client = null,
+): SocialConnectionsTool {
+    $aggregators ??= aggregatorService($client);
+
+    return new SocialConnectionsTool(
+        $connections ?? connectionService(),
+        $aggregators,
+        new AggregatorAccountSync(zernioClient($client), $aggregators),
     );
 }
 

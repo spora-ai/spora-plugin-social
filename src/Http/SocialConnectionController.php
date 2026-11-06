@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Spora\Plugins\Social\Http;
 
 use Spora\Auth\AuthService;
+use Spora\Plugins\Social\Aggregator\AggregatorProvider;
+use Spora\Plugins\Social\Aggregator\AggregatorService;
+use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\Service\PlatformFit;
 use Spora\Plugins\Social\Service\SocialAppUrlProbe;
@@ -30,6 +33,7 @@ final class SocialConnectionController extends AbstractSocialController
         private readonly SocialConnectionService $connections,
         private readonly SocialSettings $settings,
         private readonly SocialAppUrlProbe $appUrlProbe,
+        private readonly AggregatorService $aggregators,
     ) {
         parent::__construct($auth, $principals, $principalService);
     }
@@ -51,9 +55,9 @@ final class SocialConnectionController extends AbstractSocialController
      * refuses the publish. A copy in the frontend warns about a number that
      * is no longer enforced.
      */
-    public function config(): JsonResponse
+    public function config(Request $request): JsonResponse
     {
-        return $this->run(function (): JsonResponse {
+        return $this->run(function () use ($request): JsonResponse {
             $providers = [];
 
             foreach (SocialProvider::cases() as $provider) {
@@ -68,11 +72,60 @@ final class SocialConnectionController extends AbstractSocialController
 
             return $this->ok([
                 'providers'      => $providers,
+                'aggregators'    => $this->aggregators($request),
                 'app_url'        => $this->settings->appUrl(),
                 'app_url_public' => $this->appUrlProbe->isPubliclyReachable($this->settings->appUrl()),
                 'rules'          => PlatformFit::apiRules(),
             ]);
         });
+    }
+
+    /**
+     * The aggregators the plugin can publish through.
+     *
+     * An aggregator is not an OAuth provider — it has no client id, no
+     * redirect URI and no setup — so it gets its own section rather
+     * than a corner of the providers' one.
+     *
+     * **The key is the principal's**, so the flag is the principal's too:
+     * the request names one, and without one the answer is that nobody's
+     * key is known.
+     *
+     * @return array<string, array{configured: bool, label: string, needs_setup: null}>
+     */
+    private function aggregators(Request $request): array
+    {
+        $principalId = $this->optionalPrincipalId($request);
+
+        $aggregators = [];
+
+        foreach (AggregatorProvider::cases() as $provider) {
+            $aggregators[$provider->value] = [
+                'configured'  => $principalId !== null && $this->aggregators->isConfigured($principalId, $provider),
+                'label'       => $provider->label(),
+                'needs_setup' => null,
+            ];
+        }
+
+        return $aggregators;
+    }
+
+    /**
+     * The principal a read is scoped to, when the request names one.
+     */
+    private function optionalPrincipalId(Request $request): ?int
+    {
+        $requested = $this->requestedPrincipalId($request);
+
+        if ($requested === null) {
+            return null;
+        }
+
+        if (!in_array($requested, $this->principals->visiblePrincipalIds($this->userId()), true)) {
+            throw SocialException::forbidden('You cannot act for this principal.');
+        }
+
+        return $requested;
     }
 
     /**
@@ -168,7 +221,7 @@ final class SocialConnectionController extends AbstractSocialController
 
             $provider = SocialProvider::tryFromName((string) ($body['provider'] ?? ''));
             if ($provider === null) {
-                throw \Spora\Plugins\Social\Exception\SocialException::validation(
+                throw SocialException::validation(
                     'provider must be meta or linkedin.',
                 );
             }

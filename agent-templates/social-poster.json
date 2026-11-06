@@ -41,6 +41,11 @@
           "name": "health",
           "enabled": true,
           "auto_approve": true
+        },
+        {
+          "name": "sync",
+          "enabled": true,
+          "auto_approve": true
         }
       ]
     },

@@ -92,7 +92,7 @@ it('does not claim a refresh when there is no refresh grant', function () {
     // message says the key is replaced rather than renewed.
     expect($service->refresh((int) $connection->id, $principalId)->id)->toBe($connection->id);
 
-    $tool = new Spora\Plugins\Social\Tools\SocialConnectionsTool($service);
+    $tool = connectionsTool($service);
 
     $result = $tool->execute(
         ['action' => 'refresh', 'connection_id' => (int) $connection->id],
@@ -144,6 +144,7 @@ it('never points the OAuth connect flow at an aggregator', function () {
                 new Symfony\Component\HttpClient\Response\MockResponse('', ['http_code' => 200]),
             ]),
         ),
+        aggregatorService(),
     );
 
     $response = $controller->connect(jsonRequest('POST', '/api/v1/plugins/social/connections/connect', [

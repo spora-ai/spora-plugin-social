@@ -64,13 +64,28 @@ final class SocialPostAccounts
     /**
      * The refusal, and the way out of it.
      *
-     * Two cases, and the way out differs: a principal with no account
-     * has to connect one, and a principal with accounts has to name one.
+     * Three cases, and the way out differs: a principal with no account
+     * has to connect one, a principal with only aggregator accounts has
+     * to add one on the Accounts screen — there is no connect URL for an
+     * aggregator — and a principal with accounts has to name one.
      */
     public function noAccount(int $principalId): SocialException
     {
-        if (!SocialAccount::query()->forPrincipal($principalId)->exists()) {
+        $accounts = SocialAccount::query()->forPrincipal($principalId)->get();
+
+        if ($accounts->isEmpty()) {
             return SocialException::validation('No social account is connected for this principal. Connect one first: `social_connections` with action `connect` returns the URL for the operator to open.');
+        }
+
+        // The only accounts there are aggregator accounts: the operator
+        // manages them in the aggregator's own dashboard, and there is
+        // no URL for the plugin to hand back.
+        $native = $accounts->contains(
+            static fn(SocialAccount $account): bool => $account->channel()->isDirect(),
+        );
+
+        if (!$native) {
+            return SocialException::validation('No native social account is connected for this principal. Add one on the Accounts screen — an aggregator account is managed in the aggregator\'s own dashboard.');
         }
 
         return SocialException::validation('A post needs at least one account to publish to.');

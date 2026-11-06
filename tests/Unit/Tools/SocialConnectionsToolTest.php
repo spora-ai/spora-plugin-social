@@ -151,7 +151,7 @@ function aPrincipalWithTheTool(array $providers = []): array
 
     return [
         'principalId' => $principalId,
-        'tool' => new SocialConnectionsTool(connectionService(new FakeProviderResolver($providers))),
+        'tool' => connectionsTool(connectionService(new FakeProviderResolver($providers))),
     ];
 }
 
@@ -160,7 +160,7 @@ it('lists the connections of the principal', function () {
 
     createSocialConnection($principalId, 'linkedin', ['access_token' => 'the-token']);
 
-    $tool = new SocialConnectionsTool(connectionService());
+    $tool = connectionsTool(connectionService());
 
     $result = $tool->execute(['action' => 'list'], 1, null, principalContext($principalId));
 
@@ -175,7 +175,7 @@ it('lists the account ids a post can go to', function () {
     $connection = createSocialConnection($principalId, 'linkedin', ['access_token' => 'the-token']);
     $account = createSocialAccount($principalId, 'linkedin', 'organization', ['connection' => $connection]);
 
-    $tool = new SocialConnectionsTool(connectionService());
+    $tool = connectionsTool(connectionService());
 
     $result = $tool->execute(['action' => 'list'], 1, null, principalContext($principalId));
 
@@ -193,6 +193,52 @@ it('says that no account is connected', function () {
 
     expect($result->success)->toBeTrue()
         ->and($result->content)->toContain('No social account is connected');
+});
+
+it('syncs the aggregator accounts on request', function () {
+    $recorder = new Spora\Plugins\Social\Tests\Support\ZernioRecorder([
+        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('follower-stats')],
+        ['body' => zernioFixture('follower-stats')],
+        ['body' => zernioFixture('follower-stats')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $connection = createSocialConnection($principalId, 'zernio', ['access_token' => 'the-key']);
+
+    $tool = connectionsTool(connectionService(), null, $recorder->client());
+
+    $result = $tool->execute(
+        ['action' => 'sync', 'aggregator' => 'zernio'],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeTrue()
+        ->and($result->content)->toContain('Synced 3 Zernio accounts')
+        ->and($result->data['accounts'])->toBe(3);
+
+    // The accounts are the plugin's own rows now.
+    expect(Spora\Plugins\Social\Model\SocialAccount::query()->where('via', 'zernio')->count())->toBe(3)
+        ->and($connection->id)->toBeInt();
+});
+
+it('refuses a sync for an aggregator that is not connected', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $tool = connectionsTool(connectionService());
+
+    $result = $tool->execute(
+        ['action' => 'sync', 'aggregator' => 'zernio'],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($result->success)->toBeFalse()
+        ->and($result->content)->toContain('Accounts screen');
 });
 
 it('hands over the url to connect a provider', function () {
@@ -257,7 +303,7 @@ it('refuses an action it does not know', function () {
 });
 
 it('names the action the operator is about to confirm', function () {
-    $tool = new SocialConnectionsTool(connectionService());
+    $tool = connectionsTool(connectionService());
 
     expect($tool->describeAction(['action' => 'connect', 'provider' => 'meta']))
         ->toBe('Social connect: meta')
@@ -266,7 +312,7 @@ it('names the action the operator is about to confirm', function () {
 });
 
 it('needs a principal to act for', function () {
-    $tool = new SocialConnectionsTool(connectionService());
+    $tool = connectionsTool(connectionService());
 
     $result = $tool->execute(['action' => 'list'], 999999);
 

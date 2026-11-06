@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Spora\Plugins\Social\Http;
 
 use Spora\Auth\AuthService;
+use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
 use Spora\Plugins\Social\Aggregator\AggregatorProvider;
 use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Exception\SocialException;
@@ -24,11 +25,15 @@ use Symfony\Component\HttpFoundation\Request;
  */
 final class SocialAggregatorController extends AbstractSocialController
 {
+    /**
+     * The aggregator's own service.
+     */
     public function __construct(
         AuthService $auth,
         PrincipalResolver $principals,
         PrincipalService $principalService,
         private readonly AggregatorService $aggregators,
+        private readonly AggregatorAccountSync $sync,
     ) {
         parent::__construct($auth, $principals, $principalService);
     }
@@ -86,6 +91,37 @@ final class SocialAggregatorController extends AbstractSocialController
                 'deleted'    => true,
                 'message'    => 'The ' . $provider->label() . ' key is forgotten. The accounts stay in '
                     . $provider->label() . ' — remove them there if you do not want them published to any more.',
+            ]);
+        });
+    }
+
+    /**
+     * The aggregator's accounts, read again.
+     *
+     * The Accounts screen's *"Sync now"* button. Read-only towards the
+     * aggregator: the operator creates, renames, moves and disconnects
+     * there, and this only learns what is there.
+     */
+    public function syncAggregator(Request $request): JsonResponse
+    {
+        return $this->run(function () use ($request): JsonResponse {
+            $principalId = $this->writablePrincipalId($request);
+            $provider = $this->providerOf($request);
+
+            $connection = $this->aggregators->connection($principalId, $provider);
+
+            if ($connection === null) {
+                throw SocialException::conflict('There is no ' . $provider->label() . ' connection to sync.');
+            }
+
+            $result = $this->sync->read($connection);
+            $this->sync->apply($connection, $result);
+
+            return $this->ok([
+                'aggregator'   => $provider->value,
+                'accounts'     => count($result->accounts),
+                'disconnected' => count($result->gone),
+                'analytics'    => $result->analyticsAvailable,
             ]);
         });
     }

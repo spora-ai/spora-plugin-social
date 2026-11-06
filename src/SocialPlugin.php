@@ -9,6 +9,7 @@ use Spora\Events\RoutesRegisteringEvent;
 use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
+use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
 use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Aggregator\Zernio\ZernioClient;
 use Spora\Plugins\Social\Http\OAuthCallbackController;
@@ -119,6 +120,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             SocialSettingsProvider::class    => \DI\autowire(),
             ZernioClient::class              => \DI\autowire(),
             AggregatorService::class          => \DI\autowire(),
+            AggregatorAccountSync::class      => \DI\autowire(),
             SocialConnectionController::class => \DI\autowire(),
             SocialAggregatorController::class => \DI\autowire(),
             SocialPostController::class      => \DI\autowire(),
@@ -152,6 +154,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
         // is written here and nowhere else.
         $routes->addRoute('POST', $base . '/aggregators', [SocialAggregatorController::class, 'setAggregator'], self::AUTH);
         $routes->addRoute('DELETE', $base . '/aggregators/{slug}', [SocialAggregatorController::class, 'forgetAggregator'], self::AUTH);
+        $routes->addRoute('POST', $base . '/aggregators/{slug}/sync', [SocialAggregatorController::class, 'syncAggregator'], self::AUTH);
 
         $routes->addRoute('GET', $base . '/posts', [SocialPostController::class, 'posts'], self::AUTH);
         $routes->addRoute('POST', $base . '/posts', [SocialPostController::class, 'createPost'], self::AUTH);
@@ -222,7 +225,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
 
     public function schemaVersion(): int
     {
-        return 9;
+        return 10;
     }
 
     /**

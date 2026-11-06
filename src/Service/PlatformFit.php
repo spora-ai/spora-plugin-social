@@ -6,7 +6,6 @@ namespace Spora\Plugins\Social\Service;
 
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialChannel;
-use Spora\Plugins\Social\Model\SocialPlatform;
 
 /**
  * What each channel accepts: the media rules and the character limit.
@@ -24,7 +23,11 @@ use Spora\Plugins\Social\Model\SocialPlatform;
  * limits are the aggregator's own.
  *
  * The verdict names the remedy, not just the failure: an operator can act
- * on "Convert to JPEG" and not on a platform's error text.
+ * on "Convert to JPEG" and not on a platform's error text. **The remedy
+ * rides on the row**, because the networks' rules differ — Instagram
+ * takes no PNG and no GIF, Bluesky takes a GIF and no MOV, and a row that
+ * borrowed the network's remedy would name a conversion the network does
+ * not need.
  *
  * The table carries two facts that are not platform rules but plugin
  * rules — how many attachments a post may carry, and which networks fetch
@@ -36,6 +39,12 @@ use Spora\Plugins\Social\Model\SocialPlatform;
  * a second attachment, and an Instagram publish is refused without a
  * publicly reachable URL — the media pipeline mints one, because Instagram
  * fetches the file itself.
+ *
+ * **The aggregator's rows are a copy of Zernio's own documentation**, one
+ * row per platform page, and they will rot: Zernio changes a limit and
+ * the copy is behind until someone reads the changelog. A stale row
+ * produces a wrong warning and not a failed post — the publish-time
+ * refusal is Zernio's own error, which the target carries.
  */
 final class PlatformFit
 {
@@ -57,9 +66,16 @@ final class PlatformFit
 
     private const MEGABYTE = 1048576;
 
+    private const GIGABYTE = 1073741824;
+
     private const MIME_JPEG = 'image/jpeg';
     private const MIME_PNG = 'image/png';
+    private const MIME_GIF = 'image/gif';
+    private const MIME_WEBP = 'image/webp';
     private const MIME_MP4 = 'video/mp4';
+    private const MIME_MOV = 'video/quicktime';
+    private const MIME_AVI = 'video/x-msvideo';
+    private const MIME_WEBM = 'video/webm';
 
     /**
      * How many attachments a post may carry.
@@ -80,7 +96,11 @@ final class PlatformFit
      *     max_bytes: int,
      *     max_characters: int,
      *     visible_chars: int,
-     *     media: string
+     *     media: string,
+     *     media_remedy: string,
+     *     video_remedy: string,
+     *     size_remedy: string,
+     *     counting_note: ?string
      * }>
      */
     public static function rules(): array
@@ -91,22 +111,36 @@ final class PlatformFit
                 'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
                 'fetches_media'  => false,
-                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, 'image/gif'],
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, self::MIME_GIF],
                 'max_bytes'      => 8 * self::MEGABYTE,
                 'max_characters' => 3000,
                 'visible_chars'  => 200,
                 'media'          => 'JPEG, PNG or GIF, up to 8 MB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
             ],
             'direct:facebook' => [
                 'label'          => 'Facebook',
                 'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
                 'fetches_media'  => false,
-                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, 'image/gif', 'image/bmp', self::MIME_MP4],
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_GIF,
+                    'image/bmp',
+                    self::MIME_MP4,
+                ],
                 'max_bytes'      => 1024 * self::MEGABYTE,
                 'max_characters' => 63206,
                 'visible_chars'  => 125,
                 'media'          => 'JPEG, PNG, GIF, BMP or MP4, up to 1 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
             ],
             'direct:instagram' => [
                 'label'          => 'Instagram',
@@ -118,6 +152,244 @@ final class PlatformFit
                 'max_characters' => 2200,
                 'visible_chars'  => 125,
                 'media'          => 'JPEG or MP4, up to 100 MB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:twitter' => [
+                'label'          => 'X',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_WEBP,
+                    self::MIME_GIF,
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                ],
+                'max_bytes'      => 512 * self::MEGABYTE,
+                'max_characters' => 280,
+                'visible_chars'  => 280,
+                'media'          => 'JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => 'X counts a URL as 23 characters whatever its length, and an emoji as 2, '
+                    . 'so the number of characters in the body is not the number X counts.',
+            ],
+            'zernio:instagram' => [
+                'label'          => 'Instagram',
+                'media_required' => true,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, self::MIME_MP4, self::MIME_MOV],
+                'max_bytes'      => 300 * self::MEGABYTE,
+                'max_characters' => 2200,
+                'visible_chars'  => 125,
+                'media'          => 'JPEG or PNG up to 8 MB, or an MP4 or MOV video up to 300 MB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:facebook' => [
+                'label'          => 'Facebook',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_GIF,
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                ],
+                'max_bytes'      => 4 * self::GIGABYTE,
+                'max_characters' => 63206,
+                'visible_chars'  => 480,
+                'media'          => 'JPEG, PNG or GIF up to 4 MB, or an MP4 or MOV video up to 4 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:linkedin' => [
+                'label'          => 'LinkedIn',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_GIF,
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                    self::MIME_AVI,
+                ],
+                'max_bytes'      => 5 * self::GIGABYTE,
+                'max_characters' => 3000,
+                'visible_chars'  => 200,
+                'media'          => 'JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:tiktok' => [
+                'label'          => 'TikTok',
+                'media_required' => true,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_WEBP,
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                    self::MIME_WEBM,
+                ],
+                'max_bytes'      => 4 * self::GIGABYTE,
+                'max_characters' => 2200,
+                'visible_chars'  => 2200,
+                'media'          => 'JPEG, PNG or WebP up to 20 MB, or an MP4, MOV or WebM video up to 4 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:youtube' => [
+                'label'          => 'YouTube',
+                'media_required' => true,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                    self::MIME_AVI,
+                    'video/x-ms-wmv',
+                    'video/x-flv',
+                    'video/3gpp',
+                    self::MIME_WEBM,
+                ],
+                'max_bytes'      => 256 * self::GIGABYTE,
+                'max_characters' => 5000,
+                'visible_chars'  => 5000,
+                'media'          => 'an MP4, MOV, AVI, WMV, FLV, 3GP or WebM video up to 256 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:pinterest' => [
+                'label'          => 'Pinterest',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_WEBP,
+                    self::MIME_GIF,
+                    self::MIME_MP4,
+                    self::MIME_MOV,
+                ],
+                'max_bytes'      => 2 * self::GIGABYTE,
+                'max_characters' => 800,
+                'visible_chars'  => 800,
+                'media'          => 'JPEG, PNG, WebP or GIF up to 32 MB, or an MP4 or MOV video up to 2 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:reddit' => [
+                'label'          => 'Reddit',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_GIF,
+                    self::MIME_MP4,
+                ],
+                'max_bytes'      => 1 * self::GIGABYTE,
+                'max_characters' => 40000,
+                'visible_chars'  => 40000,
+                'media'          => 'JPEG, PNG or GIF up to 20 MB, or an MP4 video up to 1 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:bluesky' => [
+                'label'          => 'Bluesky',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [
+                    self::MIME_JPEG,
+                    self::MIME_PNG,
+                    self::MIME_WEBP,
+                    self::MIME_GIF,
+                    self::MIME_MP4,
+                ],
+                'max_bytes'      => 50 * self::MEGABYTE,
+                'max_characters' => 300,
+                'visible_chars'  => 300,
+                'media'          => 'JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:threads' => [
+                'label'          => 'Threads',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, self::MIME_MP4],
+                'max_bytes'      => 1 * self::GIGABYTE,
+                'max_characters' => 500,
+                'visible_chars'  => 500,
+                'media'          => 'JPEG or PNG up to 8 MB, or an MP4 video up to 1 GB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:googlebusiness' => [
+                'label'          => 'Google Business',
+                'media_required' => false,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG],
+                'max_bytes'      => 5 * self::MEGABYTE,
+                'max_characters' => 1500,
+                'visible_chars'  => 1500,
+                'media'          => 'JPEG or PNG up to 5 MB. No video.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
+            ],
+            'zernio:snapchat' => [
+                'label'          => 'Snapchat',
+                'media_required' => true,
+                'media_count'    => self::MEDIA_PER_POST,
+                'fetches_media'  => true,
+                'mime_types'     => [self::MIME_JPEG, self::MIME_PNG, self::MIME_MP4],
+                'max_bytes'      => 500 * self::MEGABYTE,
+                'max_characters' => 160,
+                'visible_chars'  => 160,
+                'media'          => 'JPEG or PNG up to 20 MB, or an MP4 video up to 500 MB.',
+                'media_remedy'   => self::REMEDY_CONVERT_JPEG,
+                'video_remedy'   => self::REMEDY_CONVERT_VIDEO,
+                'size_remedy'    => self::REMEDY_COMPRESS,
+                'counting_note'  => null,
             ],
         ];
     }
@@ -146,6 +418,22 @@ final class PlatformFit
     }
 
     /**
+     * The channels the plugin reaches on its own route.
+     *
+     * The aggregator's channels are the other ones: the same networks,
+     * reached through somebody else's API, with that API's limits.
+     *
+     * @return list<SocialChannel>
+     */
+    public static function nativeChannels(): array
+    {
+        return array_values(array_filter(
+            self::channels(),
+            static fn(SocialChannel $channel): bool => $channel->isDirect(),
+        ));
+    }
+
+    /**
      * The rule of one channel.
      *
      * @return array{
@@ -157,7 +445,11 @@ final class PlatformFit
      *     max_bytes: int,
      *     max_characters: int,
      *     visible_chars: int,
-     *     media: string
+     *     media: string,
+     *     media_remedy: string,
+     *     video_remedy: string,
+     *     size_remedy: string,
+     *     counting_note: ?string
      * }
      */
     public static function rule(SocialChannel $channel): array
@@ -183,7 +475,13 @@ final class PlatformFit
      * remedies name the action, so the badge on an attachment and the
      * refusal at publish time read as one thing.
      *
+     * The label and the route travel with the rule, so the network names
+     * live in one place — the frontend stops keeping its own list of them.
+     *
      * @return array<string, array{
+     *     label: string,
+     *     network: string,
+     *     via: string,
      *     media_required: bool,
      *     media_count: int,
      *     fetches_media: bool,
@@ -194,7 +492,8 @@ final class PlatformFit
      *     media_note: string,
      *     media_remedy: string,
      *     video_remedy: string,
-     *     size_remedy: string
+     *     size_remedy: string,
+     *     counting_note: ?string
      * }>
      */
     public static function apiRules(): array
@@ -205,6 +504,9 @@ final class PlatformFit
             $rule = self::rule($channel);
 
             $rules[$channel->key()] = [
+                'label'          => $rule['label'],
+                'network'        => $channel->network,
+                'via'            => $channel->via,
                 'media_required' => $rule['media_required'],
                 'media_count'    => $rule['media_count'],
                 'fetches_media'  => $rule['fetches_media'],
@@ -213,9 +515,10 @@ final class PlatformFit
                 'max_text'       => $rule['max_characters'],
                 'visible_chars'  => $rule['visible_chars'],
                 'media_note'     => $rule['label'] . ' accepts ' . $rule['media'],
-                'media_remedy'   => self::remedyForMime($channel, self::MIME_PNG),
-                'video_remedy'   => self::remedyForMime($channel, self::MIME_MP4),
-                'size_remedy'    => self::REMEDY_COMPRESS,
+                'media_remedy'   => $rule['media_remedy'],
+                'video_remedy'   => $rule['video_remedy'],
+                'size_remedy'    => $rule['size_remedy'],
+                'counting_note'  => $rule['counting_note'],
             ];
         }
 
@@ -279,7 +582,7 @@ final class PlatformFit
 
         if (!in_array($mime, $rule['mime_types'], true)) {
             $reasons[] = $rule['label'] . ' does not accept ' . $mime . '.';
-            $remedy = self::remedyForMime($channel, $mime);
+            $remedy = self::remedyForMime($rule, $mime);
         }
 
         if ($sizeBytes !== null && $sizeBytes > $rule['max_bytes']) {
@@ -289,7 +592,7 @@ final class PlatformFit
                 self::humanBytes($rule['max_bytes']),
                 self::humanBytes($sizeBytes),
             );
-            $remedy = self::REMEDY_COMPRESS;
+            $remedy = $rule['size_remedy'];
         }
 
         return ['fits' => $reasons === [], 'reasons' => $reasons, 'remedy' => $remedy];
@@ -301,11 +604,21 @@ final class PlatformFit
      * Counted in characters, not bytes: the limits are the networks' own
      * character counts.
      *
+     * A row that carries a counting note is not judged on the count at
+     * all: the network counts differently, and a number the plugin cannot
+     * compute is worse than no number. The network refuses the post, and
+     * its own message lands on the target.
+     *
      * @return array{fits: bool, reasons: list<string>, remedy: ?string}
      */
     public static function checkBody(SocialChannel $channel, string $body): array
     {
         $rule = self::rule($channel);
+
+        if ($rule['counting_note'] !== null) {
+            return ['fits' => true, 'reasons' => [], 'remedy' => null];
+        }
+
         $limit = (int) $rule['max_characters'];
         $length = mb_strlen($body);
 
@@ -329,26 +642,25 @@ final class PlatformFit
     /**
      * The remedy for a file type the channel rejects.
      *
-     * Instagram is the case that matters: it takes no PNG at all, and the
-     * conversion is one derivative away.
+     * The row carries it: a video the network will not take is a
+     * different conversion from an image it will not take, and the
+     * networks differ on both.
+     *
+     * @param array<string, mixed> $rule
      */
-    private static function remedyForMime(SocialChannel $channel, string $mime): string
+    private static function remedyForMime(array $rule, string $mime): string
     {
-        if ($channel->network === SocialPlatform::Instagram->value) {
-            return str_starts_with($mime, 'video/')
-                ? self::REMEDY_CONVERT_VIDEO
-                : self::REMEDY_CONVERT_JPEG;
-        }
-
-        if ($channel->network === SocialPlatform::LinkedIn->value && str_starts_with($mime, 'video/')) {
-            return self::REMEDY_CONVERT_VIDEO;
-        }
-
-        return self::REMEDY_CONVERT_JPEG;
+        return str_starts_with($mime, 'video/')
+            ? (string) $rule['video_remedy']
+            : (string) $rule['media_remedy'];
     }
 
     private static function humanBytes(int $bytes): string
     {
+        if ($bytes >= self::GIGABYTE) {
+            return round($bytes / self::GIGABYTE, $bytes % self::GIGABYTE === 0 ? 0 : 1) . ' GB';
+        }
+
         if ($bytes >= self::MEGABYTE) {
             return round($bytes / self::MEGABYTE, $bytes % self::MEGABYTE === 0 ? 0 : 1) . ' MB';
         }

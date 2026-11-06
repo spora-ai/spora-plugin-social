@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
+use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
+use Spora\Plugins\Social\Aggregator\AggregatorProvider;
 use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Http\SocialConnectionResource;
 use Spora\Plugins\Social\Model\SocialConnection;
@@ -71,14 +73,24 @@ use Throwable;
     enabledByDefault: true,
     requiresApprovalByDefault: false,
 )]
+#[ToolOperation(
+    name: 'sync',
+    description: 'Sync the accounts an aggregator holds. Read-only: it asks the aggregator which accounts the key reaches and updates the plugin\'s copy of them. It never connects an account and never changes anything in the aggregator.',
+    operatorDescription: 'Sync the aggregator accounts',
+    enabledByDefault: true,
+    requiresApprovalByDefault: false,
+)]
 #[ToolParameter(name: 'provider', type: 'string', description: 'The provider to connect: meta (Instagram and Facebook together) or linkedin.', required: ['connect'], enum: ['meta', 'linkedin'])]
 #[ToolParameter(name: 'connection_id', type: 'integer', description: 'The connection id. Required for disconnect, refresh and health.', required: ['disconnect', 'refresh', 'health'])]
+#[ToolParameter(name: 'aggregator', type: 'string', description: 'The aggregator to sync: zernio.', required: ['sync'], enum: ['zernio'])]
 final class SocialConnectionsTool extends AbstractSocialTool
 {
     private const CONNECTION_ID_REQUIRED = 'Error (VALIDATION_ERROR): connection_id is required.';
 
     public function __construct(
         private readonly SocialConnectionService $connections,
+        private readonly AggregatorService $aggregators,
+        private readonly AggregatorAccountSync $sync,
     ) {}
 
     public function execute(
@@ -97,7 +109,8 @@ final class SocialConnectionsTool extends AbstractSocialTool
                 'disconnect' => $this->disconnect($principalId, $arguments),
                 'refresh' => $this->refresh($principalId, $arguments),
                 'health' => $this->health($principalId, $arguments),
-                default => new ToolResult(false, "Invalid action '{$operation}'. Use list, connect, disconnect, refresh or health."),
+                'sync' => $this->sync($principalId, $arguments),
+                default => new ToolResult(false, "Invalid action '{$operation}'. Use list, connect, disconnect, refresh, health or sync."),
             };
         } catch (Throwable $e) {
             return $this->failure($e);
@@ -212,5 +225,50 @@ final class SocialConnectionsTool extends AbstractSocialTool
             'Token health: ' . $health['status'] . ' — ' . $health['message'],
             ['health' => $health],
         );
+    }
+
+    /**
+     * Read the aggregator's accounts again.
+     *
+     * The accounts are the aggregator's, and the operator manages them
+     * there. The sync only learns what is there, so it needs no approval
+     * — it cannot publish, and it cannot connect anything.
+     */
+    private function sync(int $principalId, array $arguments): ToolResult
+    {
+        $provider = AggregatorProvider::tryFromName((string) ($arguments['aggregator'] ?? ''));
+
+        if ($provider === null) {
+            return new ToolResult(false, 'Error (VALIDATION_ERROR): aggregator must be zernio.');
+        }
+
+        $connection = $this->aggregators->connection($principalId, $provider);
+
+        if ($connection === null) {
+            return new ToolResult(false, 'There is no ' . $provider->label() . ' connection to sync. The operator adds the key on the Accounts screen.');
+        }
+
+        $result = $this->sync->read($connection);
+        $this->sync->apply($connection, $result);
+
+        $message = 'Synced ' . count($result->accounts) . ' ' . $provider->label() . ' account'
+            . (count($result->accounts) === 1 ? '' : 's') . '.';
+
+        if ($result->gone !== []) {
+            $message .= ' ' . count($result->gone) . ' account'
+                . (count($result->gone) === 1 ? ' is' : 's are') . ' no longer in '
+                . $provider->label() . ' and are marked disconnected.';
+        }
+
+        if (!$result->analyticsAvailable) {
+            $message .= ' The follower counts and the numbers stay empty: analytics is an add-on on '
+                . $provider->label() . '\'s plan.';
+        }
+
+        return ToolResult::ok($message, [
+            'accounts'     => count($result->accounts),
+            'disconnected' => count($result->gone),
+            'analytics'    => $result->analyticsAvailable,
+        ]);
     }
 }

@@ -228,6 +228,29 @@ it('names the connected accounts when the post names none of them', function () 
     );
 });
 
+it('names the accounts screen when the only accounts are aggregator accounts', function () {
+    $service = postService();
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $connection = createSocialConnection($principalId, 'zernio');
+
+    createSocialAccount($principalId, 'bluesky', 'aggregator', [
+        'connection' => $connection,
+        'via'        => 'zernio',
+    ]);
+
+    // There is no connect URL for an aggregator, so the way out is the
+    // screen the operator added the key on.
+    expect(fn() => $service->create($principalId, [
+        'body'          => SocialFixtures::POST_BODY,
+        'scheduled_for' => '2026-11-02T09:00:00+00:00',
+    ]))->toThrow(
+        Spora\Plugins\Social\Exception\SocialException::class,
+        'Accounts screen',
+    );
+});
+
 it('refuses to give a draft a date while it has no account', function () {
     $service = postService();
 
