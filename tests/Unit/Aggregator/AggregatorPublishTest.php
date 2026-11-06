@@ -8,20 +8,6 @@ use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\Tests\Support\ZernioRecorder;
 
 /**
- * An account the aggregator holds.
- */
-function zernioAccount(int $principalId, string $network = 'bluesky', string $externalId = 'id_002'): SocialAccount
-{
-    $connection = createSocialConnection($principalId, 'zernio', ['access_token' => 'the-key']);
-
-    return createSocialAccount($principalId, $network, 'aggregator', [
-        'connection' => $connection,
-        'external_id' => $externalId,
-        'via'        => 'zernio',
-    ]);
-}
-
-/**
  * A post that goes to the given accounts.
  *
  * @param list<SocialAccount> $accounts

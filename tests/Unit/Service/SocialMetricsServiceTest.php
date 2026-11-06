@@ -33,6 +33,10 @@ function recordingMetricsService(array &$seen, array $bodies = ['{}']): SocialMe
         new Spora\Plugins\Social\Publish\PlatformHttpClient($http),
         metricsConnectionService(),
         apiVersions(),
+        new Spora\Plugins\Social\Aggregator\AggregatorMetricsReader(
+            zernioClient(),
+            aggregatorService(),
+        ),
     );
 }
 

@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Service;
 
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
+use Spora\Plugins\Social\Aggregator\AggregatorMetricsReader;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
 use Spora\Plugins\Social\Model\SocialPlatform;
@@ -31,8 +32,9 @@ final class SocialMetricsService
         PlatformHttpClient $http,
         SocialConnectionService $connections,
         ApiVersions $versions,
+        AggregatorMetricsReader $aggregator,
     ) {
-        $this->reader = new PlatformMetricsReader($http, $connections, $versions);
+        $this->reader = new PlatformMetricsReader($http, $connections, $versions, $aggregator);
     }
 
     private readonly PlatformMetricsReader $reader;
@@ -56,6 +58,12 @@ final class SocialMetricsService
         }
 
         $snapshot = $this->reader->read($channel, $account, (string) $target->external_id);
+
+        // The reading is skipped: the aggregator is still syncing, and
+        // the daily job picks it up tomorrow.
+        if ($snapshot === null) {
+            return null;
+        }
 
         $date = DateTimeParser::nowUtc()->format('Y-m-d');
 
@@ -199,7 +207,7 @@ final class SocialMetricsService
                 'status'       => (string) $target->status,
                 'external_id'  => $target->external_id,
                 'metrics'      => $metrics === null ? null : $this->metricsOf($metrics),
-                'report_note'  => $this->reportNoteFor($target),
+                'report_note'  => $this->reportNoteFor($target, $metrics),
             ];
         }
 
@@ -344,8 +352,21 @@ final class SocialMetricsService
         return $notes;
     }
 
-    private function reportNoteFor(SocialPostTarget $target): ?string
+    /**
+     * The note the target's numbers carry.
+     *
+     * A reading's own note comes first: it says what the numbers are —
+     * that they cover every network in the aggregator's post, or that
+     * the plan carries no analytics at all.
+     */
+    private function reportNoteFor(SocialPostTarget $target, ?SocialPostMetric $metrics): ?string
     {
+        $note = $metrics?->platform_metrics['note'] ?? null;
+
+        if (is_string($note) && $note !== '') {
+            return $note;
+        }
+
         $account = $target->account;
         if ($account === null) {
             return null;

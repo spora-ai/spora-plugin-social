@@ -276,6 +276,7 @@ it('reads the reactions of the member post back', function () {
                 new PlatformHttpClient($context->http(SocialPlatform::LinkedIn)),
                 $context->accountService(),
                 $context->versions(),
+                $context->aggregatorMetricsReader(),
             );
 
             $row = $service->collect($target);

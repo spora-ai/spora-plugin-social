@@ -359,6 +359,20 @@ function aggregatorService(?Symfony\Contracts\HttpClient\HttpClientInterface $cl
 }
 
 /**
+ * An account the aggregator holds.
+ */
+function zernioAccount(int $principalId, string $network = 'bluesky', string $externalId = 'id_002'): Spora\Plugins\Social\Model\SocialAccount
+{
+    $connection = createSocialConnection($principalId, 'zernio', ['access_token' => 'the-key']);
+
+    return createSocialAccount($principalId, $network, 'aggregator', [
+        'connection' => $connection,
+        'external_id' => $externalId,
+        'via'        => 'zernio',
+    ]);
+}
+
+/**
  * The connections tool, with the aggregator's own collaborators.
  */
 function connectionsTool(
@@ -620,7 +634,15 @@ function metricsService(array $responses): SocialMetricsService
         $responses,
     ));
 
-    return new SocialMetricsService(new PlatformHttpClient($http), connectionService(), apiVersions());
+    return new SocialMetricsService(
+        new PlatformHttpClient($http),
+        connectionService(),
+        apiVersions(),
+        new Spora\Plugins\Social\Aggregator\AggregatorMetricsReader(
+            zernioClient(),
+            aggregatorService(),
+        ),
+    );
 }
 
 /**

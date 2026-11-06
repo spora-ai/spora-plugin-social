@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Service;
 
+use Spora\Plugins\Social\Aggregator\AggregatorMetricsReader;
+use Spora\Plugins\Social\Aggregator\AggregatorProvider;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialAccountKind;
@@ -31,13 +33,23 @@ final class PlatformMetricsReader
         private readonly PlatformHttpClient $http,
         private readonly SocialConnectionService $connections,
         private readonly ApiVersions $versions,
+        private readonly AggregatorMetricsReader $aggregator,
     ) {}
 
     /**
      * The numbers one published target has.
+     *
+     * Null when the reading is skipped: the aggregator is still syncing
+     * the post's numbers, and there is nothing to write down yet.
      */
-    public function read(SocialChannel $channel, SocialAccount $account, string $externalId): MetricSnapshot
+    public function read(SocialChannel $channel, SocialAccount $account, string $externalId): ?MetricSnapshot
     {
+        // Another route's numbers are read elsewhere: the aggregator's
+        // own reader knows what its plan and its networks report.
+        if (!$channel->isDirect()) {
+            return $this->aggregator->read($channel, $account, $externalId);
+        }
+
         $platform = self::nativeOf($channel);
 
         if ($platform === null) {
@@ -57,11 +69,12 @@ final class PlatformMetricsReader
      * Whether the plugin reads this channel's numbers.
      *
      * The insights APIs belong to the networks the plugin talks to
-     * natively; another route's numbers are read elsewhere.
+     * natively; the aggregator's numbers are read by the aggregator's
+     * own reader, which knows what its plan reports.
      */
     public static function reads(SocialChannel $channel): bool
     {
-        return self::nativeOf($channel) !== null;
+        return self::nativeOf($channel) !== null || AggregatorProvider::tryFromName($channel->via) !== null;
     }
 
     /**

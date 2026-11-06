@@ -38,6 +38,10 @@ function dueWorkProvider(array $answers = [], array $containers = []): SocialDue
                 aggregatorService(),
             ),
             apiVersions(),
+            new Spora\Plugins\Social\Aggregator\AggregatorMetricsReader(
+                zernioClient(),
+                aggregatorService(),
+            ),
         ),
         postPublisher($answers),
         new Spora\Plugins\Social\Service\ContainerReconciliation(

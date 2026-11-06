@@ -10,6 +10,7 @@ use Spora\Http\Middleware\AuthMiddleware;
 use Spora\Http\Middleware\CsrfMiddleware;
 use Spora\Plugins\AbstractPlugin;
 use Spora\Plugins\Social\Aggregator\AggregatorAccountSync;
+use Spora\Plugins\Social\Aggregator\AggregatorMetricsReader;
 use Spora\Plugins\Social\Aggregator\AggregatorPublisher;
 use Spora\Plugins\Social\Aggregator\AggregatorReconciliation;
 use Spora\Plugins\Social\Aggregator\AggregatorService;
@@ -126,6 +127,7 @@ final class SocialPlugin extends AbstractPlugin implements EventSubscriberInterf
             AggregatorService::class          => \DI\autowire(),
             AggregatorAccountSync::class      => \DI\autowire(),
             AggregatorPublisher::class         => \DI\autowire(),
+            AggregatorMetricsReader::class     => \DI\autowire(),
             AggregatorReconciliation::class    => \DI\autowire(),
             SocialConnectionController::class => \DI\autowire(),
             SocialAggregatorController::class => \DI\autowire(),
