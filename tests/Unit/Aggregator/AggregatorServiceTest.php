@@ -59,6 +59,45 @@ it('refuses a key Zernio refuses', function () {
         ->toThrow(SocialException::class, 'Zernio refused that API key');
 });
 
+it('does not echo the key back when Zernio refuses it', function () {
+    // Zernio may answer a bad key with the key in its own words, and the
+    // operator's message is not the place for a credential.
+    $recorder = new ZernioRecorder([
+        ['body' => '{"error":"Invalid API key sk_secret"}', 'status' => 401],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $message = null;
+
+    try {
+        aggregatorServiceWith($recorder)->setKey($principalId, AggregatorProvider::Zernio, 'sk_secret');
+    } catch (SocialException $e) {
+        $message = $e->getMessage();
+    }
+
+    expect($message)->not->toBeNull()
+        ->and($message)->not->toContain('sk_secret')
+        // The reason Zernio gave is worth keeping; only the key goes.
+        ->and($message)->toContain('Zernio refused that API key');
+});
+
+it('does not echo the key back in the health answer', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => '{"error":"Invalid API key the-key"}', 'status' => 401],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $connection = createSocialConnection($principalId, 'zernio', ['access_token' => 'the-key']);
+
+    $health = connectionService(null, null, [], aggregatorServiceWith($recorder))
+        ->health((int) $connection->id, $principalId);
+
+    expect($health['status'])->toBe(SocialConnection::STATUS_REVOKED)
+        ->and($health['message'])->not->toContain('the-key');
+});
+
 it('answers the health with a cheap authenticated call and never resolves accounts', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('accounts')],

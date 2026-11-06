@@ -162,9 +162,10 @@ final class AggregatorService
     public function health(SocialConnection $connection): array
     {
         $checkedAt = gmdate('c');
+        $key = $this->apiKey($connection);
 
         try {
-            $response = $this->client->accounts($this->apiKey($connection), ['limit' => 1]);
+            $response = $this->client->accounts($key, ['limit' => 1]);
         } catch (Throwable $e) {
             return ['status' => SocialConnection::STATUS_ERROR, 'message' => $e->getMessage(), 'checked_at' => $checkedAt];
         }
@@ -179,7 +180,10 @@ final class AggregatorService
 
             return [
                 'status'     => $status,
-                'message'    => $response->errorMessage() ?? 'Zernio refused the API key.',
+                'message'    => $this->withoutTheKey(
+                    $response->errorMessage() ?? 'Zernio refused the API key.',
+                    $key,
+                ),
                 'checked_at' => $checkedAt,
             ];
         }
@@ -210,9 +214,29 @@ final class AggregatorService
         // Only a refusal of the key itself is a refusal: an outage is
         // not the operator's fault.
         if (!$response->isSuccessful() && ($response->status === 401 || $response->status === 403)) {
-            return 'Zernio refused that API key: ' . ($response->errorMessage() ?? 'the key was not accepted.');
+            return 'Zernio refused that API key: ' . $this->withoutTheKey(
+                $response->errorMessage() ?? 'the key was not accepted.',
+                $apiKey,
+            );
         }
 
         return null;
+    }
+
+    /**
+     * Zernio's own words, without the key in them.
+     *
+     * Zernio may echo the submitted key in its error body, and the
+     * operator's message is not the place for a credential: the key
+     * would come back to whoever reads the refusal, verbatim. The reason
+     * Zernio gave is worth keeping — only the key goes.
+     */
+    private function withoutTheKey(string $message, string $apiKey): string
+    {
+        if ($apiKey === '') {
+            return $message;
+        }
+
+        return str_replace($apiKey, '[redacted]', $message);
     }
 }
