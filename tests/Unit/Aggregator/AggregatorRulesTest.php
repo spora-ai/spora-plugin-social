@@ -95,6 +95,17 @@ it("carries Telegram's own limits", function () {
         ->and($telegram['media'])->toContain('50 MB');
 });
 
+it('does not promise an album the plugin will not send', function () {
+    $telegram = PlatformFit::rule(SocialChannel::tryFrom('zernio', 'telegram'));
+
+    // Zernio's own limit is an album of ten, and the plugin's rule of
+    // one attachment per post holds on every channel. The row carries
+    // both, so the operator is never told the plugin sends ten files.
+    expect($telegram['media'])->toContain('album')
+        ->and($telegram['media'])->toContain('one attachment')
+        ->and($telegram['media_count'])->toBe(PlatformFit::MEDIA_PER_POST);
+});
+
 it('names the networks the aggregator reaches in the skill', function () {
     $prose = socialSkill()['body'];
 

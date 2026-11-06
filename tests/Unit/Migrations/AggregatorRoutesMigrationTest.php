@@ -148,3 +148,20 @@ it('moves the copy\'s keys back when it is rolled back', function () {
 
     expect($row->platform_bodies)->toBe('{"linkedin":"The LinkedIn copy"}');
 });
+
+it('counts the index name the way the comment does', function () {
+    $source = (string) file_get_contents(
+        dirname(__DIR__, 3) . '/database/migrations/social_000009_add_aggregator_routes.php',
+    );
+
+    // The comment counts the name MySQL is given, and the name is built
+    // from the table and its columns. The number was once wrong, and a
+    // wrong number in a comment about a limit is the kind of thing
+    // nobody notices.
+    preg_match('/(\d+) characters — MySQL allows 64 for an index name/', $source, $matches);
+
+    $name = 'social_accounts_principal_id_via_platform_external_id_unique';
+
+    expect($matches)->not->toBeEmpty()
+        ->and((int) ($matches[1] ?? 0))->toBe(strlen($name));
+});

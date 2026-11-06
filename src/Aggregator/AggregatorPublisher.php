@@ -219,8 +219,8 @@ final class AggregatorPublisher
      * `platformResults[]` carries `{platform, status, error}` and **no
      * account id**, so two accounts of one network cannot be told apart
      * by it. The response's own `post.platforms[]` mirrors the request
-     * entries and may carry an `accountId` — that is read first, and the
-     * order of the entries is the fallback.
+     * entries and may carry an `accountId` — that is where the entry
+     * comes from, and {@see self::entryFor()} says which of them answers.
      *
      * @param  list<SocialPostTarget> $targets
      * @return array<int, AggregatorOutcome>
@@ -339,6 +339,11 @@ final class AggregatorPublisher
 
     /**
      * The entry that answers for the target.
+     *
+     * Three answers, in this order: the account id the answer names, the
+     * order of the entries, and the network itself — the last one only
+     * when the target is the only one of the group on that network, so
+     * two accounts of one network never take the same entry.
      *
      * @param  list<array<string, mixed>> $entries
      * @param  list<SocialPostTarget>     $targets

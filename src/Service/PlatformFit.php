@@ -382,7 +382,7 @@ final class PlatformFit
                 maxCharacters: 4096,
                 visibleChars: 4096,
                 media: 'JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB. '
-                    . 'Up to 10 images or videos in an album.',
+                    . 'Zernio puts up to 10 images or videos in an album, and a post carries one attachment.',
             ),
         ];
     }

@@ -14,7 +14,7 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  * differ where it matters. This one sends `Idempotency-Key` (the layer
  * that protects a retry whose body differs), uploads with a `PUT` of raw
  * bytes to a presigned URL and no authorization header, and waits longer
- * — a publish to sixteen networks happens inside the request, and that is
+ * — a publish to twelve networks happens inside the request, and that is
  * not a fast call.
  *
  * A refusal is a value and a transport failure is an exception: the
@@ -29,7 +29,7 @@ final class ZernioClient
      * How long a call may take.
      *
      * A publish goes out to every network in the call, synchronously,
-     * inside the request. Sixteen networks is not a fast call, and a
+     * inside the request. Twelve networks is not a fast call, and a
      * timeout that fires while Zernio is still publishing is a publish
      * whose outcome is unknown — which the plugin has to survive.
      */

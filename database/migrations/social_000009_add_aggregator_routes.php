@@ -92,7 +92,7 @@ return new class extends Migration {
         }
 
         $schema->table('social_accounts', function (Blueprint $table): void {
-            // 59 characters — MySQL allows 64 for an index name.
+            // 60 characters — MySQL allows 64 for an index name.
             $table->unique(['principal_id', 'via', 'platform', 'external_id']);
         });
     }
