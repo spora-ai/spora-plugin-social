@@ -147,8 +147,11 @@ route; this one is Zernio's:
 | Google Business | optional | JPEG or PNG up to 5 MB, no video | up to 1,500 characters |
 | Telegram | optional | JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB | up to 4,096 characters |
 
-So a LinkedIn post through Zernio may carry several images and a video, where
-the plugin's own LinkedIn route carries one image and no video. **X counts
+Zernio's own limits are the wider ones: a LinkedIn post through Zernio may
+carry several images and a video, where the plugin's own LinkedIn route
+carries one image and no video. **The plugin's rule of one attachment per
+post still holds on every channel**: the publish sends one file, and a second
+is a file the operator believes is going out and is not. **X counts
 its characters its own way** — a URL is 23 characters whatever its length and
 an emoji is 2 — so the plugin does not count it for you: keep an X body short
 and let X refuse it if it is too long.
@@ -162,14 +165,14 @@ operator asked for.
 hours.** Zernio refuses the same content on the same account again within a
 day, and it says so in its own words — the operator reads that message on the
 target. It is Zernio's rule, not the plugin's, and there is nothing to work
-around: the content has to change, or the post has to be deleted in Zernio,
-which frees the content for re-creation.
+around: the dedup is keyed on the whole content, so the way out is the one
+Zernio names — change the caption, the media or the account.
 
-**An aggregator's numbers are an add-on on its plan.** Without it the target
-reports no numbers, and the note says why. And when the aggregator gives one
-aggregate for the whole post rather than a number per network, the target
-reports that aggregate with a note saying it covers every network in the
-post.
+**An aggregator's numbers need the analytics add-on on a legacy plan** — a
+usage-based plan includes them. Without them the target reports no numbers,
+and the note says why. And when the aggregator gives one aggregate for the
+whole post rather than a number per network, the target reports that
+aggregate with a note saying it covers every network in the post.
 
 ## The media rules
 
@@ -226,9 +229,10 @@ operator approves the copy and the time once — not again at the moment.
   platforms count reach differently. `totals` is that rough figure;
   `by_network` is the honest one. A row is a **channel** — the network and
   the route to it — so the same network on two routes is two rows.
-- **An aggregator's numbers are an add-on on its plan.** Without it the
-  numbers stay empty and the note says why. And one aggregate for the whole
-  aggregator post covers every network in it, not the one account.
+- **An aggregator's numbers need the analytics add-on on a legacy plan** — a
+  usage-based plan includes them. Without them the numbers stay empty and
+  the note says why. And one aggregate for the whole aggregator post covers
+  every network in it, not the one account.
 
 ## What not to do
 

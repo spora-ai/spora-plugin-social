@@ -163,6 +163,21 @@ it('says which networks need the aggregator, and what its rules are', function (
         ->and($prose)->toContain('24 hours');
 });
 
+it('does not claim again what the code does not do', function (string $claim) {
+    // The skill is the operating manual the model reads, and a claim in
+    // it that the plugin does not honour is a claim the model acts on:
+    // it would attach a second file, or promise a remedy that is not
+    // one. Each phrase below was wrong once, and the correction is the
+    // fix — so the phrase must not come back.
+    $prose = strtolower(socialSkill()['body']);
+
+    expect($prose)->not->toContain($claim);
+})->with([
+    'a post may carry several images through the aggregator' => 'may carry several images',
+    'deleting the post in Zernio frees the content' => 'which frees the content',
+    "the aggregator's numbers are an add-on on its plan" => "numbers are an add-on on its plan",
+]);
+
 it('declares the skill the tools bundle', function () {
     foreach ((new Spora\Plugins\Social\SocialPlugin())->tools() as $class) {
         $attributes = (new ReflectionClass($class))->getAttributes(Spora\Tools\Attributes\Tool::class);
