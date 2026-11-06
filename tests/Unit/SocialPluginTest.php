@@ -190,6 +190,22 @@ it('declares the manifest slug and class', function () {
         ->and($manifest['icon'])->toBe('globe');
 });
 
+it('names the aggregator in the manifest description', function () {
+    // The description is what an operator reads in the plugin list, and
+    // the aggregator is invisible by default — so the description is the
+    // only place that says the plugin reaches more networks.
+    $manifest = json_decode(
+        (string) file_get_contents(dirname(__DIR__, 2) . '/plugin.json'),
+        true,
+        512,
+        JSON_THROW_ON_ERROR,
+    );
+
+    expect($manifest['description'])->toContain('Publish to LinkedIn, Facebook and Instagram')
+        ->and($manifest['description'])->toContain('aggregator')
+        ->and($manifest['description'])->toContain('does not connect to natively');
+});
+
 it('binds the plugin services into the container', function () {
     $builder = new DI\ContainerBuilder();
 

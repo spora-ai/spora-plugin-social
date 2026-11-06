@@ -17,3 +17,11 @@ it('names the panel after the plugin', function () {
         ->and($app->accent())->toBe('sky')
         ->and($app->entry())->toBe('main.js');
 });
+
+it('names the aggregator in the description', function () {
+    // The aggregator is optional and invisible by default, and a
+    // description that does not mention it reads as though the plugin
+    // reaches three networks and no more.
+    expect((new SocialApp())->description())->toContain('aggregator')
+        ->and((new SocialApp())->description())->toContain('does not connect to natively');
+});
