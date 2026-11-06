@@ -10,7 +10,6 @@ use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
 use Spora\Plugins\Social\Model\SocialChannel;
-use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\Publish\DeleteRequest;
@@ -263,11 +262,10 @@ final class SocialPublisher
             $account = $this->connections->findAccount((int) $target->account_id, (int) $post->principal_id);
             $channel = $target->channel();
 
-            $platform = SocialPlatform::tryFromName($channel->network);
-
-            if ($platform === null) {
-                throw SocialException::validation('This target has an unknown platform.');
-            }
+            // The adapter is resolved first: a channel nothing can
+            // publish is a different failure from a body that is too
+            // long, and it is the one the operator has to act on.
+            $publisher = $this->publishers->for($channel);
 
             $body = $this->bodyFor($post, $channel);
 
@@ -283,7 +281,7 @@ final class SocialPublisher
                 ));
             }
 
-            $result = $this->publishers->for($platform)->publish(new PublishRequest(
+            $result = $publisher->publish(new PublishRequest(
                 externalId: (string) $account->external_id,
                 kind: SocialAccountKind::from((string) $account->kind),
                 accessToken: $this->connections->tokenFor($account),
@@ -350,17 +348,14 @@ final class SocialPublisher
                 throw SocialException::conflict('This target has no account to delete with.');
             }
 
-            $platform = SocialPlatform::tryFromName((string) $target->platform);
-
-            if ($platform === null) {
-                throw SocialException::validation('This target has an unknown platform.');
-            }
+            $channel = $target->channel();
+            $publisher = $this->publishers->for($channel);
 
             if ($target->external_id === null || $target->external_id === '') {
                 throw SocialException::conflict('This target has no published id to delete.');
             }
 
-            $result = $this->publishers->for($platform)->delete(new DeleteRequest(
+            $result = $publisher->delete(new DeleteRequest(
                 externalId: (string) $target->external_id,
                 kind: SocialAccountKind::from((string) $account->kind),
                 accessToken: $this->connections->tokenFor($account),

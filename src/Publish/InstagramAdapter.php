@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Publish;
 
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\ApiVersions;
 
@@ -49,9 +50,9 @@ final class InstagramAdapter implements PublisherInterface
         private readonly PlatformApi $api,
     ) {}
 
-    public function platform(): SocialPlatform
+    public function channel(): SocialChannel
     {
-        return SocialPlatform::Instagram;
+        return SocialChannel::direct(SocialPlatform::Instagram->value);
     }
 
     public function publish(PublishRequest $request): PublishResult

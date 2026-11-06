@@ -7,6 +7,7 @@ namespace Spora\Plugins\Social\Service;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialAccountKind;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialConnection;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\OAuth\LinkedInProvider;
@@ -35,8 +36,14 @@ final class PlatformMetricsReader
     /**
      * The numbers one published target has.
      */
-    public function read(SocialPlatform $platform, SocialAccount $account, string $externalId): MetricSnapshot
+    public function read(SocialChannel $channel, SocialAccount $account, string $externalId): MetricSnapshot
     {
+        $platform = self::nativeOf($channel);
+
+        if ($platform === null) {
+            throw SocialException::validation('There are no numbers the plugin can read for the channel ' . $channel->key() . '.');
+        }
+
         $token = $this->tokenFor($account);
 
         return match ($platform) {
@@ -44,6 +51,29 @@ final class PlatformMetricsReader
             SocialPlatform::Facebook => $this->readFacebook($externalId, $token),
             SocialPlatform::Instagram => $this->readInstagram($externalId, $token),
         };
+    }
+
+    /**
+     * Whether the plugin reads this channel's numbers.
+     *
+     * The insights APIs belong to the networks the plugin talks to
+     * natively; another route's numbers are read elsewhere.
+     */
+    public static function reads(SocialChannel $channel): bool
+    {
+        return self::nativeOf($channel) !== null;
+    }
+
+    /**
+     * The native network behind a channel, when the channel is one.
+     */
+    private static function nativeOf(SocialChannel $channel): ?SocialPlatform
+    {
+        if (!$channel->isDirect()) {
+            return null;
+        }
+
+        return SocialPlatform::tryFromName($channel->network);
     }
 
     /**

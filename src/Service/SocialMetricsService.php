@@ -49,12 +49,13 @@ final class SocialMetricsService
             return null;
         }
 
-        $platform = SocialPlatform::tryFromName((string) $target->platform);
-        if ($platform === null || $target->external_id === null || $target->external_id === '') {
+        $channel = $target->channel();
+
+        if (!PlatformMetricsReader::reads($channel) || $target->external_id === null || $target->external_id === '') {
             return null;
         }
 
-        $snapshot = $this->reader->read($platform, $account, (string) $target->external_id);
+        $snapshot = $this->reader->read($channel, $account, (string) $target->external_id);
 
         $date = DateTimeParser::nowUtc()->format('Y-m-d');
 
