@@ -124,6 +124,45 @@ it('does not claim the backend leaves the limits to the agent', function () {
         ->and($prose)->toContain('enforce');
 });
 
+it('quotes the aggregator networks and their limits in the skill', function () {
+    // The skill is the agent's only description of what the plugin can
+    // do, and the aggregator's limits are not the plugin's own: the
+    // agent has to know them to write a body that fits.
+    $prose = socialSkill()['body'];
+
+    foreach (PlatformFit::channels() as $channel) {
+        if ($channel->isDirect()) {
+            continue;
+        }
+
+        $rule = PlatformFit::rule($channel);
+
+        expect($prose)->toMatch('/\b' . preg_quote($rule['label'], '/') . '\b/')
+            ->and($prose)->toContain(number_format($rule['max_characters']));
+    }
+});
+
+it('says which networks need the aggregator, and what its rules are', function () {
+    $prose = socialSkill()['body'];
+
+    // Which networks are the plugin's own and which are not.
+    expect($prose)->toContain('Zernio')
+        ->and($prose)->toContain('Everything else goes through an aggregator');
+
+    // The limits are the aggregator's, and they differ from the native
+    // ones for the same network.
+    expect($prose)->toContain("limits are Zernio's")
+        ->and($prose)->toContain('differ');
+
+    // It publishes at the moment it is due, not when the aggregator says
+    // so.
+    expect($prose)->toContain('at the moment it is due');
+
+    // And it may refuse the same content again within a day.
+    expect($prose)->toContain('duplicate')
+        ->and($prose)->toContain('24 hours');
+});
+
 it('declares the skill the tools bundle', function () {
     foreach ((new Spora\Plugins\Social\SocialPlugin())->tools() as $class) {
         $attributes = (new ReflectionClass($class))->getAttributes(Spora\Tools\Attributes\Tool::class);
