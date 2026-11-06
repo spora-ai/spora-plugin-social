@@ -329,20 +329,10 @@ final class SocialPublisher
         $going = [];
 
         foreach ($targets as $target) {
-            $channel = $target->channel();
+            $problem = $this->fitProblem($post, $target, $media);
 
-            $bodyFit = PlatformFit::checkBody($channel, $this->bodyFor($post, $channel));
-            if (!$bodyFit['fits']) {
-                $this->failTarget($target, trim(
-                    implode(' ', $bodyFit['reasons']) . ' ' . (string) $bodyFit['remedy'],
-                ));
-
-                continue;
-            }
-
-            $mediaProblem = $this->mediaProblem($channel, $media);
-            if ($mediaProblem !== null) {
-                $this->failTarget($target, $mediaProblem);
+            if ($problem !== null) {
+                $this->failTarget($target, $problem);
 
                 continue;
             }
@@ -389,6 +379,31 @@ final class SocialPublisher
     private function originalMedia(SocialPost $post): ?PreparedMedia
     {
         return $this->postMedia->original($post);
+    }
+
+    /**
+     * Why the target does not go out, when it does not.
+     *
+     * A channel the plugin has no rules for is a refusal of that target
+     * alone. The rules table throws for it, and the exception must not
+     * take the rest of the group down with it — and it must not escape
+     * before the key is written, or the survivors are lost to the
+     * reconciliation as well.
+     */
+    private function fitProblem(SocialPost $post, SocialPostTarget $target, ?PreparedMedia $media): ?string
+    {
+        try {
+            $channel = $target->channel();
+
+            $bodyFit = PlatformFit::checkBody($channel, $this->bodyFor($post, $channel));
+            if (!$bodyFit['fits']) {
+                return trim(implode(' ', $bodyFit['reasons']) . ' ' . (string) $bodyFit['remedy']);
+            }
+
+            return $this->mediaProblem($channel, $media);
+        } catch (Throwable $e) {
+            return $e->getMessage();
+        }
     }
 
     /**

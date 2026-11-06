@@ -216,6 +216,38 @@ it('does not publish a target that is still publishing under its own key', funct
     expect($posts)->toHaveCount(1);
 });
 
+it('fails a target whose channel the plugin has no rules for, and publishes the others', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('create-post'), 'status' => 201],
+    ]);
+
+    $publisher = postPublisher([], $recorder);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $bluesky = zernioAccount($principalId, 'bluesky', 'id_002');
+    // A network the aggregator reports and the plugin has no rules for.
+    $snapchat = zernioAccount($principalId, 'snapchat', 'id_005');
+
+    $post = aPostTo($principalId, [$bluesky, $snapchat]);
+
+    $post = $publisher->publish((int) $post->id, $principalId);
+
+    $targets = $post->targets()->orderBy('id')->get();
+
+    // The one without rules fails on its own, and the other still goes out.
+    expect($targets[0]->status)->toBe(SocialPostTarget::STATUS_PUBLISHED)
+        ->and($targets[1]->status)->toBe(SocialPostTarget::STATUS_FAILED)
+        ->and($targets[1]->error)->toContain('zernio:snapchat');
+
+    $posts = array_values(array_filter(
+        zernioRequests($recorder),
+        static fn(array $request): bool => str_ends_with($request['url'], '/posts'),
+    ));
+
+    expect($posts)->toHaveCount(1);
+});
+
 it('writes partial on the post and failed on the network that was refused', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('create-post-partial'), 'status' => 207],
