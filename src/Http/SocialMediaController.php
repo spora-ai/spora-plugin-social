@@ -8,6 +8,7 @@ use Spora\Auth\AuthService;
 use Spora\Models\MediaAsset;
 use Spora\Models\MediaDerivative;
 use Spora\Plugins\Social\Exception\SocialException;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\PlatformFit;
@@ -83,33 +84,33 @@ final class SocialMediaController extends AbstractSocialController
 
             $asset = $this->media->findAsset($this->assetId($body), $principalId);
 
-            $platforms = [];
+            $channels = [];
             foreach (is_array($body['platforms'] ?? null) ? $body['platforms'] : [] as $name) {
                 $platform = is_string($name) ? SocialPlatform::tryFromName($name) : null;
                 if ($platform !== null) {
-                    $platforms[] = $platform;
+                    $channels[] = SocialChannel::direct($platform->value);
                 }
             }
 
-            if ($platforms === []) {
-                $platforms = SocialPlatform::cases();
+            if ($channels === []) {
+                $channels = PlatformFit::channels();
             }
 
             $perPlatform = [];
             $fits = true;
 
-            foreach ($platforms as $platform) {
+            foreach ($channels as $channel) {
                 // The media as the platform receives it: the backend
                 // converts a PNG for Instagram before it publishes, so
                 // judging the original would warn about a post that goes
                 // out.
-                $prepared = $this->media->prepareForFit($asset, $platform);
+                $prepared = $this->media->prepareForFit($asset, $channel);
 
-                $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+                $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
                 $fits = $fits && $fit['fits'];
 
                 $perPlatform[] = [
-                    'platform'  => $platform->value,
+                    'platform'  => $channel->network,
                     'fits'      => $fit['fits'],
                     'reasons'   => $fit['reasons'],
                     'remedy'    => $fit['remedy'],
@@ -137,7 +138,7 @@ final class SocialMediaController extends AbstractSocialController
                 ?? SocialPlatform::Instagram;
 
             $asset = $this->media->findAsset($this->assetId($body), $principalId);
-            $prepared = $this->media->prepare($asset, $platform);
+            $prepared = $this->media->prepare($asset, SocialChannel::direct($platform->value));
 
             return $this->ok([
                 'media_asset_id' => $prepared->mediaAssetId,

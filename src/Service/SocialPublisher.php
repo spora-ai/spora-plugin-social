@@ -261,20 +261,22 @@ final class SocialPublisher
 
         try {
             $account = $this->connections->findAccount((int) $target->account_id, (int) $post->principal_id);
-            $platform = SocialPlatform::tryFromName((string) $target->platform);
+            $channel = $target->channel();
+
+            $platform = SocialPlatform::tryFromName($channel->network);
 
             if ($platform === null) {
                 throw SocialException::validation('This target has an unknown platform.');
             }
 
-            $body = $this->bodyFor($post, $target->channel());
+            $body = $this->bodyFor($post, $channel);
 
-            // The text is judged against the platform it is going to, with
-            // that platform's own body: one post aimed at Instagram and
+            // The text is judged against the channel it is going to, with
+            // that channel's own body: one post aimed at Instagram and
             // Facebook carries two bodies, and each has its own limit. The
             // hashtags are part of the text that goes out, so they are
             // counted against the limit as well.
-            $bodyFit = PlatformFit::checkBody($platform, $body);
+            $bodyFit = PlatformFit::checkBody($channel, $body);
             if (!$bodyFit['fits']) {
                 throw SocialException::validation(trim(
                     implode(' ', $bodyFit['reasons']) . ' ' . (string) $bodyFit['remedy'],
@@ -286,7 +288,7 @@ final class SocialPublisher
                 kind: SocialAccountKind::from((string) $account->kind),
                 accessToken: $this->connections->tokenFor($account),
                 body: $body,
-                media: $this->prepareMedia($post, $platform),
+                media: $this->prepareMedia($post, $channel),
                 // The container is written down as soon as the platform has
                 // one, because the target is in `publishing` until the
                 // publish is done — and a publish that dies here leaves a
@@ -381,19 +383,19 @@ final class SocialPublisher
     }
 
     /**
-     * The attachment the platform will receive, checked against that
-     * platform's rules.
+     * The attachment the channel will receive, checked against that
+     * channel's rules.
      *
      * The check runs on the prepared media, not on the original: for
      * Instagram the prepared media is the JPEG derivative, which is what
      * the platform will actually see.
      */
-    private function prepareMedia(SocialPost $post, SocialPlatform $platform): ?PublishMedia
+    private function prepareMedia(SocialPost $post, SocialChannel $channel): ?PublishMedia
     {
         $attachment = $post->media()->orderBy('position')->first();
 
         if ($attachment === null) {
-            $rule = PlatformFit::rule($platform);
+            $rule = PlatformFit::rule($channel);
 
             if ($rule['media_required']) {
                 throw SocialException::validation(
@@ -414,9 +416,9 @@ final class SocialPublisher
         }
 
         $asset = $this->media->findAsset((string) $attachment->media_asset_id, (int) $post->principal_id);
-        $prepared = $this->media->prepare($asset, $platform);
+        $prepared = $this->media->prepare($asset, $channel);
 
-        $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+        $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
         if (!$fit['fits']) {
             throw SocialException::validation(trim(
                 implode(' ', $fit['reasons']) . ' ' . (string) $fit['remedy'],

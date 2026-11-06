@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\PlatformFit;
 use Spora\Plugins\Social\Tools\SocialPostTool;
 
@@ -26,8 +25,8 @@ it('quotes the character limits the backend enforces', function () {
         'the skill'                        => socialSkill()['body'],
     ];
 
-    foreach (SocialPlatform::cases() as $platform) {
-        $limit = number_format(PlatformFit::characterLimit($platform));
+    foreach (PlatformFit::channels() as $channel) {
+        $limit = number_format(PlatformFit::characterLimit($channel));
 
         foreach ($readers as $prose) {
             expect($prose)->toContain($limit);
@@ -48,11 +47,11 @@ it('quotes the characters a platform shows before it hides the rest', function (
     $rulesOf = static function (string $prose): array {
         $starts = [];
 
-        foreach (SocialPlatform::cases() as $platform) {
-            $position = strpos($prose, number_format(PlatformFit::characterLimit($platform)));
+        foreach (PlatformFit::channels() as $channel) {
+            $position = strpos($prose, number_format(PlatformFit::characterLimit($channel)));
 
             if ($position !== false) {
-                $starts[$platform->value] = $position;
+                $starts[$channel->network] = $position;
             }
         }
 
@@ -72,12 +71,12 @@ it('quotes the characters a platform shows before it hides the rest', function (
     foreach ($readers as $prose) {
         $blocks = $rulesOf($prose);
 
-        foreach (SocialPlatform::cases() as $platform) {
-            $visible = (string) PlatformFit::rule($platform)['visible_chars'];
+        foreach (PlatformFit::channels() as $channel) {
+            $visible = (string) PlatformFit::rule($channel)['visible_chars'];
 
             // The count has to stand on its own, or the cap of one
             // platform passes for the fold of another.
-            expect($blocks[$platform->value] ?? '')->toMatch('/(?<![\d,])' . $visible . '(?![\d,])/');
+            expect($blocks[$channel->network] ?? '')->toMatch('/(?<![\d,])' . $visible . '(?![\d,])/');
         }
     }
 });

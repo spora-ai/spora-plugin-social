@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Service;
 
 use Spora\Models\MediaAsset;
 use Spora\Plugins\Social\Exception\SocialException;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Services\MediaArchive\MediaArchiveService;
 use Spora\Services\MediaArchive\MediaAssetReader;
@@ -56,9 +57,9 @@ final class MediaPipeline
         return $asset;
     }
 
-    public function prepare(MediaAsset $asset, SocialPlatform $platform): PreparedMedia
+    public function prepare(MediaAsset $asset, SocialChannel $channel): PreparedMedia
     {
-        if ($platform === SocialPlatform::Instagram) {
+        if ($this->isInstagram($channel)) {
             $source = $this->instagramSource($asset);
 
             return new PreparedMedia(
@@ -90,9 +91,9 @@ final class MediaPipeline
      * would receive, and the fit check says so. {@see prepare()} asks
      * for the conversion itself and refuses instead.
      */
-    public function prepareForFit(MediaAsset $asset, SocialPlatform $platform): PreparedMedia
+    public function prepareForFit(MediaAsset $asset, SocialChannel $channel): PreparedMedia
     {
-        if ($platform === SocialPlatform::Instagram) {
+        if ($this->isInstagram($channel)) {
             try {
                 $source = $this->instagramSource($asset);
             } catch (Throwable) {
@@ -114,6 +115,17 @@ final class MediaPipeline
             sizeBytes: (int) ($asset->byte_size ?? 0),
             filename: (string) ($asset->filename ?? 'media'),
         );
+    }
+
+    /**
+     * Whether the channel is the one that fetches the media itself.
+     *
+     * Instagram is the native case: it rejects a PNG and fetches the
+     * file from a URL, so the pipeline converts one and mints that URL.
+     */
+    private function isInstagram(SocialChannel $channel): bool
+    {
+        return $channel->isDirect() && $channel->network === SocialPlatform::Instagram->value;
     }
 
     /**

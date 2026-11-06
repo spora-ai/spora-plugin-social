@@ -9,7 +9,6 @@ use Spora\Plugins\Social\Http\SocialCalendarController;
 use Spora\Plugins\Social\Http\SocialConnectionController;
 use Spora\Plugins\Social\Http\SocialMediaController;
 use Spora\Plugins\Social\Http\SocialPostController;
-use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\SocialStateCodec;
 use Spora\Plugins\Social\Service\PlatformFit;
@@ -420,19 +419,19 @@ it('carries the platform rules the frontend reads', function () {
 
     $rules = decode($response)['data']['rules'];
 
-    expect($rules)->toHaveKeys(['linkedin', 'facebook', 'instagram']);
+    expect($rules)->toHaveKeys(['direct:linkedin', 'direct:facebook', 'direct:instagram']);
 
-    foreach (SocialPlatform::cases() as $platform) {
-        $rule = PlatformFit::rule($platform);
+    foreach (PlatformFit::channels() as $channel) {
+        $rule = PlatformFit::rule($channel);
 
-        expect($rules[$platform->value]['media_required'])->toBe($rule['media_required'])
-            ->and($rules[$platform->value]['media_count'])->toBe($rule['media_count'])
-            ->and($rules[$platform->value]['fetches_media'])->toBe($rule['fetches_media'])
-            ->and($rules[$platform->value]['mime_types'])->toBe($rule['mime_types'])
-            ->and($rules[$platform->value]['max_bytes'])->toBe($rule['max_bytes'])
-            ->and($rules[$platform->value]['max_text'])->toBe($rule['max_characters'])
-            ->and($rules[$platform->value]['media_note'])->toContain($rule['media'])
-            ->and($rules[$platform->value])->toHaveKeys([
+        expect($rules[$channel->key()]['media_required'])->toBe($rule['media_required'])
+            ->and($rules[$channel->key()]['media_count'])->toBe($rule['media_count'])
+            ->and($rules[$channel->key()]['fetches_media'])->toBe($rule['fetches_media'])
+            ->and($rules[$channel->key()]['mime_types'])->toBe($rule['mime_types'])
+            ->and($rules[$channel->key()]['max_bytes'])->toBe($rule['max_bytes'])
+            ->and($rules[$channel->key()]['max_text'])->toBe($rule['max_characters'])
+            ->and($rules[$channel->key()]['media_note'])->toContain($rule['media'])
+            ->and($rules[$channel->key()])->toHaveKeys([
                 'media_required',
                 'media_count',
                 'fetches_media',

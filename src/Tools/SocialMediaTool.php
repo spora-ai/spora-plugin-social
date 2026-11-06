@@ -6,6 +6,7 @@ namespace Spora\Plugins\Social\Tools;
 
 use Spora\Models\MediaAsset;
 use Spora\Plugins\Social\Http\SocialPostResource;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\PlatformFit;
@@ -162,16 +163,11 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $platforms = $this->platformList($arguments['platforms'] ?? null, SocialPlatform::values());
+        $channels = $this->channels($arguments['platforms'] ?? null);
         $perPlatform = [];
 
-        foreach ($platforms as $name) {
-            $platform = SocialPlatform::tryFromName($name);
-            if ($platform === null) {
-                continue;
-            }
-
-            $perPlatform[] = $this->fitOf($platform, $asset);
+        foreach ($channels as $channel) {
+            $perPlatform[] = $this->fitOf($channel, $asset);
         }
 
         $fits = true;
@@ -188,6 +184,30 @@ final class SocialMediaTool extends AbstractSocialTool
     }
 
     /**
+     * The channels to check against.
+     *
+     * The names the caller gives are the networks' names, and a network
+     * is reached through the plugin's own route unless the caller says
+     * otherwise.
+     *
+     * @return list<SocialChannel>
+     */
+    private function channels(mixed $raw): array
+    {
+        $channels = [];
+
+        foreach ($this->platformList($raw) as $name) {
+            $platform = SocialPlatform::tryFromName($name);
+
+            if ($platform !== null) {
+                $channels[] = SocialChannel::direct($platform->value);
+            }
+        }
+
+        return $channels !== [] ? $channels : PlatformFit::channels();
+    }
+
+    /**
      * The fit as the publish will reach it.
      *
      * The publish judges the prepared media, not the original: Instagram
@@ -196,11 +216,11 @@ final class SocialMediaTool extends AbstractSocialTool
      *
      * @return array<string, mixed>
      */
-    private function fitOf(SocialPlatform $platform, MediaAsset $asset): array
+    private function fitOf(SocialChannel $channel, MediaAsset $asset): array
     {
-        $prepared = $this->media->prepareForFit($asset, $platform);
+        $prepared = $this->media->prepareForFit($asset, $channel);
 
-        $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+        $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
 
         $convertedFrom = null;
         if ($prepared->mimeType !== (string) $asset->mime_type) {
@@ -208,7 +228,7 @@ final class SocialMediaTool extends AbstractSocialTool
         }
 
         return [
-            'platform'       => $platform->value,
+            'platform'       => $channel->network,
             'fits'           => $fit['fits'],
             'reasons'        => $fit['reasons'],
             'remedy'         => $fit['remedy'],
@@ -229,7 +249,7 @@ final class SocialMediaTool extends AbstractSocialTool
     {
         $asset = $this->media->findAsset($this->assetId($arguments), $principalId);
 
-        $prepared = $this->media->prepare($asset, SocialPlatform::Instagram);
+        $prepared = $this->media->prepare($asset, SocialChannel::direct(SocialPlatform::Instagram->value));
 
         return ToolResult::ok(
             SocialToolPresenter::prepared((string) $asset->id, $prepared),

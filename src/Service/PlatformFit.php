@@ -4,18 +4,24 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Service;
 
+use Spora\Plugins\Social\Exception\SocialException;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 
 /**
- * What each platform accepts: the media rules and the character limit.
+ * What each channel accepts: the media rules and the character limit.
  *
- * A rule also carries the characters the network shows before it hides the
- * rest behind a "see more": a post that reads well in full can still say
+ * A rule also carries the characters the network shows before it hides
+ * the rest behind a "see more": a post that reads well in full can still say
  * nothing in the first line, and that is what a reader sees.
  *
  * One table, because the rules are read in three places — the composer
  * badge on an attachment, the publish-time guard, and the prose the agent
  * reads — and three copies of a size cap would drift.
+ *
+ * The table is keyed by the channel's key, not by the network: the same
+ * network reached through two routes is two accounts, and the aggregator's
+ * limits are the aggregator's own.
  *
  * The verdict names the remedy, not just the failure: an operator can act
  * on "Convert to JPEG" and not on a platform's error text.
@@ -80,7 +86,7 @@ final class PlatformFit
     public static function rules(): array
     {
         return [
-            SocialPlatform::LinkedIn->value => [
+            'direct:linkedin' => [
                 'label'          => 'LinkedIn',
                 'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
@@ -91,7 +97,7 @@ final class PlatformFit
                 'visible_chars'  => 200,
                 'media'          => 'JPEG, PNG or GIF, up to 8 MB.',
             ],
-            SocialPlatform::Facebook->value => [
+            'direct:facebook' => [
                 'label'          => 'Facebook',
                 'media_required' => false,
                 'media_count'    => self::MEDIA_PER_POST,
@@ -102,7 +108,7 @@ final class PlatformFit
                 'visible_chars'  => 125,
                 'media'          => 'JPEG, PNG, GIF, BMP or MP4, up to 1 GB.',
             ],
-            SocialPlatform::Instagram->value => [
+            'direct:instagram' => [
                 'label'          => 'Instagram',
                 'media_required' => true,
                 'media_count'    => self::MEDIA_PER_POST,
@@ -117,6 +123,31 @@ final class PlatformFit
     }
 
     /**
+     * The channels the plugin has rules for.
+     *
+     * A channel without a row is one the plugin does not offer, and the
+     * composer says so rather than guessing.
+     *
+     * @return list<SocialChannel>
+     */
+    public static function channels(): array
+    {
+        $channels = [];
+
+        foreach (array_keys(self::rules()) as $key) {
+            $channel = SocialChannel::fromKey($key);
+
+            if ($channel !== null) {
+                $channels[] = $channel;
+            }
+        }
+
+        return $channels;
+    }
+
+    /**
+     * The rule of one channel.
+     *
      * @return array{
      *     label: string,
      *     media_required: bool,
@@ -129,9 +160,15 @@ final class PlatformFit
      *     media: string
      * }
      */
-    public static function rule(SocialPlatform $platform): array
+    public static function rule(SocialChannel $channel): array
     {
-        return self::rules()[$platform->value];
+        $rule = self::rules()[$channel->key()] ?? null;
+
+        if ($rule === null) {
+            throw SocialException::validation('There are no rules for the channel ' . $channel->key() . '.');
+        }
+
+        return $rule;
     }
 
     /**
@@ -164,8 +201,10 @@ final class PlatformFit
     {
         $rules = [];
 
-        foreach (self::rules() as $platform => $rule) {
-            $rules[$platform] = [
+        foreach (self::channels() as $channel) {
+            $rule = self::rule($channel);
+
+            $rules[$channel->key()] = [
                 'media_required' => $rule['media_required'],
                 'media_count'    => $rule['media_count'],
                 'fetches_media'  => $rule['fetches_media'],
@@ -174,8 +213,8 @@ final class PlatformFit
                 'max_text'       => $rule['max_characters'],
                 'visible_chars'  => $rule['visible_chars'],
                 'media_note'     => $rule['label'] . ' accepts ' . $rule['media'],
-                'media_remedy'   => self::remedyForMime(SocialPlatform::from($platform), self::MIME_PNG),
-                'video_remedy'   => self::remedyForMime(SocialPlatform::from($platform), self::MIME_MP4),
+                'media_remedy'   => self::remedyForMime($channel, self::MIME_PNG),
+                'video_remedy'   => self::remedyForMime($channel, self::MIME_MP4),
                 'size_remedy'    => self::REMEDY_COMPRESS,
             ];
         }
@@ -184,11 +223,11 @@ final class PlatformFit
     }
 
     /**
-     * How many characters the platform accepts in a post body.
+     * How many characters the channel accepts in a post body.
      */
-    public static function characterLimit(SocialPlatform $platform): int
+    public static function characterLimit(SocialChannel $channel): int
     {
-        return (int) self::rule($platform)['max_characters'];
+        return (int) self::rule($channel)['max_characters'];
     }
 
     /**
@@ -217,13 +256,13 @@ final class PlatformFit
     }
 
     /**
-     * Whether the attachment fits the platform.
+     * Whether the attachment fits the channel.
      *
      * @return array{fits: bool, reasons: list<string>, remedy: ?string}
      */
-    public static function check(SocialPlatform $platform, ?string $mimeType, ?int $sizeBytes): array
+    public static function check(SocialChannel $channel, ?string $mimeType, ?int $sizeBytes): array
     {
-        $rule = self::rule($platform);
+        $rule = self::rule($channel);
         $reasons = [];
         $remedy = null;
 
@@ -240,7 +279,7 @@ final class PlatformFit
 
         if (!in_array($mime, $rule['mime_types'], true)) {
             $reasons[] = $rule['label'] . ' does not accept ' . $mime . '.';
-            $remedy = self::remedyForMime($platform, $mime);
+            $remedy = self::remedyForMime($channel, $mime);
         }
 
         if ($sizeBytes !== null && $sizeBytes > $rule['max_bytes']) {
@@ -257,16 +296,16 @@ final class PlatformFit
     }
 
     /**
-     * Whether the body fits the platform's character limit.
+     * Whether the body fits the channel's character limit.
      *
      * Counted in characters, not bytes: the limits are the networks' own
      * character counts.
      *
      * @return array{fits: bool, reasons: list<string>, remedy: ?string}
      */
-    public static function checkBody(SocialPlatform $platform, string $body): array
+    public static function checkBody(SocialChannel $channel, string $body): array
     {
-        $rule = self::rule($platform);
+        $rule = self::rule($channel);
         $limit = (int) $rule['max_characters'];
         $length = mb_strlen($body);
 
@@ -288,20 +327,20 @@ final class PlatformFit
     }
 
     /**
-     * The remedy for a file type the platform rejects.
+     * The remedy for a file type the channel rejects.
      *
      * Instagram is the case that matters: it takes no PNG at all, and the
      * conversion is one derivative away.
      */
-    private static function remedyForMime(SocialPlatform $platform, string $mime): string
+    private static function remedyForMime(SocialChannel $channel, string $mime): string
     {
-        if ($platform === SocialPlatform::Instagram) {
+        if ($channel->network === SocialPlatform::Instagram->value) {
             return str_starts_with($mime, 'video/')
                 ? self::REMEDY_CONVERT_VIDEO
                 : self::REMEDY_CONVERT_JPEG;
         }
 
-        if ($platform === SocialPlatform::LinkedIn && str_starts_with($mime, 'video/')) {
+        if ($channel->network === SocialPlatform::LinkedIn->value && str_starts_with($mime, 'video/')) {
             return self::REMEDY_CONVERT_VIDEO;
         }
 

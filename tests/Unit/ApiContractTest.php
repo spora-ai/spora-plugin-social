@@ -98,9 +98,9 @@ it('carries the plugin rules the frontend used to keep a copy of', function () {
 
     // Instagram fetches the media from the internet; the other two take
     // the bytes.
-    expect($rules['instagram']['fetches_media'])->toBeTrue()
-        ->and($rules['linkedin']['fetches_media'])->toBeFalse()
-        ->and($rules['facebook']['fetches_media'])->toBeFalse();
+    expect($rules['direct:instagram']['fetches_media'])->toBeTrue()
+        ->and($rules['direct:linkedin']['fetches_media'])->toBeFalse()
+        ->and($rules['direct:facebook']['fetches_media'])->toBeFalse();
 });
 
 it('sends the linkedin version header on every rest request', function () {
