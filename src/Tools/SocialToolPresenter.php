@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Service\PreparedMedia;
 
 /**
@@ -273,7 +274,13 @@ final class SocialToolPresenter
         return sprintf(
             'account %d (%s) — %s',
             (int) ($account['account_id'] ?? $account['id'] ?? 0),
-            (string) ($account['platform'] ?? ''),
+            // The channel and not the network: the same network on two
+            // routes is two accounts, and two lines that both say
+            // "linkedin" say nothing about which is which.
+            SocialChannel::keyOf(
+                (string) ($account['via'] ?? ''),
+                (string) ($account['platform'] ?? ''),
+            ),
             $label,
         );
     }
@@ -348,7 +355,13 @@ final class SocialToolPresenter
     private static function targetOutcome(array $target): string
     {
         $parts = [
-            (string) ($target['platform'] ?? ''),
+            // The channel and not the network: the same network on two
+            // routes is two accounts, and two lines that both say
+            // "linkedin" tell the agent nothing about which went out.
+            SocialChannel::keyOf(
+                (string) ($target['via'] ?? ''),
+                (string) ($target['platform'] ?? ''),
+            ),
             'account ' . (int) ($target['account_id'] ?? 0),
             (string) ($target['status'] ?? ''),
         ];

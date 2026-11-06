@@ -183,7 +183,25 @@ it('lists the account ids a post can go to', function () {
     // the content — not the data — so it has to be in the answer.
     expect($result->success)->toBeTrue()
         ->and($result->content)->toContain('connection ' . $connection->id)
-        ->and($result->content)->toContain('account ' . $account->id);
+        ->and($result->content)->toContain('account ' . $account->id)
+        // The channel and not only the network: the same network on two
+        // routes is two accounts.
+        ->and($result->content)->toContain('direct:linkedin');
+});
+
+it('tells two accounts of one network on two routes apart', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'linkedin', 'zernio', 'urn:li:organization:2');
+
+    $tool = connectionsTool(connectionService());
+
+    $result = $tool->execute(['action' => 'list'], 1, null, principalContext($principalId));
+
+    expect($result->success)->toBeTrue()
+        ->and($result->content)->toContain('direct:linkedin')
+        ->and($result->content)->toContain('zernio:linkedin');
 });
 
 it('says that no account is connected', function () {

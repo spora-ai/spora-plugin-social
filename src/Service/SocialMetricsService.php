@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Spora\Plugins\Social\Aggregator\AggregatorMetricsReader;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostMetric;
@@ -96,6 +97,11 @@ final class SocialMetricsService
     /**
      * The summary the analytics view renders.
      *
+     * The rows are per **channel**, not per network: the same network
+     * reached through two routes is two accounts with two sets of numbers,
+     * and merging them into one row leaves the reader unable to tell
+     * which of the two produced them.
+     *
      * @return array{totals: array<string, int|null>, by_network: list<array<string, mixed>>, series: list<array<string, mixed>>, top_posts: list<array<string, mixed>>, notes: list<string>}
      */
     public function summary(int $principalId, int $days = 30): array
@@ -109,10 +115,15 @@ final class SocialMetricsService
         $series = [];
 
         foreach ($rows as $row) {
-            $platform = (string) $row->platform;
+            $channel = SocialChannel::tryFrom((string) $row->via, (string) $row->platform)
+                ?? SocialChannel::direct((string) $row->platform);
 
-            $network = $byNetwork[$platform] ?? [
-                'platform'    => $platform,
+            $key = $channel->key();
+
+            $network = $byNetwork[$key] ?? [
+                'platform'    => $channel->network,
+                'channel'     => $key,
+                'via'         => $channel->via,
                 'reach'       => null,
                 'impressions' => null,
                 'likes'       => null,
@@ -134,12 +145,12 @@ final class SocialMetricsService
             }
 
             $network['posts'] = (int) $network['posts'] + 1;
-            $byNetwork[$platform] = $network;
+            $byNetwork[$key] = $network;
 
             $date = (string) $row->metric_date;
             $series[$date] ??= ['date' => $date];
             if ($row->reach !== null) {
-                $series[$date][$platform] = (int) ($series[$date][$platform] ?? 0) + (int) $row->reach;
+                $series[$date][$key] = (int) ($series[$date][$key] ?? 0) + (int) $row->reach;
             }
         }
 
@@ -204,6 +215,7 @@ final class SocialMetricsService
                 'target_id'    => (int) $target->id,
                 'account_id'   => (int) $target->account_id,
                 'platform'     => (string) $target->platform,
+                'via'          => (string) $target->via,
                 'status'       => (string) $target->status,
                 'external_id'  => $target->external_id,
                 'metrics'      => $metrics === null ? null : $this->metricsOf($metrics),
@@ -263,6 +275,7 @@ final class SocialMetricsService
                 'social_post_metrics.saves',
                 'social_post_metrics.clicks',
                 'social_post_targets.platform',
+                'social_post_targets.via',
             ])
             ->get()
             ->all();
@@ -282,6 +295,7 @@ final class SocialMetricsService
                 'social_posts.id as post_id',
                 'social_posts.title as title',
                 'social_post_targets.platform as platform',
+                'social_post_targets.via as via',
                 'social_post_metrics.reach as reach',
                 'social_post_metrics.impressions as impressions',
                 'social_post_metrics.likes as likes',
@@ -295,6 +309,7 @@ final class SocialMetricsService
                 'post_id'      => (int) $row->post_id,
                 'title'        => $row->title,
                 'platform'     => (string) $row->platform,
+                'via'          => (string) $row->via,
                 'reach'        => $row->reach === null ? null : (int) $row->reach,
                 'impressions'  => $row->impressions === null ? null : (int) $row->impressions,
                 'likes'        => $row->likes === null ? null : (int) $row->likes,

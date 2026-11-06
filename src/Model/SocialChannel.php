@@ -92,6 +92,18 @@ final readonly class SocialChannel
         return $this->via === self::DIRECT;
     }
 
+    /**
+     * The key of a channel named by its two parts.
+     *
+     * A name that carries no route is one the plugin's own route wrote —
+     * a row written before the route column existed — so it reads as the
+     * plugin's own route to the network.
+     */
+    public static function keyOf(string $via, string $network): string
+    {
+        return (self::tryFrom($via, $network) ?? self::direct($network))->key();
+    }
+
     private static function normalise(string $value): string
     {
         return strtolower(trim($value));

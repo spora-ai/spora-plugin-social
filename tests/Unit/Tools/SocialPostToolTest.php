@@ -85,8 +85,52 @@ it('publishes a post and reports the per-account outcome', function () {
         ->and($result->data['post']['status'])->toBe('published')
         ->and($result->data['post']['targets'][0]['external_id'])->toBe('urn:li:share:9')
         // Which network published and which one refused is the answer
-        // the agent needs — and the model reads the content.
-        ->and($result->content)->toContain('linkedin — account ' . $account->id . ' — published');
+        // the agent needs — and the model reads the content. The channel
+        // is named and not only the network, because the same network on
+        // two routes is two accounts.
+        ->and($result->content)->toContain('direct:linkedin — account ' . $account->id . ' — published');
+});
+
+it('filters the posts by a network without hiding a route, and names the route of each target', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    // One network, two routes: an operator who filters by "linkedin"
+    // wants every LinkedIn target, on either route. The two accounts are
+    // not the same account, and two lines that both said "linkedin"
+    // would say nothing about which of the two went out.
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'linkedin', 'zernio', 'urn:li:organization:2');
+
+    $tool = postTool();
+
+    $created = $tool->execute([
+        'action'      => 'create',
+        'body'        => SocialFixtures::POST_BODY,
+        'account_ids' => [$direct->id, $aggregated->id],
+    ], 1, null, principalContext($principalId));
+
+    $postId = $created->data['post']['id'];
+
+    $listed = $tool->execute(
+        ['action' => 'list', 'platform' => 'linkedin'],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($listed->success)->toBeTrue()
+        ->and($listed->data['items'])->toHaveCount(1);
+
+    $inspected = $tool->execute(
+        ['action' => 'inspect', 'post_id' => $postId],
+        1,
+        null,
+        principalContext($principalId),
+    );
+
+    expect($inspected->success)->toBeTrue()
+        ->and($inspected->content)->toContain('direct:linkedin — account ' . $direct->id)
+        ->and($inspected->content)->toContain('zernio:linkedin — account ' . $aggregated->id);
 });
 
 it('takes a published post back down', function () {

@@ -671,6 +671,41 @@ function publishedTarget(int $principalId, string $platform, string $kind, strin
 }
 
 /**
+ * A connected account on a given route.
+ *
+ * The route decides where the account comes from: the plugin's own route
+ * needs a native account, and an aggregator's route needs one of the
+ * aggregator's. Two accounts on one network on two routes are two
+ * accounts, and each needs its own external id.
+ */
+function accountOnRoute(
+    int $principalId,
+    string $network,
+    string $via,
+    string $externalId,
+): Spora\Plugins\Social\Model\SocialAccount {
+    if ($via === 'direct') {
+        $connection = createSocialConnection($principalId, $network === 'linkedin' ? 'linkedin' : 'meta', [
+            'access_token' => $network . '-token',
+            'expires_at'   => new DateTimeImmutable('+50 days'),
+        ]);
+
+        return createSocialAccount($principalId, $network, 'organization', [
+            'connection'  => $connection,
+            'external_id' => $externalId,
+        ]);
+    }
+
+    $connection = createSocialConnection($principalId, $via, ['access_token' => 'the-key']);
+
+    return createSocialAccount($principalId, $network, 'aggregator', [
+        'connection'  => $connection,
+        'external_id' => $externalId,
+        'via'         => $via,
+    ]);
+}
+
+/**
  * The plugin's media pipeline, wired to core's real services.
  */
 function mediaPipeline(): MediaPipeline

@@ -224,7 +224,8 @@ operator approves the copy and the time once — not again at the moment.
   days and the platforms restate them. Nothing is final.
 - The networks stay apart. A combined figure is a rough one: the three
   platforms count reach differently. `totals` is that rough figure;
-  `by_network` is the honest one.
+  `by_network` is the honest one. A row is a **channel** — the network and
+  the route to it — so the same network on two routes is two rows.
 - **An aggregator's numbers are an add-on on its plan.** Without it the
   numbers stay empty and the note says why. And one aggregate for the whole
   aggregator post covers every network in it, not the one account.
