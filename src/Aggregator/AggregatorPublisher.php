@@ -471,13 +471,9 @@ final class AggregatorPublisher
      */
     private function duplicateDetails(ZernioResponse $response): ?array
     {
-        if ($response->status !== 409) {
-            return null;
-        }
-
         // A conflict on the key is not a duplicate: nothing is published
         // yet, so there is no account to fail and no group to send again.
-        if ($this->isStillProcessing($response)) {
+        if ($response->status !== 409 || $this->isStillProcessing($response)) {
             return null;
         }
 
