@@ -49,6 +49,19 @@ final class ZernioRecorder
     }
 
     /**
+     * The requests that went to a path.
+     *
+     * @return list<array{method: string, url: string, options: array<string, mixed>}>
+     */
+    public function callsTo(string $path): array
+    {
+        return array_values(array_filter(
+            $this->requests,
+            static fn(array $request): bool => str_contains($request['url'], $path),
+        ));
+    }
+
+    /**
      * The headers the last request carried, as a map.
      *
      * @return array<string, string>

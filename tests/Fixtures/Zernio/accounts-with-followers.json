@@ -1,0 +1,47 @@
+{
+    "accounts": [
+        {
+            "_id": "id_001",
+            "platform": "bluesky",
+            "profileId": "id_010",
+            "username": "name_001",
+            "displayName": "name_002",
+            "platformUserId": "name_003",
+            "profileUrl": "https://bsky.app/redacted",
+            "isActive": true,
+            "needsReconnection": false,
+            "enabled": true,
+            "followersCount": 1234,
+            "followersLastUpdated": "2026-11-01T00:00:00.000Z"
+        },
+        {
+            "_id": "id_002",
+            "platform": "twitter",
+            "profileId": "id_010",
+            "username": "name_004",
+            "displayName": "name_005",
+            "platformUserId": "name_006",
+            "profileUrl": "https://twitter.com/redacted",
+            "isActive": true,
+            "needsReconnection": false,
+            "enabled": true,
+            "followersCount": 5678,
+            "followersLastUpdated": "2026-11-01T00:00:00.000Z"
+        },
+        {
+            "_id": "id_003",
+            "platform": "facebook",
+            "profileId": "id_010",
+            "username": "name_007",
+            "displayName": "name_008",
+            "platformUserId": "name_009",
+            "profileUrl": "https://facebook.com/redacted",
+            "isActive": true,
+            "needsReconnection": false,
+            "enabled": true,
+            "followersCount": 9012,
+            "followersLastUpdated": "2026-11-01T00:00:00.000Z"
+        }
+    ],
+    "hasAnalyticsAccess": true
+}

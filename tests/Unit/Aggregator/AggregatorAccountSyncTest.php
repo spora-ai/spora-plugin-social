@@ -135,6 +135,87 @@ it('fetches the follower count and writes it down', function () {
     expect($account?->followers)->toBe(1234);
 });
 
+it('reads the follower count off the account object, and asks for none', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('accounts-with-followers')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $connection = zernioConnection($principalId);
+
+    $sync = accountSync($recorder);
+    $result = $sync->read($connection);
+    $sync->apply($connection, $result);
+
+    $account = SocialAccount::query()
+        ->where('principal_id', $principalId)
+        ->where('via', 'zernio')
+        ->where('platform', 'bluesky')
+        ->first();
+
+    expect($account?->followers)->toBe(1234);
+
+    // One call per account is a call per account, and the number was
+    // already in hand.
+    expect($recorder->callsTo('follower-stats'))->toBe([]);
+});
+
+it('asks for the follower count the account object does not carry', function () {
+    $recorder = new ZernioRecorder([
+        ['body' => zernioFixture('accounts')],
+        ['body' => zernioFixture('follower-stats')],
+        ['body' => zernioFixture('follower-stats')],
+        ['body' => zernioFixture('follower-stats')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $connection = zernioConnection($principalId);
+
+    $sync = accountSync($recorder);
+    $result = $sync->read($connection);
+    $sync->apply($connection, $result);
+
+    $calls = $recorder->callsTo('follower-stats');
+
+    // One call per account, and the parameter is the plural one: the
+    // endpoint takes a list of account ids.
+    expect($calls)->toHaveCount(3)
+        ->and($calls[0]['url'])->toBe('https://zernio.com/api/v1/accounts/follower-stats?accountIds=id_001');
+});
+
+it('asks only for the counts the account object does not carry', function () {
+    $accounts = json_decode(zernioFixture('accounts-with-followers'), true, 512, JSON_THROW_ON_ERROR);
+
+    // The account the object says nothing about.
+    unset($accounts['accounts'][1]['followersCount']);
+
+    $recorder = new ZernioRecorder([
+        ['body' => (string) json_encode($accounts)],
+        ['body' => zernioFixture('follower-stats')],
+    ]);
+
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+    $connection = zernioConnection($principalId);
+
+    $sync = accountSync($recorder);
+    $result = $sync->read($connection);
+    $sync->apply($connection, $result);
+
+    $calls = $recorder->callsTo('follower-stats');
+
+    expect($calls)->toHaveCount(1)
+        ->and($calls[0]['url'])->toBe('https://zernio.com/api/v1/accounts/follower-stats?accountIds=id_002');
+
+    // The count the object carried is the count the account keeps.
+    $bluesky = SocialAccount::query()
+        ->where('principal_id', $principalId)
+        ->where('via', 'zernio')
+        ->where('platform', 'bluesky')
+        ->first();
+
+    expect($bluesky?->followers)->toBe(1234);
+});
+
 it('leaves the follower count empty when the add-on is not there, and does not fail the sync', function () {
     $recorder = new ZernioRecorder([
         ['body' => zernioFixture('accounts')],

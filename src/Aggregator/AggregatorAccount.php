@@ -23,5 +23,14 @@ final readonly class AggregatorAccount
          * Null when it does not, and the network's own table decides then.
          */
         public ?string $kind = null,
+        /**
+         * The follower count the account object carries.
+         *
+         * Null when it does not carry one, and the count is then fetched.
+         * The aggregator puts it there only when the plan carries the
+         * analytics add-on, so a count on the object is also the answer
+         * to whether the plan has it.
+         */
+        public ?int $followers = null,
     ) {}
 }

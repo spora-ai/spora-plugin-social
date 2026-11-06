@@ -112,9 +112,14 @@ final class AggregatorAccountSync
     /**
      * The follower count of every account the aggregator reports.
      *
-     * The count needs the analytics add-on, so the call can answer
-     * `402`. That is not a failure of the sync: the accounts are still
-     * accounts, and the count stays empty with the reason on the account.
+     * **The account object carries the count when the plan has the
+     * analytics add-on**, and a number already in hand is not worth a
+     * call: one call per account is a call per account, and the count is
+     * only fetched for the accounts whose object does not carry one.
+     *
+     * The count needs the add-on, so the call can answer `402`. That is
+     * not a failure of the sync: the accounts are still accounts, and the
+     * count stays empty with the reason on the account.
      *
      * The call is made once per account, and the first `402` ends the
      * round: the add-on is a property of the plan, so every account
@@ -126,8 +131,25 @@ final class AggregatorAccountSync
     private function followerCounts(string $key, array $accounts): array
     {
         $counts = [];
+        $missing = [];
 
         foreach ($accounts as $account) {
+            if ($account->followers !== null) {
+                $counts[$account->externalId] = $account->followers;
+
+                continue;
+            }
+
+            $missing[] = $account;
+        }
+
+        if ($missing === []) {
+            // Every account carried its count, and the add-on is what
+            // puts it there: the plan has it.
+            return ['counts' => $counts, 'available' => true];
+        }
+
+        foreach ($missing as $account) {
             $response = $this->client->followerStats($key, ['accountIds' => $account->externalId]);
 
             if ($response->status === 402) {
@@ -188,6 +210,7 @@ final class AggregatorAccountSync
             displayName: $this->stringOrNull($entry['displayName'] ?? null),
             username: $this->stringOrNull($entry['username'] ?? null),
             kind: $this->reportedType($entry),
+            followers: $this->intOrNull($entry['followersCount'] ?? null),
         );
     }
 
@@ -298,5 +321,10 @@ final class AggregatorAccountSync
     private function stringOrNull(mixed $value): ?string
     {
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    private function intOrNull(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) $value : null;
     }
 }
