@@ -9,7 +9,7 @@ declare(strict_types=1);
  * There is no sandbox. Every shape this plugin has to parse — the account
  * object, the create-post response, the analytics response — has to come from
  * a real call, and the call has to be made with a real key by the operator.
- * This script makes that one call and writes down what came back.
+ * This script makes that call and writes down what came back.
  *
  * **The redacted files are the fixtures.** The plugin's tests never talk to
  * Zernio: they run against a mocked HTTP client, and the mock answers with
@@ -18,8 +18,10 @@ declare(strict_types=1);
  * nesting — while carrying nothing of the operator's.
  *
  * The redaction maps an id to `id_001`, a name to `name_001`, and a URL to
- * its host with the path redacted. The same input always maps to the same
- * output, so the fixtures are stable.
+ * its host with the path redacted. **One map for the whole run**, so the same
+ * account is the same placeholder in every file — a fixture that names an
+ * account one way in `accounts.json` and another way in `create-post.json`
+ * would not match.
  *
  * The raw responses are written next to the redacted ones and are **not** for
  * committing. `build/` is gitignored; delete that directory when you are done.
@@ -41,6 +43,35 @@ chdir($root);
 const DEFAULT_BASE_URL = 'https://zernio.com/api/v1';
 
 const PROBE_CONTENT = 'Spora probe post. Safe to delete.';
+
+/**
+ * The keys whose value is an id, whether or not it looks like one.
+ *
+ * A 24-character hexadecimal value is caught by its shape, but not every id
+ * has that shape: `platformUserId` is the account's id *on its own platform*
+ * — the operator's identity there — and it is a bare number on Instagram.
+ */
+const ID_KEYS = [
+    '_id', 'id', 'accountId', 'postId', 'profileId', 'userId', 'platformUserId',
+    'platformPostId', 'externalPostId', 'existingPostId', 'oauthAppId', 'videoId',
+    'parentId', 'connectedByUserId',
+];
+
+/**
+ * The keys whose value is a name.
+ */
+const NAME_KEYS = [
+    'displayName', 'username', 'name', 'accountUsername', 'display_name',
+    'firstName', 'lastName', 'fullName', 'teamName',
+];
+
+/**
+ * The keys whose whole value is dropped.
+ *
+ * `metadata` is a platform-specific blob whose fields vary by platform, so
+ * what is in it is not knowable from here — it is replaced whole.
+ */
+const DROPPED_KEYS = ['metadata', 'scopeAreas', 'platformSpecificData'];
 
 /**
  * The probe's own options, read once.
@@ -156,6 +187,14 @@ function pickAccount(array $accounts, string $accountId, string $network): ?arra
  * name, and a URL keeps its host. What the fixtures need is the *shape*, not
  * the value.
  *
+ * **One map for the whole run**, so the same account is the same placeholder
+ * in every file.
+ *
+ * The keys are the value with a null byte in front of it. A bare value as the
+ * key would be cast to an integer by PHP when the value is a number — and
+ * `platformUserId` is a number on Instagram — and an integer key cannot be
+ * looked up as a string.
+ *
  * @param list<array<string, mixed>> $sources
  * @return array<string, string>
  */
@@ -181,23 +220,28 @@ function redactionMap(array $sources): array
         if (str_contains($value, '://')) {
             // A URL keeps its host — it is public — and loses its path.
             $host = (string) (parse_url($value, PHP_URL_HOST) ?: 'example.test');
-            $map[$value] = 'https://' . $host . '/redacted';
+            $map["\0" . $value] = 'https://' . $host . '/redacted';
 
             return;
         }
 
         if (preg_match('/^[0-9a-f]{24}$/i', $value) === 1) {
             $idCounter++;
-            $map[$value] = sprintf('id_%03d', $idCounter);
+            $map["\0" . $value] = sprintf('id_%03d', $idCounter);
 
             return;
         }
 
-        $nameKeys = ['displayName', 'username', 'name', 'display_name', 'firstName', 'lastName', 'fullName'];
+        if (in_array($key, ID_KEYS, true)) {
+            $idCounter++;
+            $map["\0" . $value] = sprintf('id_%03d', $idCounter);
 
-        if (in_array($key, $nameKeys, true)) {
+            return;
+        }
+
+        if (in_array($key, NAME_KEYS, true)) {
             $nameCounter++;
-            $map[$value] = sprintf('name_%03d', $nameCounter);
+            $map["\0" . $value] = sprintf('name_%03d', $nameCounter);
         }
     };
 
@@ -209,20 +253,27 @@ function redactionMap(array $sources): array
 }
 
 /**
- * The same tree, with every identifying value replaced.
+ * The same tree, with every identifying value replaced and the keys whose
+ * whole value is dropped replaced whole.
  *
  * @param array<string, mixed> $source
  * @param array<string, string> $map
  * @return array<string, mixed>
  */
-function redact(array $source, array $map): array
+function redactDropped(array $source, array $map): array
 {
-    $walk = function (mixed $value) use (&$walk, $map): mixed {
+    $walk = function (mixed $value, string $key) use (&$walk, $map): mixed {
         if (is_array($value)) {
             $out = [];
 
-            foreach ($value as $key => $child) {
-                $out[$key] = $walk($child);
+            foreach ($value as $childKey => $child) {
+                if (is_string($childKey) && in_array($childKey, DROPPED_KEYS, true)) {
+                    $out[$childKey] = ['redacted' => true];
+
+                    continue;
+                }
+
+                $out[$childKey] = $walk($child, is_string($childKey) ? $childKey : $key);
             }
 
             return $out;
@@ -232,49 +283,25 @@ function redact(array $source, array $map): array
             return $value;
         }
 
-        if (isset($map[$value])) {
-            return $map[$value];
+        if (isset($map["\0" . $value])) {
+            return $map["\0" . $value];
         }
 
         // A URL that embeds an id or a name keeps its shape but loses them.
         foreach ($map as $from => $to) {
-            if (strlen($from) > 2 && str_contains($value, $from)) {
-                $value = str_replace($from, $to, $value);
+            $needle = substr($from, 1);
+
+            if (strlen($needle) > 2 && str_contains($value, $needle)) {
+                $value = str_replace($needle, $to, $value);
             }
         }
 
         return $value;
     };
 
-    return $walk($source);
-}
+    $redacted = $walk($source, '');
 
-/**
- * Write a fixture and its raw counterpart.
- *
- * @param array<string, mixed> $body
- * @param array<string, string> $map
- */
-function writeFixture(string $out, string $name, array $body, array $map): void
-{
-    $rawDir = $out . '/raw';
-    $redactedDir = $out . '/redacted';
-
-    foreach ([$rawDir, $redactedDir] as $dir) {
-        if (!is_dir($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
-            throw new RuntimeException('Could not create ' . $dir);
-        }
-    }
-
-    $encoded = json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-    file_put_contents($rawDir . '/' . $name . '.json', (string) $encoded . "\n");
-    file_put_contents($redactedDir . '/' . $name . '.json', (string) json_encode(
-        redact($body, $map),
-        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
-    ) . "\n");
-
-    echo '  wrote ' . $redactedDir . '/' . $name . ".json\n";
+    return is_array($redacted) ? $redacted : [];
 }
 
 $options = probeOptions($argv);
@@ -293,6 +320,9 @@ echo '  Output:   ' . $options['out'] . "\n";
 echo "\n";
 
 $client = HttpClient::create(['timeout' => 60]);
+
+/** @var array<string, array{status: int, body: array<string, mixed>}> $responses */
+$responses = [];
 
 // The accounts. Everything else is keyed off them.
 $accountsResponse = zernioCall(
@@ -315,6 +345,8 @@ if ($accountsResponse['status'] >= 400) {
     exit(1);
 }
 
+$responses['accounts'] = $accountsResponse;
+
 $accounts = array_values(array_filter(
     is_array($accountsResponse['body']['accounts'] ?? null) ? $accountsResponse['body']['accounts'] : [],
     'is_array',
@@ -334,20 +366,15 @@ if ($platforms !== []) {
 
 echo "\n";
 
-// What an account carries. The follower count is the open question: it may
-// ride on the object or have to be fetched.
+// What an account carries. The follower count is only there with the
+// analytics add-on, so its presence is worth knowing.
 $first = $accounts[0] ?? null;
 
 if ($first !== null) {
     echo '  An account carries: ' . implode(', ', array_keys($first)) . "\n";
-    echo '  …and a follower count: ' . (array_key_exists('followers', $first) ? 'yes' : 'no') . "\n\n";
+    echo '  …and a follower count: ' . (array_key_exists('followersCount', $first) ? 'yes' : 'no') . "\n\n";
 }
 
-$map = redactionMap([$accountsResponse['body']]);
-
-writeFixture($options['out'], 'accounts', $accountsResponse['body'], $map);
-
-// The health of one account.
 $healthAccount = pickAccount($accounts, $options['publishTo'], $options['network']) ?? $first;
 
 if ($healthAccount !== null) {
@@ -361,12 +388,14 @@ if ($healthAccount !== null) {
 
     echo '  Health: ' . $healthResponse['status'] . "\n";
 
-    $healthMap = redactionMap([$healthResponse['body']]);
-    writeFixture($options['out'], 'account-health', $healthResponse['body'], $healthMap);
+    $responses['account-health'] = $healthResponse;
 }
 
 // The follower stats. It answers 402 without the analytics add-on, which is a
 // shape worth having in the fixtures too.
+//
+// The parameter is `accountIds` — plural, comma-separated. The singular is
+// not a parameter and is ignored.
 if ($healthAccount !== null) {
     $followerResponse = zernioCall(
         $client,
@@ -374,20 +403,16 @@ if ($healthAccount !== null) {
         '/accounts/follower-stats',
         $options['key'],
         $options['baseUrl'],
-        ['accountId' => (string) $healthAccount['_id']],
+        ['accountIds' => (string) $healthAccount['_id']],
     );
 
     echo '  Follower stats: ' . $followerResponse['status'] . "\n";
 
-    $followerMap = redactionMap([$followerResponse['body']]);
-    writeFixture($options['out'], 'follower-stats', $followerResponse['body'], $followerMap);
+    $responses['follower-stats'] = $followerResponse;
 }
 
 // A real publish. This is the one that costs something and puts a post on a
 // network, so it only happens when the operator names an account.
-$postResponse = null;
-$postId = '';
-
 if ($options['publishTo'] !== '' || $options['network'] !== '') {
     $target = pickAccount($accounts, $options['publishTo'], $options['network']);
 
@@ -396,9 +421,9 @@ if ($options['publishTo'] !== '' || $options['network'] !== '') {
             . ' --network=' . $options['network'] . ". Nothing was published.\n\n";
     } else {
         $platform = (string) ($target['platform'] ?? '');
-        $postId = (string) $target['_id'];
+        $accountId = (string) $target['_id'];
 
-        echo "\n  Publishing to " . $platform . ' (account ' . $postId . ") — a real post.\n";
+        echo "\n  Publishing to " . $platform . " (account " . $accountId . ") — a real post.\n";
 
         $postResponse = zernioCall(
             $client,
@@ -408,8 +433,8 @@ if ($options['publishTo'] !== '' || $options['network'] !== '') {
             $options['baseUrl'],
             [],
             [
-                'platforms' => [['platform' => $platform, 'accountId' => $postId]],
-                'content'   => $options['content'],
+                'platforms'  => [['platform' => $platform, 'accountId' => $accountId]],
+                'content'    => $options['content'],
                 'publishNow' => true,
             ],
             ['Idempotency-Key' => sprintf('spora-probe-%s', bin2hex(random_bytes(8)))],
@@ -417,8 +442,7 @@ if ($options['publishTo'] !== '' || $options['network'] !== '') {
 
         echo '  Status: ' . $postResponse['status'] . "\n";
 
-        $postMap = redactionMap([$postResponse['body']]);
-        writeFixture($options['out'], 'create-post', $postResponse['body'], $postMap);
+        $responses['create-post'] = $postResponse;
 
         $createdId = (string) ($postResponse['body']['post']['_id'] ?? '');
 
@@ -434,14 +458,41 @@ if ($options['publishTo'] !== '' || $options['network'] !== '') {
 
             echo '  Analytics: ' . $analyticsResponse['status'] . "\n";
 
-            $analyticsMap = redactionMap([$analyticsResponse['body']]);
-            writeFixture($options['out'], 'analytics', $analyticsResponse['body'], $analyticsMap);
+            $responses['analytics'] = $analyticsResponse;
 
             echo "\n  Look at build/zernio-probe/redacted/analytics.json: does it carry a\n";
             echo "  number per network, or one aggregate for the post? That is the one\n";
             echo "  question the plugin's answer depends on.\n";
         }
     }
+}
+
+// One map for the whole run, so the same account is the same placeholder in
+// every file.
+$map = redactionMap(array_values(array_map(
+    static fn(array $response): array => $response['body'],
+    $responses,
+)));
+
+$rawDir = $options['out'] . '/raw';
+$redactedDir = $options['out'] . '/redacted';
+
+foreach ([$rawDir, $redactedDir] as $dir) {
+    if (!is_dir($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
+        throw new RuntimeException('Could not create ' . $dir);
+    }
+}
+
+$encoded = static fn(mixed $value): string => (string) json_encode(
+    $value,
+    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+);
+
+foreach ($responses as $name => $response) {
+    file_put_contents($rawDir . '/' . $name . '.json', $encoded($response['body']) . "\n");
+    file_put_contents($redactedDir . '/' . $name . '.json', $encoded(redactDropped($response['body'], $map)) . "\n");
+
+    echo '  wrote ' . $redactedDir . '/' . $name . ".json\n";
 }
 
 echo "\n";
