@@ -26,7 +26,7 @@ final class SocialApp implements VueAppInterface
 
     public function description(): string
     {
-        return 'Publish to LinkedIn, Facebook and Instagram.';
+        return 'Publish to LinkedIn, Facebook and Instagram. An optional aggregator reaches the networks Spora does not connect to natively.';
     }
 
     public function icon(): string

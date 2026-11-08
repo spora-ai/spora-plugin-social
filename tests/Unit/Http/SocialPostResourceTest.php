@@ -51,6 +51,20 @@ function postWithReadings(int $principalId, array $targets): SocialPost
     return $post->fresh() ?? $post;
 }
 
+it('carries the route of every target, so two routes are told apart', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $post = postWithReadings($principalId, [
+        ['platform' => 'linkedin', 'counters' => ['reach' => 1]],
+    ]);
+
+    $payload = SocialPostResource::toArray($post);
+
+    expect($payload['targets'][0]['platform'])->toBe('linkedin')
+        ->and($payload['targets'][0]['via'])->toBe('direct')
+        ->and($payload['accounts'][0]['via'])->toBe('direct');
+});
+
 it('gives the media row the asset url the host renders as an image', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

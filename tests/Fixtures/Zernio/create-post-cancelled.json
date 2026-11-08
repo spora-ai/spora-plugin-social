@@ -1,0 +1,25 @@
+{
+    "post": {
+        "_id": "id_001",
+        "content": "We shipped…",
+        "status": "cancelled",
+        "platforms": [
+            {
+                "platform": "bluesky",
+                "accountId": "id_002",
+                "status": "cancelled",
+                "errorMessage": "The post was taken down on the platform."
+            }
+        ],
+        "createdAt": "2026-11-01T10:00:00.000Z",
+        "updatedAt": "2026-11-01T10:00:05.000Z"
+    },
+    "message": "Post published to 0 of 1 platforms",
+    "platformResults": [
+        {
+            "platform": "bluesky",
+            "status": "cancelled",
+            "error": "The post was taken down on the platform."
+        }
+    ]
+}

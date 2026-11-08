@@ -292,6 +292,7 @@ it('reads the page insights with the connection token', function () {
                 new PlatformHttpClient($context->http(SocialPlatform::Facebook)),
                 $context->accountService(),
                 $context->versions(),
+                $context->aggregatorMetricsReader(),
             );
 
             $row = $service->collect($target);

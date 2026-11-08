@@ -1,0 +1,5 @@
+{
+    "error": "Analytics add-on required",
+    "message": "Follower stats tracking requires the Analytics add-on. Please upgrade to access this feature.",
+    "requiresAddon": true
+}

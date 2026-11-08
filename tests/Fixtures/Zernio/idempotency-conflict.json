@@ -1,0 +1,4 @@
+{
+    "error": "A request with this Idempotency-Key is still being processed. Retry after the delay to get the original post.",
+    "code": "idempotency_conflict"
+}

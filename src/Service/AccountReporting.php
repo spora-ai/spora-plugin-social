@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Service;
 
+use Spora\Plugins\Social\Aggregator\AggregatorProvider;
 use Spora\Plugins\Social\Model\SocialAccount;
 use Spora\Plugins\Social\Model\SocialAccountKind;
 use Spora\Plugins\Social\Model\SocialPlatform;
@@ -23,6 +24,10 @@ use Spora\Plugins\Social\Model\SocialPlatform;
  *
  * The note is computed here, once, because the scopes live on the
  * connection and the connections grid is not the only reader.
+ *
+ * **An aggregator's account is answered differently.** Whether it can
+ * report is the aggregator's plan and the network's own counting, not a
+ * scope Spora granted: no scope of ours reaches Zernio's analytics.
  */
 final class AccountReporting
 {
@@ -39,7 +44,17 @@ final class AccountReporting
     public const INSTAGRAM_INSIGHTS_NOTE = 'This connection\'s token does not carry the instagram_manage_insights permission, so the account\'s media insights cannot be read.';
 
     /**
-     * The scope that reads an account's numbers, per platform and kind.
+     * The aggregator's numbers are an add-on on its plan.
+     */
+    public const AGGREGATOR_ADDON_NOTE = 'Analytics is an add-on on %s\'s plan, and this connection\'s plan does not carry it, so the numbers stay empty.';
+
+    /**
+     * Google reports at the location's level, not per post.
+     */
+    public const AGGREGATOR_LOCATION_NOTE = 'Google Business Profile reports at the location\'s level — Google deprecated the per-post numbers.';
+
+    /**
+     * The scope that reads an account's numbers, per network and kind.
      *
      * @var array<string, string>
      */
@@ -82,7 +97,14 @@ final class AccountReporting
      */
     private static function noteFor(SocialAccount $account, array $grantedScopes): ?string
     {
-        $scope = self::SCOPES[$account->platform . '|' . $account->kind] ?? null;
+        // An aggregator's account reports on the aggregator's plan, not on
+        // a scope Spora granted: no scope of ours reaches Zernio's
+        // analytics.
+        if (!$account->channel()->isDirect()) {
+            return self::aggregatorNote($account);
+        }
+
+        $scope = self::SCOPES[$account->channel()->network . '|' . $account->kind] ?? null;
 
         // The scopes are only known when the platform reported them. An
         // empty list means "not known", not "not granted" — a Meta
@@ -97,21 +119,47 @@ final class AccountReporting
     }
 
     /**
+     * Why an aggregator's account cannot report, if it cannot.
+     *
+     * Two facts, and neither is a scope: the network counts what it
+     * counts, and the aggregator's plan decides whether the numbers are
+     * read at all.
+     */
+    private static function aggregatorNote(SocialAccount $account): ?string
+    {
+        // Google deprecated the per-post numbers: a Google Business
+        // account reports at the location's level.
+        if ($account->channel()->network === 'googlebusiness') {
+            return self::AGGREGATOR_LOCATION_NOTE;
+        }
+
+        if ($account->connection?->analytics_available === false) {
+            $label = AggregatorProvider::tryFromName((string) $account->connection->provider)?->label() ?? 'the aggregator';
+
+            return sprintf(self::AGGREGATOR_ADDON_NOTE, $label);
+        }
+
+        return null;
+    }
+
+    /**
      * The note the platform itself decides: no scope gives these accounts
      * numbers.
      */
     private static function platformNote(SocialAccount $account): ?string
     {
+        $network = $account->channel()->network;
+
         $isMember = $account->kind === SocialAccountKind::Member->value;
 
         // A personal Instagram account has no insights at all: no scope
         // gives it any.
-        if ($isMember && $account->platform === SocialPlatform::Instagram->value) {
+        if ($isMember && $network === SocialPlatform::Instagram->value) {
             return self::PERSONAL_INSTAGRAM_NOTE;
         }
 
         // A LinkedIn member post reports reactions and nothing else.
-        if ($isMember && $account->platform === SocialPlatform::LinkedIn->value) {
+        if ($isMember && $network === SocialPlatform::LinkedIn->value) {
             return self::MEMBER_NOTE;
         }
 

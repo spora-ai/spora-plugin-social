@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Service\MetricSnapshot;
 
 /**
@@ -78,7 +79,7 @@ final class SocialAnalyticsPresenter
             $lines[] = sprintf(
                 '- #%d (%s) — %s%s',
                 (int) ($post['post_id'] ?? 0),
-                (string) ($post['platform'] ?? ''),
+                self::channelOf($post),
                 $counters !== '' ? $counters : self::NO_NUMBERS,
                 self::titled($post['title'] ?? null),
             );
@@ -88,23 +89,23 @@ final class SocialAnalyticsPresenter
     }
 
     /**
-     * One row per network.
+     * One row per channel.
      *
-     * @param list<array<string, mixed>> $byNetwork
+     * @param list<array<string, mixed>> $byChannel
      * @param list<string>               $notes
      */
-    public static function networks(int $days, array $byNetwork, array $notes): string
+    public static function channels(int $days, array $byChannel, array $notes): string
     {
-        $lines = ['One row per network for the last ' . $days . ' days:'];
+        $lines = ['One row per channel for the last ' . $days . ' days:'];
 
-        foreach ($byNetwork as $network) {
-            $counters = self::counters((array) $network);
+        foreach ($byChannel as $channel) {
+            $counters = self::counters((array) $channel);
 
             $lines[] = sprintf(
                 '- %s — %s — %s post(s)',
-                (string) ($network['platform'] ?? ''),
+                self::channelOf($channel),
                 $counters !== '' ? $counters : self::NO_NUMBERS,
-                (string) ($network['posts'] ?? 0),
+                (string) ($channel['posts'] ?? 0),
             );
         }
 
@@ -166,9 +167,26 @@ final class SocialAnalyticsPresenter
 
         return sprintf(
             '%s (account %d): %s',
-            (string) ($target['platform'] ?? ''),
+            self::channelOf($target),
             (int) ($target['account_id'] ?? 0),
             $counters !== '' ? $counters : self::NO_NUMBERS,
+        );
+    }
+
+    /**
+     * The channel a row names.
+     *
+     * The key and not the network: the same network reached through two
+     * routes is two accounts with two sets of numbers, and a row that
+     * names only the network cannot say which of the two it is.
+     *
+     * @param array<string, mixed> $row
+     */
+    private static function channelOf(array $row): string
+    {
+        return SocialChannel::keyOf(
+            (string) ($row['via'] ?? ''),
+            (string) ($row['platform'] ?? ''),
         );
     }
 

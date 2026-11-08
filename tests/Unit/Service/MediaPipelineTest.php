@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Spora\Plugins\Social\Model\SocialPlatform;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 
 it('prepares a jpeg derivative and a public url for instagram', function () {
@@ -14,7 +14,7 @@ it('prepares a jpeg derivative and a public url for instagram', function () {
         'payload'   => pngBytes(),
     ]);
 
-    $prepared = mediaPipeline()->prepare($asset, SocialPlatform::Instagram);
+    $prepared = mediaPipeline()->prepare($asset, SocialChannel::direct('instagram'));
 
     expect($prepared->mimeType)->toBe(SocialFixtures::MIME_JPEG)
         ->and($prepared->derivativeFormat)->toBe('format-jpeg')
@@ -42,7 +42,7 @@ it('serves a jpeg that is already a jpeg without converting it again', function 
         'payload'   => pngBytes(),
     ]);
 
-    $prepared = mediaPipeline()->prepare($asset, SocialPlatform::Instagram);
+    $prepared = mediaPipeline()->prepare($asset, SocialChannel::direct('instagram'));
 
     expect($prepared->mimeType)->toBe(SocialFixtures::MIME_JPEG)
         ->and($prepared->derivativeFormat)->toBeNull()
@@ -58,7 +58,7 @@ it('hands linkedin the bytes rather than a url', function () {
         'payload'   => pngBytes(),
     ]);
 
-    $prepared = mediaPipeline()->prepare($asset, SocialPlatform::LinkedIn);
+    $prepared = mediaPipeline()->prepare($asset, SocialChannel::direct('linkedin'));
 
     expect($prepared->bytes)->toBe(pngBytes())
         ->and($prepared->publicUrl)->toBeNull()

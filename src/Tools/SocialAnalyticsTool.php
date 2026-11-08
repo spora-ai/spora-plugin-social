@@ -15,10 +15,11 @@ use Throwable;
 /**
  * The numbers.
  *
- * The networks stay apart: each counts reach its own way, so a combined
- * figure is labelled a rough one and the rows are kept separate. A
- * counter the platform does not report stays empty rather than becoming a
- * zero that reads as "nobody saw it".
+ * The channels stay apart: the same network reached through two routes is
+ * two accounts with two sets of numbers, and each counts reach its own way,
+ * so a combined figure is labelled a rough one and the rows are kept
+ * separate. A counter the platform does not report stays empty rather than
+ * becoming a zero that reads as "nobody saw it".
  */
 #[Tool(
     name: 'social_analytics',
@@ -51,7 +52,7 @@ use Throwable;
 )]
 #[ToolOperation(
     name: 'network_comparison',
-    description: 'The same period, one row per network, so the platforms can be compared without being added up.',
+    description: 'The same period, one row per channel — the network and the route it is reached through — so the platforms can be compared without being added up. The same network on two routes is two rows.',
     operatorDescription: 'Compare the networks',
     enabledByDefault: true,
     requiresApprovalByDefault: false,
@@ -139,7 +140,7 @@ final class SocialAnalyticsTool extends AbstractSocialTool
         $summary = $this->metrics->summary($principalId, $days);
 
         return ToolResult::ok(
-            SocialAnalyticsPresenter::networks($days, $summary['by_network'], $summary['notes']),
+            SocialAnalyticsPresenter::channels($days, $summary['by_network'], $summary['notes']),
             ['by_network' => $summary['by_network'], 'series' => $summary['series'], 'notes' => $summary['notes']],
         );
     }

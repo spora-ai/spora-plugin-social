@@ -50,20 +50,26 @@ abstract class AbstractSocialTool extends AbstractTool
         return new ToolResult(false, "Error ({$code}): " . $e->getMessage());
     }
 
-    protected function platformList(mixed $raw, array $fallback = []): array
+    /**
+     * The keys the caller gave, lower-cased.
+     *
+     * @param  array<string> $fallback what to answer with when the caller names none
+     * @return list<string>
+     */
+    protected function keyList(mixed $raw, array $fallback = []): array
     {
         if (!is_array($raw)) {
             return $fallback;
         }
 
-        $platforms = [];
+        $keys = [];
         foreach ($raw as $value) {
             if (is_string($value) && $value !== '') {
-                $platforms[] = strtolower($value);
+                $keys[] = strtolower($value);
             }
         }
 
-        return $platforms !== [] ? $platforms : $fallback;
+        return $keys !== [] ? $keys : $fallback;
     }
 
     /**

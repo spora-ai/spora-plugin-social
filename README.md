@@ -1,11 +1,14 @@
 # spora-plugin-social
 
-Native social publishing for **LinkedIn**, **Facebook** and **Instagram**.
+Native social publishing for **LinkedIn**, **Facebook** and **Instagram** —
+and, through an optional aggregator, for **nine more networks**.
 
 Connect your own accounts, write one post for every network, let an agent
 schedule it, and see how each one did. This plugin replaces
 `spora-plugin-zernio`, which was a thin proxy to a third-party service that
-owned the tokens, the scheduling and the publishing.
+owned the tokens, the scheduling and the publishing. The aggregator route is
+the plugin's own now: it speaks Zernio's API directly, and the operator's key
+stays here.
 
 ## What it does
 
@@ -23,6 +26,13 @@ owned the tokens, the scheduling and the publishing.
   connected to a Page that *requires* Page Publishing Authorization cannot
   be published to until PPA is completed, and Meta says there is no way
   for an app to detect that.
+- **Reach more networks.** An optional **aggregator** — Zernio — publishes
+  on **twelve networks**: X, Instagram, Facebook, LinkedIn, TikTok, YouTube,
+  Pinterest, Reddit, Bluesky, Threads, Google Business and Telegram. Nine
+  of them the plugin does not reach itself, and the other three it reaches
+  with Zernio's limits rather than its own. The operator pastes one API key,
+  Zernio's accounts become publishable targets, and the plugin publishes
+  them as one cross-post.
 - **Publish.** One post, aimed at several accounts. The outcome is recorded
   **per account**, so a post that reached LinkedIn and not Instagram is
   `partial`, not `failed`.
@@ -46,6 +56,47 @@ There is **no fixed slot** — no "post the same text every Tuesday". It
 published the same words every week, and LinkedIn and Meta ship native
 scheduled posts now, so a third-party static repeater competed on the
 weakest axis available. The agent-driven mode replaced it.
+
+## The two routes
+
+A target's identity is the **network and the route to it**. The same
+network reached through two routes is two accounts with two tokens, and a
+post that reaches both carries a copy of its own for each. The route
+travels with the target, so the plugin never publishes to a network twice
+by accident and never merges two networks' numbers into one row.
+
+| Route | What it is | Which networks |
+|---|---|---|
+| `direct` | The plugin's own OAuth and the networks' own APIs. | LinkedIn, Facebook, Instagram. |
+| `zernio` | Zernio's API. One API key for the whole team. | X, Instagram, Facebook, LinkedIn, TikTok, YouTube, Pinterest, Reddit, Bluesky, Threads, Google Business, Telegram. |
+
+**The direct path publishes one target at a time**, as it always did. The
+aggregator's targets go out **together**: one call, one cross-post, one
+idempotency key for the group. The key is written to every target of the
+group **before** the call, so a publish that dies halfway is replayed under
+the same key — and the aggregator answers with the original post instead of
+publishing a second one.
+
+**The aggregator is read-only.** The operator creates, renames, moves and
+disconnects accounts in Zernio's own dashboard; the plugin only learns what
+is there. An account the aggregator no longer reports is marked
+*disconnected*, not deleted — a post's history keeps its target.
+
+**The API key is the operator's.** It is pasted on the Accounts screen, held
+on the connection row like a token, and replaced by pasting a new one. The
+agent's tools have no way to write a credential. An aggregator's key has no
+refresh grant and no expiry: it is replaced, not renewed.
+
+### The aggregator's routes
+
+| Route | What it does |
+|---|---|
+| `POST /api/v1/plugins/social/aggregators` | Store the API key the operator pasted. |
+| `DELETE /api/v1/plugins/social/aggregators/{slug}` | Forget the key. The accounts stay in Zernio and are marked disconnected here. |
+| `POST /api/v1/plugins/social/aggregators/{slug}/sync` | Read the aggregator's accounts again. |
+
+`social_connections` with action `sync` does the same read for an agent,
+and never writes a credential.
 
 ## The agent template and the skill
 
@@ -79,6 +130,12 @@ The plugin ships both:
 | `SPORA_SOCIAL_GRAPH_API_VERSION` | The Meta Graph API version every Facebook and Instagram endpoint carries. Defaults to the current one; Meta retires a version every year. |
 | `SPORA_SOCIAL_FRONTEND_URL` | Where the browser lands after an account is connected. Defaults to `SPORA_APP_URL`; set it when the SPA runs on another origin, as it does in local development. |
 | `SPORA_APP_URL` | Must be **publicly reachable over HTTPS**. Instagram fetches the published media from the internet, so an address only your network can see fails at the last step of a publish. The plugin checks this at connect time, and `GET /config` reports it as `app_url_public`. The OAuth redirect URI is built from it, and the platforms need that address registered — so it has to be the address you registered, not the one the request happened to arrive on. |
+
+The **aggregator needs no setting**: its API key is held on the connection
+row, like a token, and the operator pastes it on the Accounts screen. The
+aggregator fetches the media itself, from the public URL the plugin serves
+it, so `SPORA_APP_URL` has to be reachable from the internet for that route
+too.
 
 ## Checking it against the real platforms
 
@@ -274,7 +331,7 @@ Five tools, for agents that write the posts:
 
 | Tool | Operations |
 |---|---|
-| `social_connections` | `list`, `connect`, `disconnect`, `refresh`, `health` |
+| `social_connections` | `list`, `connect`, `disconnect`, `refresh`, `health`, `sync` |
 | `social_post` | `create`, `schedule`, `publish`, `list`, `inspect`, `update`, `retry`, `delete` |
 | `social_media` | `list_assets`, `check_fit`, `prepare`, `attach`, `detach` |
 | `social_analytics` | `post_metrics`, `period_totals`, `top_posts`, `network_comparison` |
@@ -306,6 +363,9 @@ again.
 
 ## What each platform accepts
 
+The table below is the **direct route's** — the plugin's own networks. The
+aggregator's limits are Zernio's, and they differ for the same network.
+
 | Platform | Media | Types | Cap |
 |---|---|---|---|
 | LinkedIn | optional | JPEG, PNG, GIF | 8 MB |
@@ -321,6 +381,13 @@ the publish sends one file, so a second would be a file the operator
 believes is going out and is not. Instagram **fetches** the media from the
 internet, so the bytes have to be reachable from outside — the plugin
 serves them from a public URL for it; LinkedIn and Facebook take the bytes.
+
+**The aggregator's route carries the same rule.** Zernio's own limit for
+Telegram is an album of ten images or videos, and Zernio takes several
+images and a video on LinkedIn — but the plugin's rule of one attachment per
+post still holds on every channel, and the publish refuses a second file.
+The aggregator's limits are the ones *Zernio* enforces on top of that; the
+plugin's own rule is the one it enforces itself.
 
 Instagram takes no PNG at all, so the plugin converts it through core's own
 image producer before publishing.
@@ -343,6 +410,38 @@ Instagram 125 before "more". The whole body is published either way.
 
 **Hashtags** are a list of tags without the hashes. The plugin adds them
 under the body when the post goes out, on every platform.
+
+## What the aggregator accepts
+
+Zernio's own limits, one row per network it publishes on. The plugin's
+table is a copy of Zernio's documentation, so it goes stale when Zernio
+changes a limit — the publish-time refusal is Zernio's own error, and the
+target carries it.
+
+| Network | Media | Cap | Body |
+|---|---|---|---|
+| X | optional | JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB | 280 characters free, 25,000 on Premium — a URL counts as 23 and an emoji as 2 |
+| Instagram | **required** | JPEG or PNG up to 8 MB, or an MP4 or MOV video up to 300 MB | up to 2,200 characters |
+| Facebook | optional | JPEG, PNG or GIF up to 4 MB, or an MP4 or MOV video up to 4 GB | up to 63,206 characters, ~480 shown before "See more" |
+| LinkedIn | optional | JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB | up to 3,000 characters |
+| TikTok | **required** | JPEG, PNG or WebP up to 20 MB, or an MP4, MOV or WebM video up to 4 GB | up to 2,200 characters |
+| YouTube | **required** | an MP4, MOV, AVI, WMV, FLV, 3GP or WebM video up to 256 GB | up to 5,000 characters |
+| Pinterest | optional | JPEG, PNG, WebP or GIF up to 32 MB, or an MP4 or MOV video up to 2 GB | up to 800 characters |
+| Reddit | optional | JPEG, PNG or GIF up to 20 MB, or an MP4 video up to 1 GB | up to 40,000 characters |
+| Bluesky | optional | JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB | up to 300 characters |
+| Threads | optional | JPEG or PNG up to 8 MB, or an MP4 video up to 1 GB | up to 500 characters |
+| Google Business | optional | JPEG or PNG up to 5 MB, no video | up to 1,500 characters |
+| Telegram | optional | JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB — Zernio puts up to ten of them in an album | up to 4,096 characters |
+
+**X counts its characters its own way** — a URL is 23 characters whatever
+its length and an emoji is 2 — so the plugin does not count it for you: keep
+an X body short and let X refuse it if it is too long.
+
+The aggregator **fetches the media itself**, from the URL the plugin sends,
+so the bytes have to be reachable from the internet — the plugin serves them
+from a public URL for it. The aggregator takes the **original** asset's
+bytes, not a converted derivative: it accepts JPEG, PNG, GIF and WebP, and
+it compresses above a network's limit itself.
 
 ## Times and timezones
 
@@ -386,7 +485,14 @@ post.
 - **Every reading is a dated snapshot.** Impressions keep climbing for days
   and the platforms restate them. Nothing here is final.
 - **The networks are kept apart.** They count reach differently, so the
-  rows stay separate and the combined figure is labelled a rough one.
+  rows stay separate and the combined figure is labelled a rough one. A row
+  is a **channel** — the network and the route to it — so the same network
+  on two routes is two rows.
+- **An aggregator's numbers are an add-on on its plan.** Without it the
+  target reports no numbers, and the note says why. The follower count
+  needs the same add-on, and the accounts screen says whether the plan has
+  it. And one aggregate for the whole aggregator post covers every network
+  in it, not the one account — so the target says so too.
 
 ## Install
 

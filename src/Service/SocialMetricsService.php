@@ -6,8 +6,10 @@ namespace Spora\Plugins\Social\Service;
 
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Support\Carbon;
+use Spora\Plugins\Social\Aggregator\AggregatorMetricsReader;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostMetric;
@@ -31,8 +33,9 @@ final class SocialMetricsService
         PlatformHttpClient $http,
         SocialConnectionService $connections,
         ApiVersions $versions,
+        AggregatorMetricsReader $aggregator,
     ) {
-        $this->reader = new PlatformMetricsReader($http, $connections, $versions);
+        $this->reader = new PlatformMetricsReader($http, $connections, $versions, $aggregator);
     }
 
     private readonly PlatformMetricsReader $reader;
@@ -49,13 +52,24 @@ final class SocialMetricsService
             return null;
         }
 
-        $platform = SocialPlatform::tryFromName((string) $target->platform);
-        if ($platform === null || $target->external_id === null || $target->external_id === '') {
+        $channel = $target->channel();
+
+        if (!PlatformMetricsReader::reads($channel) || $target->external_id === null || $target->external_id === '') {
             return null;
         }
 
-        $snapshot = $this->reader->read($platform, $account, (string) $target->external_id);
+        $snapshot = $this->reader->read($channel, $account, (string) $target->external_id);
 
+        // The reading is skipped: the aggregator is still syncing, and
+        // the daily job picks it up tomorrow.
+        return $snapshot === null ? null : $this->store($target, $snapshot);
+    }
+
+    /**
+     * The reading, written down as the day's snapshot.
+     */
+    private function store(SocialPostTarget $target, MetricSnapshot $snapshot): SocialPostMetric
+    {
         $date = DateTimeParser::nowUtc()->format('Y-m-d');
 
         $row = SocialPostMetric::query()
@@ -87,6 +101,11 @@ final class SocialMetricsService
     /**
      * The summary the analytics view renders.
      *
+     * The rows are per **channel**, not per network: the same network
+     * reached through two routes is two accounts with two sets of numbers,
+     * and merging them into one row leaves the reader unable to tell
+     * which of the two produced them.
+     *
      * @return array{totals: array<string, int|null>, by_network: list<array<string, mixed>>, series: list<array<string, mixed>>, top_posts: list<array<string, mixed>>, notes: list<string>}
      */
     public function summary(int $principalId, int $days = 30): array
@@ -100,10 +119,15 @@ final class SocialMetricsService
         $series = [];
 
         foreach ($rows as $row) {
-            $platform = (string) $row->platform;
+            $channel = SocialChannel::tryFrom((string) $row->via, (string) $row->platform)
+                ?? SocialChannel::direct((string) $row->platform);
 
-            $network = $byNetwork[$platform] ?? [
-                'platform'    => $platform,
+            $key = $channel->key();
+
+            $network = $byNetwork[$key] ?? [
+                'platform'    => $channel->network,
+                'channel'     => $key,
+                'via'         => $channel->via,
                 'reach'       => null,
                 'impressions' => null,
                 'likes'       => null,
@@ -125,12 +149,12 @@ final class SocialMetricsService
             }
 
             $network['posts'] = (int) $network['posts'] + 1;
-            $byNetwork[$platform] = $network;
+            $byNetwork[$key] = $network;
 
             $date = (string) $row->metric_date;
             $series[$date] ??= ['date' => $date];
             if ($row->reach !== null) {
-                $series[$date][$platform] = (int) ($series[$date][$platform] ?? 0) + (int) $row->reach;
+                $series[$date][$key] = (int) ($series[$date][$key] ?? 0) + (int) $row->reach;
             }
         }
 
@@ -195,10 +219,11 @@ final class SocialMetricsService
                 'target_id'    => (int) $target->id,
                 'account_id'   => (int) $target->account_id,
                 'platform'     => (string) $target->platform,
+                'via'          => (string) $target->via,
                 'status'       => (string) $target->status,
                 'external_id'  => $target->external_id,
                 'metrics'      => $metrics === null ? null : $this->metricsOf($metrics),
-                'report_note'  => $this->reportNoteFor($target),
+                'report_note'  => $this->reportNoteFor($target, $metrics),
             ];
         }
 
@@ -254,12 +279,21 @@ final class SocialMetricsService
                 'social_post_metrics.saves',
                 'social_post_metrics.clicks',
                 'social_post_targets.platform',
+                'social_post_targets.via',
             ])
             ->get()
             ->all();
     }
 
     /**
+     * The posts of a period, one row per target.
+     *
+     * The readings table holds **one row per target per day**, so a post
+     * published ten days ago contributes ten readings. The row is the
+     * latest of them, and the target's id travels with it: a post with
+     * two targets is two rows, and the reader needs the id to tell them
+     * apart.
+     *
      * @return list<array<string, mixed>>
      */
     private function topPosts(int $principalId, string $since): array
@@ -269,10 +303,13 @@ final class SocialMetricsService
             ->join('social_posts', 'social_posts.id', '=', 'social_post_metrics.post_id')
             ->where('social_posts.principal_id', $principalId)
             ->where('social_post_metrics.metric_date', '>=', $since)
+            ->orderBy('social_post_metrics.metric_date')
             ->select([
                 'social_posts.id as post_id',
                 'social_posts.title as title',
+                'social_post_targets.id as target_id',
                 'social_post_targets.platform as platform',
+                'social_post_targets.via as via',
                 'social_post_metrics.reach as reach',
                 'social_post_metrics.impressions as impressions',
                 'social_post_metrics.likes as likes',
@@ -280,12 +317,23 @@ final class SocialMetricsService
             ])
             ->get();
 
-        $posts = [];
+        // The table is unique on (target_id, metric_date), so the last
+        // reading of a target in date order is its latest one.
+        $latest = [];
+
         foreach ($rows as $row) {
+            $latest[(int) $row->target_id] = $row;
+        }
+
+        $posts = [];
+
+        foreach ($latest as $row) {
             $posts[] = [
                 'post_id'      => (int) $row->post_id,
+                'target_id'    => (int) $row->target_id,
                 'title'        => $row->title,
                 'platform'     => (string) $row->platform,
+                'via'          => (string) $row->via,
                 'reach'        => $row->reach === null ? null : (int) $row->reach,
                 'impressions'  => $row->impressions === null ? null : (int) $row->impressions,
                 'likes'        => $row->likes === null ? null : (int) $row->likes,
@@ -343,10 +391,32 @@ final class SocialMetricsService
         return $notes;
     }
 
-    private function reportNoteFor(SocialPostTarget $target): ?string
+    /**
+     * The note the target's numbers carry.
+     *
+     * A reading's own note comes first: it says what the numbers are —
+     * that they cover every network in the aggregator's post, or that
+     * the plan carries no analytics at all.
+     */
+    private function reportNoteFor(SocialPostTarget $target, ?SocialPostMetric $metrics): ?string
+    {
+        $note = $metrics?->platform_metrics['note'] ?? null;
+
+        if (is_string($note) && $note !== '') {
+            return $note;
+        }
+
+        return $this->accountNoteFor($target);
+    }
+
+    /**
+     * The note the account's own kind carries.
+     */
+    private function accountNoteFor(SocialPostTarget $target): ?string
     {
         $account = $target->account;
-        if ($account === null) {
+
+        if ($account === null || $account->kind !== SocialAccountKind::Member->value) {
             return null;
         }
 
@@ -354,10 +424,6 @@ final class SocialMetricsService
             SocialPlatform::LinkedIn->value => AccountReporting::MEMBER_NOTE,
             SocialPlatform::Instagram->value => AccountReporting::PERSONAL_INSTAGRAM_NOTE,
         ];
-
-        if ($account->kind !== SocialAccountKind::Member->value) {
-            return null;
-        }
 
         return $notes[$target->platform] ?? null;
     }

@@ -9,7 +9,6 @@ use Spora\Plugins\Social\Http\SocialCalendarController;
 use Spora\Plugins\Social\Http\SocialConnectionController;
 use Spora\Plugins\Social\Http\SocialMediaController;
 use Spora\Plugins\Social\Http\SocialPostController;
-use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\SocialStateCodec;
 use Spora\Plugins\Social\Service\PlatformFit;
@@ -45,6 +44,7 @@ function connectionController(
         $connections ?? connectionService(),
         $settings ?? new SocialSettings(socialConfig()),
         new SocialAppUrlProbe(new MockHttpClient([new MockResponse('', ['http_code' => 200])])),
+        aggregatorService(),
     );
 }
 
@@ -149,7 +149,7 @@ it('carries the redirect uri the operator has to register', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     expect($response->getStatusCode())->toBe(200);
 
@@ -172,7 +172,7 @@ it('carries no redirect uri on an instance that cannot register one', function (
     // cannot work.
     $settings = new SocialSettings(socialConfig(['SPORA_APP_URL' => 'http://localhost:8080']));
 
-    $response = connectionController($auth, $settings)->config();
+    $response = connectionController($auth, $settings)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     $body = decode($response);
 
@@ -187,7 +187,7 @@ it('carries no setup notice for a provider that needs no setup', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     $body = decode($response);
 
@@ -205,7 +205,7 @@ it('carries the setup notice when the meta configuration id is missing', functio
         SocialSettings::KEY_META_CONFIG_ID => '',
     ]));
 
-    $response = connectionController($auth, $settings)->config();
+    $response = connectionController($auth, $settings)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     $body = decode($response);
 
@@ -219,7 +219,7 @@ it('answers with the configuration of the operator', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     expect($response->getStatusCode())->toBe(200);
 
@@ -364,7 +364,7 @@ it('checks the fit of an asset as the platform receives it', function () {
     $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
         'principal_id'   => $principalId,
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ]));
 
     expect($response->getStatusCode())->toBe(200);
@@ -373,7 +373,10 @@ it('checks the fit of an asset as the platform receives it', function () {
     // publishes — so the asset fits there, as the publish will find it.
     $body = decode($response);
     expect($body['data']['fits'])->toBeTrue()
-        ->and($body['data']['per_platform'][0]['mime_type'])->toBe('image/jpeg');
+        ->and($body['data']['per_channel'][0]['channel'])->toBe('direct:instagram')
+        ->and($body['data']['per_channel'][0]['network'])->toBe('instagram')
+        ->and($body['data']['per_channel'][0]['via'])->toBe('direct')
+        ->and($body['data']['per_channel'][0]['mime_type'])->toBe('image/jpeg');
 });
 
 it('names the remedy for a media Instagram cannot take at all', function () {
@@ -385,14 +388,64 @@ it('names the remedy for a media Instagram cannot take at all', function () {
     $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
         'principal_id'   => $principalId,
         'media_asset_id' => $asset->id,
-        'platforms'      => ['instagram'],
+        'channels'       => ['direct:instagram'],
     ]));
 
     expect($response->getStatusCode())->toBe(200);
 
     $body = decode($response);
     expect($body['data']['fits'])->toBeFalse()
-        ->and($body['data']['per_platform'][0]['remedy'])->toBe('Convert to JPEG');
+        ->and($body['data']['per_channel'][0]['remedy'])->toBe('Convert to JPEG');
+});
+
+it('answers about the native channels when the request names none', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+
+    $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
+        'principal_id'   => $principalId,
+        'media_asset_id' => $asset->id,
+    ]));
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $body = decode($response);
+
+    // The three the plugin publishes on itself, and not the fifteen: the
+    // aggregator's `zernio:youtube` takes no image, so the default
+    // answer for an ordinary image would flip from "fits" to "does not
+    // fit".
+    expect($body['data']['fits'])->toBeTrue()
+        ->and($body['data']['per_channel'])->toHaveCount(3)
+        ->and(array_column($body['data']['per_channel'], 'channel'))
+        ->toBe(['direct:linkedin', 'direct:facebook', 'direct:instagram']);
+});
+
+it('still answers the old platforms key, for one release', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $asset = createMediaAsset($principalId, ['mime_type' => 'image/png', 'payload' => pngBytes()]);
+
+    $response = mediaController($auth)->checkFit(jsonRequest('POST', '/api/v1/plugins/social/media/check-fit', [
+        'principal_id'   => $principalId,
+        'media_asset_id' => $asset->id,
+        'platforms'      => ['instagram'],
+    ]));
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $body = decode($response);
+
+    // A bare network name in the old key means the plugin's own route to
+    // it — the route it meant before the rename.
+    expect($body['data']['per_channel'])->toHaveCount(1)
+        ->and($body['data']['per_channel'][0]['channel'])->toBe('direct:instagram')
+        // And the old answer key is still there.
+        ->and($body['data']['per_platform'])->toHaveCount(1)
+        ->and($body['data']['per_platform'][0]['platform'])->toBe('instagram');
 });
 
 it('answers with the month of the calendar', function () {
@@ -414,37 +467,82 @@ it('carries the platform rules the frontend reads', function () {
     $auth = bootAuthLayer();
     bootAuth($auth);
 
-    $response = connectionController($auth)->config();
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
     expect($response->getStatusCode())->toBe(200);
 
     $rules = decode($response)['data']['rules'];
 
-    expect($rules)->toHaveKeys(['linkedin', 'facebook', 'instagram']);
+    expect($rules)->toHaveKeys(['direct:linkedin', 'direct:facebook', 'direct:instagram', 'zernio:bluesky']);
 
-    foreach (SocialPlatform::cases() as $platform) {
-        $rule = PlatformFit::rule($platform);
+    foreach (PlatformFit::channels() as $channel) {
+        $rule = PlatformFit::rule($channel);
 
-        expect($rules[$platform->value]['media_required'])->toBe($rule['media_required'])
-            ->and($rules[$platform->value]['media_count'])->toBe($rule['media_count'])
-            ->and($rules[$platform->value]['fetches_media'])->toBe($rule['fetches_media'])
-            ->and($rules[$platform->value]['mime_types'])->toBe($rule['mime_types'])
-            ->and($rules[$platform->value]['max_bytes'])->toBe($rule['max_bytes'])
-            ->and($rules[$platform->value]['max_text'])->toBe($rule['max_characters'])
-            ->and($rules[$platform->value]['media_note'])->toContain($rule['media'])
-            ->and($rules[$platform->value])->toHaveKeys([
+        expect($rules[$channel->key()]['media_required'])->toBe($rule['media_required'])
+            ->and($rules[$channel->key()]['media_count'])->toBe($rule['media_count'])
+            ->and($rules[$channel->key()]['fetches_media'])->toBe($rule['fetches_media'])
+            ->and($rules[$channel->key()]['mime_types'])->toBe($rule['mime_types'])
+            ->and($rules[$channel->key()]['max_bytes'])->toBe($rule['max_bytes'])
+            ->and($rules[$channel->key()]['max_text'])->toBe($rule['max_characters'])
+            ->and($rules[$channel->key()]['media_note'])->toContain($rule['media'])
+            // The network names live in one place: the frontend stops
+            // keeping its own list of them.
+            ->and($rules[$channel->key()]['label'])->toBe($rule['label'])
+            ->and($rules[$channel->key()]['network'])->toBe($channel->network)
+            ->and($rules[$channel->key()]['via'])->toBe($channel->via)
+            ->and($rules[$channel->key()])->toHaveKeys([
+                'label',
+                'network',
+                'via',
                 'media_required',
                 'media_count',
                 'fetches_media',
                 'mime_types',
                 'max_bytes',
                 'max_text',
+                'visible_chars',
                 'media_note',
                 'media_remedy',
                 'video_remedy',
                 'size_remedy',
             ]);
     }
+});
+
+it('carries the aggregators beside the oauth providers, not among them', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    $response = connectionController($auth)->config(
+        jsonRequest('GET', '/api/v1/plugins/social/config' . SocialFixtures::PRINCIPAL_QUERY . $principalId),
+    );
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $body = decode($response)['data'];
+
+    // An aggregator is not an OAuth provider: it has no client id and no
+    // redirect URI, so it gets its own section.
+    expect($body['aggregators'])->toHaveKey('zernio')
+        ->and($body['aggregators']['zernio'])->toBe([
+            'configured'  => false,
+            'label'       => 'Zernio',
+            'needs_setup' => null,
+        ])
+        ->and($body['providers'])->not->toHaveKey('zernio');
+});
+
+it('says the aggregator is configured once the operator has pasted a key', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    createSocialConnection($principalId, 'zernio');
+
+    $response = connectionController($auth)->config(
+        jsonRequest('GET', '/api/v1/plugins/social/config' . SocialFixtures::PRINCIPAL_QUERY . $principalId),
+    );
+
+    expect(decode($response)['data']['aggregators']['zernio']['configured'])->toBeTrue();
 });
 
 /**
@@ -819,6 +917,42 @@ it('answers with the calendar of a month', function () {
 
     expect($response->getStatusCode())->toBe(200)
         ->and(decode($response)['data'])->toHaveKeys(['posts', 'total']);
+});
+
+it('carries the channels every post of the month goes to', function () {
+    $auth = bootAuthLayer();
+    $principalId = createUserPrincipal(bootAuth($auth));
+
+    // A LinkedIn member profile on the plugin's own route and a Bluesky
+    // account through the aggregator: two channels, two accounts.
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'bluesky', 'zernio', 'id_002');
+
+    postService()->create($principalId, [
+        'title'         => SocialFixtures::POST_TITLE,
+        'body'          => SocialFixtures::POST_BODY,
+        'account_ids'   => [$direct->id, $aggregated->id],
+        'scheduled_for' => SocialFixtures::CALENDAR_MOMENT,
+    ]);
+
+    $response = calendarController($auth)->calendar(
+        Request::create(SocialFixtures::PLUGIN_CALENDAR_PATH . SocialFixtures::PRINCIPAL_QUERY . $principalId . '&month=' . SocialFixtures::CALENDAR_MONTH),
+    );
+
+    expect($response->getStatusCode())->toBe(200);
+
+    $post = decode($response)['data']['posts'][0];
+
+    // One entry per target, and the entry names the route as well as the
+    // network: a post that names only the network cannot say which of the
+    // two routes it goes out through.
+    expect($post['channels'])->toHaveCount(2)
+        ->and($post['channels'][0]['key'])->toBe('direct:linkedin')
+        ->and($post['channels'][0]['network'])->toBe('linkedin')
+        ->and($post['channels'][0]['via'])->toBe('direct')
+        ->and($post['channels'][1]['key'])->toBe('zernio:bluesky')
+        ->and($post['channels'][1]['network'])->toBe('bluesky')
+        ->and($post['channels'][1]['via'])->toBe('zernio');
 });
 
 it('falls back to this month when the calendar names none', function () {

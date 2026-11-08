@@ -33,6 +33,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property \Carbon\Carbon|null $expires_at
  * @property string $status
  * @property string|null $scopes
+ * @property bool|null $analytics_available Whether the aggregator's plan carries the analytics add-on.
  * @property ?\Carbon\Carbon $created_at
  * @property ?\Carbon\Carbon $updated_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, SocialAccount> $accounts
@@ -61,12 +62,14 @@ final class SocialConnection extends Model
         'expires_at',
         'status',
         'scopes',
+        'analytics_available',
     ];
 
     /** @var array<string, string> */
     protected $casts = [
-        'principal_id' => 'integer',
-        'expires_at'   => 'datetime',
+        'principal_id'        => 'integer',
+        'expires_at'          => 'datetime',
+        'analytics_available' => 'boolean',
     ];
 
     /**

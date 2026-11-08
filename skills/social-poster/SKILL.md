@@ -1,6 +1,6 @@
 ---
 name: social-poster
-description: "Write, schedule and publish the operator's LinkedIn, Facebook and Instagram posts. Use when the operator asks for a social media post, wants something posted to a network, wants a post scheduled for later, asks what is already going out, or asks how a post performed. Carries the per-platform rules — Instagram needs media and takes no PNG, LinkedIn takes images only, the character limits differ — and the media and approval rules."
+description: "Write, schedule and publish the operator's social posts — their own LinkedIn, Facebook and Instagram accounts, and the networks an aggregator reaches for them. Use when the operator asks for a social media post, wants something posted to a network, wants a post scheduled for later, asks what is already going out, or asks how a post performed. Carries the per-platform rules — Instagram needs media and takes no PNG, LinkedIn takes images only, the character limits differ — the aggregator's own rules, and the media and approval rules."
 license: MIT
 compatibility: spora>=0.32 spora-plugin-social>=0.1
 metadata:
@@ -20,7 +20,7 @@ operator's voice, with the operator's approval.
 | `social_post` | The posts: draft, schedule, publish, list, inspect, update, retry, delete. |
 | `social_media` | The Media Archive: what is there, whether it fits, and attaching it. |
 | `social_analytics` | What the posts did: one post, a period, the top posts, the networks side by side. |
-| `social_calendar` | The posts of a month with the days they are due. |
+| `social_calendar` | The posts of a month with the days they are due and the channels they go to. |
 
 ## The flow, from the operator's request to a scheduled post
 
@@ -114,6 +114,66 @@ is checked twice, against each platform's limit.
 under the body when the post goes out, on every platform. Keep it to a few —
 a hashtag wall is not a voice.
 
+## The aggregator
+
+Some networks are not reached by the plugin's own connections. **LinkedIn,
+Facebook and Instagram are**: the operator connects them, and the plugin
+publishes to them directly.
+
+**Everything else goes through an aggregator.** The operator adds Zernio on
+the Accounts screen, pastes the API key, and Zernio's own accounts become
+publishable targets: Bluesky, Threads, TikTok, YouTube, Pinterest, Reddit,
+X, Google Business, Telegram. `social_connections` with action `list` shows
+them like any other account, and `social_connections` with action `sync`
+reads the accounts Zernio holds again. The operator manages them in Zernio's
+own dashboard — the plugin never creates, renames or disconnects one.
+
+**An aggregator target's limits are Zernio's, and they differ from the
+native ones for the same network.** The table above is the plugin's own
+route; this one is Zernio's:
+
+| Network | Media | Cap | Body |
+|---|---|---|---|
+| X | optional | JPEG, PNG, WebP or GIF up to 5 MB, or an MP4 or MOV video up to 512 MB | 280 characters free, 25,000 on Premium — a URL counts as 23 and an emoji as 2 |
+| Instagram | **required** | JPEG or PNG up to 8 MB, or an MP4 or MOV video up to 300 MB | up to 2,200 characters |
+| Facebook | optional | JPEG, PNG or GIF up to 4 MB, or an MP4 or MOV video up to 4 GB | up to 63,206 characters, ~480 shown before "See more" |
+| LinkedIn | optional | JPEG, PNG or GIF up to 8 MB, or an MP4, MOV or AVI video up to 5 GB | up to 3,000 characters |
+| TikTok | **required** | JPEG, PNG or WebP up to 20 MB, or an MP4, MOV or WebM video up to 4 GB | up to 2,200 characters |
+| YouTube | **required** | an MP4, MOV, AVI, WMV, FLV, 3GP or WebM video up to 256 GB | up to 5,000 characters |
+| Pinterest | optional | JPEG, PNG, WebP or GIF up to 32 MB, or an MP4 or MOV video up to 2 GB | up to 800 characters |
+| Reddit | optional | JPEG, PNG or GIF up to 20 MB, or an MP4 video up to 1 GB | up to 40,000 characters |
+| Bluesky | optional | JPEG, PNG, WebP or GIF up to 1 MB, or an MP4 video up to 50 MB | up to 300 characters |
+| Threads | optional | JPEG or PNG up to 8 MB, or an MP4 video up to 1 GB | up to 500 characters |
+| Google Business | optional | JPEG or PNG up to 5 MB, no video | up to 1,500 characters |
+| Telegram | optional | JPEG, PNG, GIF or WebP up to 10 MB, or an MP4 or MOV video up to 50 MB | up to 4,096 characters |
+
+Zernio's own limits are the wider ones: a LinkedIn post through Zernio may
+carry several images and a video, where the plugin's own LinkedIn route
+carries one image and no video. **The plugin's rule of one attachment per
+post still holds on every channel**: the publish sends one file, and a second
+is a file the operator believes is going out and is not. **X counts
+its characters its own way** — a URL is 23 characters whatever its length and
+an emoji is 2 — so the plugin does not count it for you: keep an X body short
+and let X refuse it if it is too long.
+
+**An aggregator target publishes at the moment it is due, not when the
+aggregator says so.** Spora sends it with `publishNow: true`; Zernio's own
+scheduler and queue are not used. The post goes out at the moment the
+operator asked for.
+
+**A failed aggregator target may be refused as a duplicate within 24
+hours.** Zernio refuses the same content on the same account again within a
+day, and it says so in its own words — the operator reads that message on the
+target. It is Zernio's rule, not the plugin's, and there is nothing to work
+around: the dedup is keyed on the whole content, so the way out is the one
+Zernio names — change the caption, the media or the account.
+
+**An aggregator's numbers need the analytics add-on on a legacy plan** — a
+usage-based plan includes them. Without them the target reports no numbers,
+and the note says why. And when the aggregator gives one aggregate for the
+whole post rather than a number per network, the target reports that
+aggregate with a note saying it covers every network in the post.
+
 ## The media rules
 
 - Media comes from the **Spora Media Archive**. `list_assets` shows it;
@@ -130,12 +190,15 @@ a hashtag wall is not a voice.
 - **Instagram fetches the media from the internet**, so the file has to be
   reachable from outside — the backend serves it from a public URL for you.
   LinkedIn and Facebook take the bytes.
+- **An aggregator target gets the original asset's bytes**, not a converted
+  derivative: Zernio takes JPEG, PNG, GIF and WebP, and it compresses above
+  a network's limit itself.
 
 ## The approval behaviour
 
 | Operation | Approval |
 |---|---|
-| `list`, `inspect`, `list_assets`, `check_fit`, `prepare`, `list_month`, `health`, every `social_analytics` operation | not needed |
+| `list`, `inspect`, `list_assets`, `check_fit`, `prepare`, `list_month`, `health`, `sync`, every `social_analytics` operation | not needed |
 | `create` | not needed — a draft goes nowhere |
 | `schedule`, `publish`, `retry`, `update`, `attach`, `detach`, `delete` | **the operator's** |
 
@@ -164,7 +227,12 @@ operator approves the copy and the time once — not again at the moment.
   days and the platforms restate them. Nothing is final.
 - The networks stay apart. A combined figure is a rough one: the three
   platforms count reach differently. `totals` is that rough figure;
-  `by_network` is the honest one.
+  `by_network` is the honest one. A row is a **channel** — the network and
+  the route to it — so the same network on two routes is two rows.
+- **An aggregator's numbers need the analytics add-on on a legacy plan** — a
+  usage-based plan includes them. Without them the numbers stay empty and
+  the note says why. And one aggregate for the whole aggregator post covers
+  every network in it, not the one account.
 
 ## What not to do
 
@@ -178,3 +246,8 @@ operator approves the copy and the time once — not again at the moment.
 - Do not call a draft ready. A draft without an account has no platform
   to go to, and the operator has to know that before they wait for a post
   that was never going to go out.
+- Do not promise an aggregator a time of its own. An aggregator target goes
+  out at the moment it is due, like every other target.
+- Do not work around a duplicate refusal. Zernio refuses the same content
+  on the same account within 24 hours, and its own message is on the target
+  for the operator to read.

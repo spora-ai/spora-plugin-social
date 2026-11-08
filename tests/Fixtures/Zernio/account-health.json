@@ -1,0 +1,23 @@
+{
+    "accountId": "id_001",
+    "platform": "bluesky",
+    "username": "name_001",
+    "displayName": "name_002",
+    "status": "healthy",
+    "tokenStatus": {
+        "valid": true,
+        "expiresAt": null,
+        "expiresIn": null,
+        "needsRefresh": false
+    },
+    "permissions": {
+        "posting": [],
+        "analytics": [],
+        "optional": [],
+        "canPost": true,
+        "canFetchAnalytics": false,
+        "missingRequired": []
+    },
+    "issues": [],
+    "recommendations": []
+}

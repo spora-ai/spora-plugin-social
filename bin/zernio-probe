@@ -1,0 +1,548 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * The Zernio probe: what the API actually answers, redacted.
+ *
+ * There is no sandbox. Every shape this plugin has to parse — the account
+ * object, the create-post response, the analytics response — has to come from
+ * a real call, and the call has to be made with a real key by the operator.
+ * This script makes that call and writes down what came back.
+ *
+ * **The redacted files are the fixtures.** The plugin's tests never talk to
+ * Zernio: they run against a mocked HTTP client, and the mock answers with
+ * what this script recorded. So the redacted output is what goes into the
+ * repository, and it has to keep the shape — every key, every type, every
+ * nesting — while carrying nothing of the operator's.
+ *
+ * The redaction maps an id to `id_001`, a name to `name_001`, and a URL to
+ * its host with the path redacted. **One map for the whole run**, so the same
+ * account is the same placeholder in every file — a fixture that names an
+ * account one way in `accounts.json` and another way in `create-post.json`
+ * would not match.
+ *
+ * The raw responses are written next to the redacted ones and are **not** for
+ * committing. `build/` is gitignored; delete that directory when you are done.
+ *
+ * Usage:
+ *
+ *   php bin/zernio-probe [--publish-to=<accountId>] [--network=bluesky]
+ *
+ * The key is read from the `ZERNIO_API_KEY` environment variable, or from
+ * the first line of stdin. **It is never taken as an argument**: an
+ * argument lands in the shell's history and in the process list, and both
+ * are readable by every other process on the machine. Set the variable
+ * without typing the key into the history —
+ * `read -rs ZERNIO_API_KEY && export ZERNIO_API_KEY` in bash — or pipe the
+ * key in.
+ */
+
+use Symfony\Component\HttpClient\HttpClient;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$root = dirname(__DIR__);
+
+chdir($root);
+
+const DEFAULT_BASE_URL = 'https://zernio.com/api/v1';
+
+const PROBE_CONTENT = 'Spora probe post. Safe to delete.';
+
+/**
+ * The keys whose value is an id, whether or not it looks like one.
+ *
+ * A 24-character hexadecimal value is caught by its shape, but not every id
+ * has that shape: `platformUserId` is the account's id *on its own platform*
+ * — the operator's identity there — and it is a bare number on Instagram.
+ */
+const ID_KEYS = [
+    '_id', 'id', 'accountId', 'postId', 'profileId', 'userId', 'platformUserId',
+    'platformPostId', 'externalPostId', 'existingPostId', 'oauthAppId', 'videoId',
+    'parentId', 'connectedByUserId',
+];
+
+/**
+ * The keys whose value is a name.
+ */
+const NAME_KEYS = [
+    'displayName', 'username', 'name', 'accountUsername', 'display_name',
+    'firstName', 'lastName', 'fullName', 'teamName',
+];
+
+/**
+ * The keys whose whole value is dropped.
+ *
+ * `metadata` is a platform-specific blob whose fields vary by platform, so
+ * what is in it is not knowable from here — it is replaced whole.
+ */
+const DROPPED_KEYS = ['metadata', 'scopeAreas', 'platformSpecificData'];
+
+/**
+ * The probe's own options, read once.
+ *
+ * The key is not one of them: it comes from the environment or from
+ * stdin, and never from the command line.
+ *
+ * @return array{baseUrl: string, out: string, publishTo: string, network: string, content: string}
+ */
+function probeOptions(array $argv): array
+{
+    $options = [
+        'baseUrl'   => (string) (getenv('ZERNIO_BASE_URL') ?: DEFAULT_BASE_URL),
+        'out'       => 'build/zernio-probe',
+        'publishTo' => '',
+        'network'   => '',
+        'content'   => PROBE_CONTENT,
+    ];
+
+    foreach (array_slice($argv, 1) as $argument) {
+        if (!str_starts_with($argument, '--')) {
+            continue;
+        }
+
+        $pair = explode('=', substr($argument, 2), 2);
+        $name = $pair[0];
+        $value = $pair[1] ?? '';
+
+        if ($name === 'key') {
+            // The key is in the shell's history and in the process list
+            // by now, whether the script reads it or not. Say so, and
+            // do not pretend the argument was ignored.
+            echo "\n  The key does not go on the command line. Set ZERNIO_API_KEY,\n";
+            echo "  or pipe the key in on stdin.\n\n";
+
+            exit(1);
+        }
+
+        if (array_key_exists($name, $options)) {
+            $options[$name] = $value;
+        }
+    }
+
+    return $options;
+}
+
+/**
+ * The API key, read from the environment or from stdin.
+ *
+ * Neither is in the shell's history and neither is in the process list,
+ * and that is the whole reason the key is not an argument.
+ */
+function probeKey(): string
+{
+    $key = trim((string) (getenv('ZERNIO_API_KEY') ?: ''));
+
+    if ($key !== '') {
+        return $key;
+    }
+
+    // From stdin, when something is piped in: the key is a line, and a
+    // line is in neither the history nor the process list.
+    if (!stream_isatty(STDIN)) {
+        $line = fgets(STDIN);
+
+        return $line === false ? '' : trim($line);
+    }
+
+    return '';
+}
+
+/**
+ * One call, and what it answered.
+ *
+ * @param array<string, mixed> $query
+ * @param array<string, mixed> $body
+ * @return array{status: int, body: array<string, mixed>, raw: string}
+ */
+function zernioCall(
+    \Symfony\Contracts\HttpClient\HttpClientInterface $client,
+    string $method,
+    string $path,
+    string $key,
+    string $baseUrl,
+    array $query = [],
+    array $body = [],
+    array $headers = [],
+): array {
+    $url = rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
+
+    $options = [
+        'headers' => array_merge([
+            'Authorization' => 'Bearer ' . $key,
+            'Accept'        => 'application/json',
+        ], $headers),
+    ];
+
+    if ($query !== []) {
+        $options['query'] = $query;
+    }
+
+    if ($body !== []) {
+        $options['json'] = $body;
+    }
+
+    $response = $client->request($method, $url, $options);
+    $status = $response->getStatusCode();
+    $raw = $response->getContent(false);
+
+    $decoded = json_decode($raw, true);
+
+    return [
+        'status' => $status,
+        'body'   => is_array($decoded) ? $decoded : [],
+        'raw'    => $raw,
+    ];
+}
+
+/**
+ * The account the probe publishes to.
+ *
+ * @param list<array<string, mixed>> $accounts
+ * @return array<string, mixed>|null
+ */
+function pickAccount(array $accounts, string $accountId, string $network): ?array
+{
+    foreach ($accounts as $account) {
+        if ($accountId !== '' && (string) ($account['_id'] ?? '') === $accountId) {
+            return $account;
+        }
+    }
+
+    if ($network === '') {
+        return null;
+    }
+
+    foreach ($accounts as $account) {
+        if (strtolower((string) ($account['platform'] ?? '')) === strtolower($network)) {
+            return $account;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Every value that identifies something, and the placeholder it becomes.
+ *
+ * The categories are coarse on purpose: an id looks like an id, a name like a
+ * name, and a URL keeps its host. What the fixtures need is the *shape*, not
+ * the value.
+ *
+ * **One map for the whole run**, so the same account is the same placeholder
+ * in every file.
+ *
+ * The keys are the value with a null byte in front of it. A bare value as the
+ * key would be cast to an integer by PHP when the value is a number — and
+ * `platformUserId` is a number on Instagram — and an integer key cannot be
+ * looked up as a string.
+ *
+ * @param list<array<string, mixed>> $sources
+ * @return array<string, string>
+ */
+function redactionMap(array $sources): array
+{
+    $map = [];
+    $idCounter = 0;
+    $nameCounter = 0;
+
+    $visit = function (mixed $value, string $key) use (&$visit, &$map, &$idCounter, &$nameCounter): void {
+        if (is_array($value)) {
+            foreach ($value as $childKey => $child) {
+                $visit($child, is_string($childKey) ? $childKey : $key);
+            }
+
+            return;
+        }
+
+        if (!is_string($value) || $value === '') {
+            return;
+        }
+
+        if (str_contains($value, '://')) {
+            // A URL keeps its host — it is public — and loses its path.
+            $host = (string) (parse_url($value, PHP_URL_HOST) ?: 'example.test');
+            $map["\0" . $value] = 'https://' . $host . '/redacted';
+
+            return;
+        }
+
+        if (preg_match('/^[0-9a-f]{24}$/i', $value) === 1) {
+            $idCounter++;
+            $map["\0" . $value] = sprintf('id_%03d', $idCounter);
+
+            return;
+        }
+
+        if (in_array($key, ID_KEYS, true)) {
+            $idCounter++;
+            $map["\0" . $value] = sprintf('id_%03d', $idCounter);
+
+            return;
+        }
+
+        if (in_array($key, NAME_KEYS, true)) {
+            $nameCounter++;
+            $map["\0" . $value] = sprintf('name_%03d', $nameCounter);
+        }
+    };
+
+    foreach ($sources as $source) {
+        $visit($source, '');
+    }
+
+    return $map;
+}
+
+/**
+ * The same tree, with every identifying value replaced and the keys whose
+ * whole value is dropped replaced whole.
+ *
+ * @param array<string, mixed> $source
+ * @param array<string, string> $map
+ * @return array<string, mixed>
+ */
+function redactDropped(array $source, array $map): array
+{
+    $walk = function (mixed $value, string $key) use (&$walk, $map): mixed {
+        if (is_array($value)) {
+            $out = [];
+
+            foreach ($value as $childKey => $child) {
+                if (is_string($childKey) && in_array($childKey, DROPPED_KEYS, true)) {
+                    $out[$childKey] = ['redacted' => true];
+
+                    continue;
+                }
+
+                $out[$childKey] = $walk($child, is_string($childKey) ? $childKey : $key);
+            }
+
+            return $out;
+        }
+
+        if (!is_string($value) || $value === '') {
+            return $value;
+        }
+
+        if (isset($map["\0" . $value])) {
+            return $map["\0" . $value];
+        }
+
+        // A URL that embeds an id or a name keeps its shape but loses them.
+        foreach ($map as $from => $to) {
+            $needle = substr($from, 1);
+
+            if (strlen($needle) > 2 && str_contains($value, $needle)) {
+                $value = str_replace($needle, $to, $value);
+            }
+        }
+
+        return $value;
+    };
+
+    $redacted = $walk($source, '');
+
+    return is_array($redacted) ? $redacted : [];
+}
+
+echo "\n";
+echo "  Spora social — the Zernio probe\n";
+echo "\n";
+
+$options = probeOptions($argv);
+
+$key = probeKey();
+
+if ($key === '') {
+    echo "  No API key. Set ZERNIO_API_KEY, or pipe the key in on stdin.\n\n";
+    exit(1);
+}
+
+echo '  Base URL: ' . $options['baseUrl'] . "\n";
+echo '  Output:   ' . $options['out'] . "\n";
+echo "\n";
+
+$client = HttpClient::create(['timeout' => 60]);
+
+/** @var array<string, array{status: int, body: array<string, mixed>}> $responses */
+$responses = [];
+
+// The accounts. Everything else is keyed off them.
+$accountsResponse = zernioCall(
+    $client,
+    'GET',
+    '/accounts',
+    $key,
+    $options['baseUrl'],
+    ['category' => 'social'],
+);
+
+if ($accountsResponse['status'] === 401) {
+    echo "  Zernio refused the key (401). Check it in your Zernio dashboard.\n\n";
+    exit(1);
+}
+
+if ($accountsResponse['status'] >= 400) {
+    echo '  Zernio answered ' . $accountsResponse['status'] . " for the accounts list.\n";
+    echo '  ' . substr($accountsResponse['raw'], 0, 500) . "\n\n";
+    exit(1);
+}
+
+$responses['accounts'] = $accountsResponse;
+
+$accounts = array_values(array_filter(
+    is_array($accountsResponse['body']['accounts'] ?? null) ? $accountsResponse['body']['accounts'] : [],
+    'is_array',
+));
+
+echo '  Accounts: ' . count($accounts) . "\n";
+
+$platforms = [];
+
+foreach ($accounts as $account) {
+    $platforms[(string) ($account['platform'] ?? '?')] = true;
+}
+
+if ($platforms !== []) {
+    echo '  Platforms: ' . implode(', ', array_keys($platforms)) . "\n";
+}
+
+echo "\n";
+
+// What an account carries. The follower count is only there with the
+// analytics add-on, so its presence is worth knowing.
+$first = $accounts[0] ?? null;
+
+if ($first !== null) {
+    echo '  An account carries: ' . implode(', ', array_keys($first)) . "\n";
+    echo '  …and a follower count: ' . (array_key_exists('followersCount', $first) ? 'yes' : 'no') . "\n\n";
+}
+
+$healthAccount = pickAccount($accounts, $options['publishTo'], $options['network']) ?? $first;
+
+if ($healthAccount !== null) {
+    $healthResponse = zernioCall(
+        $client,
+        'GET',
+        '/accounts/' . rawurlencode((string) $healthAccount['_id']) . '/health',
+        $key,
+        $options['baseUrl'],
+    );
+
+    echo '  Health: ' . $healthResponse['status'] . "\n";
+
+    $responses['account-health'] = $healthResponse;
+}
+
+// The follower stats. It answers 402 without the analytics add-on, which is a
+// shape worth having in the fixtures too.
+//
+// The parameter is `accountIds` — plural, comma-separated. The singular is
+// not a parameter and is ignored.
+if ($healthAccount !== null) {
+    $followerResponse = zernioCall(
+        $client,
+        'GET',
+        '/accounts/follower-stats',
+        $key,
+        $options['baseUrl'],
+        ['accountIds' => (string) $healthAccount['_id']],
+    );
+
+    echo '  Follower stats: ' . $followerResponse['status'] . "\n";
+
+    $responses['follower-stats'] = $followerResponse;
+}
+
+// A real publish. This is the one that costs something and puts a post on a
+// network, so it only happens when the operator names an account.
+if ($options['publishTo'] !== '' || $options['network'] !== '') {
+    $target = pickAccount($accounts, $options['publishTo'], $options['network']);
+
+    if ($target === null) {
+        echo "\n  No account matched --publish-to=" . $options['publishTo']
+            . ' --network=' . $options['network'] . ". Nothing was published.\n\n";
+    } else {
+        $platform = (string) ($target['platform'] ?? '');
+        $accountId = (string) $target['_id'];
+
+        echo "\n  Publishing to " . $platform . " (account " . $accountId . ") — a real post.\n";
+
+        $postResponse = zernioCall(
+            $client,
+            'POST',
+            '/posts',
+            $key,
+            $options['baseUrl'],
+            [],
+            [
+                'platforms'  => [['platform' => $platform, 'accountId' => $accountId]],
+                'content'    => $options['content'],
+                'publishNow' => true,
+            ],
+            ['Idempotency-Key' => sprintf('spora-probe-%s', bin2hex(random_bytes(8)))],
+        );
+
+        echo '  Status: ' . $postResponse['status'] . "\n";
+
+        $responses['create-post'] = $postResponse;
+
+        $createdId = (string) ($postResponse['body']['post']['_id'] ?? '');
+
+        if ($createdId !== '') {
+            $analyticsResponse = zernioCall(
+                $client,
+                'GET',
+                '/analytics',
+                $key,
+                $options['baseUrl'],
+                ['postId' => $createdId],
+            );
+
+            echo '  Analytics: ' . $analyticsResponse['status'] . "\n";
+
+            $responses['analytics'] = $analyticsResponse;
+
+            echo "\n  Look at build/zernio-probe/redacted/analytics.json: does it carry a\n";
+            echo "  number per network, or one aggregate for the post? That is the one\n";
+            echo "  question the plugin's answer depends on.\n";
+        }
+    }
+}
+
+// One map for the whole run, so the same account is the same placeholder in
+// every file.
+$map = redactionMap(array_values(array_map(
+    static fn(array $response): array => $response['body'],
+    $responses,
+)));
+
+$rawDir = $options['out'] . '/raw';
+$redactedDir = $options['out'] . '/redacted';
+
+foreach ([$rawDir, $redactedDir] as $dir) {
+    if (!is_dir($dir) && !mkdir($dir, 0o755, true) && !is_dir($dir)) {
+        throw new RuntimeException('Could not create ' . $dir);
+    }
+}
+
+$encoded = static fn(mixed $value): string => (string) json_encode(
+    $value,
+    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+);
+
+foreach ($responses as $name => $response) {
+    file_put_contents($rawDir . '/' . $name . '.json', $encoded($response['body']) . "\n");
+    file_put_contents($redactedDir . '/' . $name . '.json', $encoded(redactDropped($response['body'], $map)) . "\n");
+
+    echo '  wrote ' . $redactedDir . '/' . $name . ".json\n";
+}
+
+echo "\n";
+echo '  The redacted files are the fixtures. Copy them into';
+echo " tests/Fixtures/Zernio/ when the branch is ready for them.\n";
+echo '  The raw files are yours and nobody else\'s — delete ' . $options['out'] . "/raw when you are done.\n";
+echo "\n";

@@ -97,6 +97,36 @@ it('answers with one row per network', function () {
         ->and($networks['instagram'])->toBe(500);
 });
 
+it('answers with one row per channel, so two routes to one network are two rows', function () {
+    $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
+
+    $direct = accountOnRoute($principalId, 'linkedin', 'direct', 'urn:li:organization:1');
+    $aggregated = accountOnRoute($principalId, 'linkedin', 'zernio', 'urn:li:organization:2');
+
+    $post = postService()->create($principalId, [
+        'body'        => 'We shipped…',
+        'account_ids' => [$direct->id, $aggregated->id],
+    ]);
+
+    foreach ($post->targets()->get() as $target) {
+        $row = new Spora\Plugins\Social\Model\SocialPostMetric();
+        $row->post_id = $post->id;
+        $row->target_id = $target->id;
+        $row->metric_date = gmdate('Y-m-d');
+        $row->reach = 420;
+        $row->measured_at = Carbon::now();
+        $row->save();
+    }
+
+    $tool = new SocialAnalyticsTool(metricsService([]));
+
+    $result = $tool->execute(['action' => 'network_comparison'], 1, null, principalContext($principalId));
+
+    expect($result->data['by_network'])->toHaveCount(2)
+        ->and($result->content)->toContain('direct:linkedin')
+        ->and($result->content)->toContain('zernio:linkedin');
+});
+
 it('answers with an error when a post id is missing', function () {
     $principalId = createUserPrincipal(bootAuth(bootAuthLayer()));
 

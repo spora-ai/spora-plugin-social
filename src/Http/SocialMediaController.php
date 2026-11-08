@@ -8,6 +8,7 @@ use Spora\Auth\AuthService;
 use Spora\Models\MediaAsset;
 use Spora\Models\MediaDerivative;
 use Spora\Plugins\Social\Exception\SocialException;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPlatform;
 use Spora\Plugins\Social\Service\MediaPipeline;
 use Spora\Plugins\Social\Service\PlatformFit;
@@ -72,7 +73,7 @@ final class SocialMediaController extends AbstractSocialController
     }
 
     /**
-     * Whether an asset fits a platform, and what to do about it when it
+     * Whether an asset fits a channel, and what to do about it when it
      * does not.
      */
     public function checkFit(Request $request): JsonResponse
@@ -83,33 +84,33 @@ final class SocialMediaController extends AbstractSocialController
 
             $asset = $this->media->findAsset($this->assetId($body), $principalId);
 
-            $platforms = [];
-            foreach (is_array($body['platforms'] ?? null) ? $body['platforms'] : [] as $name) {
-                $platform = is_string($name) ? SocialPlatform::tryFromName($name) : null;
-                if ($platform !== null) {
-                    $platforms[] = $platform;
-                }
+            $channels = $this->channels($body);
+
+            if ($channels === []) {
+                // The channels the plugin publishes on itself. The
+                // aggregator's own are not the default: `zernio:youtube`
+                // takes no image, so the default answer for an ordinary
+                // image would flip from "fits" to "does not fit".
+                $channels = PlatformFit::nativeChannels();
             }
 
-            if ($platforms === []) {
-                $platforms = SocialPlatform::cases();
-            }
-
-            $perPlatform = [];
+            $perChannel = [];
             $fits = true;
 
-            foreach ($platforms as $platform) {
+            foreach ($channels as $channel) {
                 // The media as the platform receives it: the backend
                 // converts a PNG for Instagram before it publishes, so
                 // judging the original would warn about a post that goes
                 // out.
-                $prepared = $this->media->prepareForFit($asset, $platform);
+                $prepared = $this->media->prepareForFit($asset, $channel);
 
-                $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+                $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
                 $fits = $fits && $fit['fits'];
 
-                $perPlatform[] = [
-                    'platform'  => $platform->value,
+                $perChannel[] = [
+                    'channel'   => $channel->key(),
+                    'network'   => $channel->network,
+                    'via'       => $channel->via,
                     'fits'      => $fit['fits'],
                     'reasons'   => $fit['reasons'],
                     'remedy'    => $fit['remedy'],
@@ -118,10 +119,56 @@ final class SocialMediaController extends AbstractSocialController
             }
 
             return $this->ok([
-                'fits'         => $fits,
-                'per_platform' => $perPlatform,
+                'fits'        => $fits,
+                'per_channel' => $perChannel,
+                // The key this endpoint answered with before the channels
+                // had names of their own. It is kept for one more
+                // release, so a caller that still reads it is not left
+                // with nothing.
+                'per_platform' => array_map(
+                    static fn(array $entry): array => [
+                        'platform'  => $entry['network'],
+                        'fits'      => $entry['fits'],
+                        'reasons'   => $entry['reasons'],
+                        'remedy'    => $entry['remedy'],
+                        'mime_type' => $entry['mime_type'],
+                    ],
+                    $perChannel,
+                ),
             ]);
         });
+    }
+
+    /**
+     * The channels the request asks about.
+     *
+     * The `platforms` key is the one this endpoint carried before the
+     * channels had names of their own. It is accepted for one more
+     * release, and a bare network name in it means the plugin's own
+     * route to that network — the route it meant before the rename.
+     *
+     * @param  array<string, mixed> $body
+     * @return list<SocialChannel>
+     */
+    private function channels(array $body): array
+    {
+        $named = is_array($body['channels'] ?? null) ? $body['channels'] : [];
+
+        if ($named === []) {
+            $named = is_array($body['platforms'] ?? null) ? $body['platforms'] : [];
+        }
+
+        $channels = [];
+
+        foreach ($named as $key) {
+            $channel = is_string($key) ? SocialChannel::fromKey($key) : null;
+
+            if ($channel !== null) {
+                $channels[] = $channel;
+            }
+        }
+
+        return $channels;
     }
 
     /**
@@ -137,7 +184,7 @@ final class SocialMediaController extends AbstractSocialController
                 ?? SocialPlatform::Instagram;
 
             $asset = $this->media->findAsset($this->assetId($body), $principalId);
-            $prepared = $this->media->prepare($asset, $platform);
+            $prepared = $this->media->prepare($asset, SocialChannel::direct($platform->value));
 
             return $this->ok([
                 'media_asset_id' => $prepared->mediaAssetId,

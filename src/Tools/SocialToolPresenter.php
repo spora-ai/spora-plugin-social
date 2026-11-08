@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Spora\Plugins\Social\Tools;
 
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Service\PreparedMedia;
 
 /**
@@ -177,21 +178,21 @@ final class SocialToolPresenter
     }
 
     /**
-     * The fit of an asset, per platform.
+     * The fit of an asset, per channel.
      *
      * The verdict is the one the publish will reach: the media is
      * judged as the platform receives it, so a PNG that the backend
      * converts for Instagram fits there.
      *
-     * @param list<array<string, mixed>> $perPlatform
+     * @param list<array<string, mixed>> $perChannel
      */
-    public static function fit(bool $fits, array $perPlatform): string
+    public static function fit(bool $fits, array $perChannel): string
     {
         $lines = [$fits
-            ? 'The asset fits every platform asked about.'
-            : 'The asset does not fit every platform asked about.'];
+            ? 'The asset fits every channel asked about.'
+            : 'The asset does not fit every channel asked about.'];
 
-        foreach ($perPlatform as $entry) {
+        foreach ($perChannel as $entry) {
             $lines[] = '- ' . self::fitLine($entry);
         }
 
@@ -273,7 +274,13 @@ final class SocialToolPresenter
         return sprintf(
             'account %d (%s) — %s',
             (int) ($account['account_id'] ?? $account['id'] ?? 0),
-            (string) ($account['platform'] ?? ''),
+            // The channel and not the network: the same network on two
+            // routes is two accounts, and two lines that both say
+            // "linkedin" say nothing about which is which.
+            SocialChannel::keyOf(
+                (string) ($account['via'] ?? ''),
+                (string) ($account['platform'] ?? ''),
+            ),
             $label,
         );
     }
@@ -295,6 +302,11 @@ final class SocialToolPresenter
             $parts[] = $when;
         }
 
+        $channels = self::channelsOf($post);
+        if ($channels !== '') {
+            $parts[] = $channels;
+        }
+
         $title = trim((string) ($post['title'] ?? ''));
         if ($title !== '') {
             $parts[] = '"' . $title . '"';
@@ -309,15 +321,39 @@ final class SocialToolPresenter
     }
 
     /**
+     * The channels a post goes to, named.
+     *
+     * The calendar answers what is going out and where, and a post that
+     * named only the network would not say which route it goes out
+     * through. Two accounts of one network are two channels.
+     *
+     * @param array<string, mixed> $post
+     */
+    private static function channelsOf(array $post): string
+    {
+        $keys = [];
+
+        foreach ((array) ($post['channels'] ?? []) as $channel) {
+            $key = (string) ($channel['key'] ?? '');
+
+            if ($key !== '' && !in_array($key, $keys, true)) {
+                $keys[] = $key;
+            }
+        }
+
+        return implode(', ', $keys);
+    }
+
+    /**
      * @param array<string, mixed> $entry
      */
     private static function fitLine(array $entry): string
     {
-        $platform = (string) ($entry['platform'] ?? '');
+        $channel = (string) ($entry['channel'] ?? '');
         $mime = (string) ($entry['mime_type'] ?? '');
 
         if (($entry['fits'] ?? false) === false) {
-            $line = $platform . ': does not fit — ' . implode(' ', (array) ($entry['reasons'] ?? []));
+            $line = $channel . ': does not fit — ' . implode(' ', (array) ($entry['reasons'] ?? []));
 
             $remedy = $entry['remedy'] ?? null;
             if (is_string($remedy) && $remedy !== '') {
@@ -329,14 +365,14 @@ final class SocialToolPresenter
 
         $line = sprintf(
             '%s: fits (%s, %s bytes)',
-            $platform,
+            $channel,
             $mime,
             (string) ($entry['size_bytes'] ?? 0),
         );
 
         $convertedFrom = $entry['converted_from'] ?? null;
         if (is_string($convertedFrom) && $convertedFrom !== '') {
-            $line .= ' — ' . $convertedFrom . ' is converted to ' . $mime . ' for ' . $platform;
+            $line .= ' — ' . $convertedFrom . ' is converted to ' . $mime . ' for ' . $channel;
         }
 
         return $line;
@@ -348,7 +384,13 @@ final class SocialToolPresenter
     private static function targetOutcome(array $target): string
     {
         $parts = [
-            (string) ($target['platform'] ?? ''),
+            // The channel and not the network: the same network on two
+            // routes is two accounts, and two lines that both say
+            // "linkedin" tell the agent nothing about which went out.
+            SocialChannel::keyOf(
+                (string) ($target['via'] ?? ''),
+                (string) ($target['platform'] ?? ''),
+            ),
             'account ' . (int) ($target['account_id'] ?? 0),
             (string) ($target['status'] ?? ''),
         ];

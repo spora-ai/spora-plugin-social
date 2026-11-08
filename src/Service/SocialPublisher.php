@@ -7,9 +7,10 @@ namespace Spora\Plugins\Social\Service;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
+use Spora\Plugins\Social\Aggregator\AggregatorRoute;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialAccountKind;
-use Spora\Plugins\Social\Model\SocialPlatform;
+use Spora\Plugins\Social\Model\SocialChannel;
 use Spora\Plugins\Social\Model\SocialPost;
 use Spora\Plugins\Social\Model\SocialPostTarget;
 use Spora\Plugins\Social\Publish\DeleteRequest;
@@ -31,6 +32,10 @@ use Throwable;
  * One target failing does not stop the others — the whole point of the
  * per-target rows is that a post can succeed on one network and fail on
  * another.
+ *
+ * This is the **direct** path: the plugin's own networks, published one
+ * target at a time. The aggregator's route is {@see AggregatorRoute}'s
+ * business.
  */
 final class SocialPublisher
 {
@@ -41,6 +46,7 @@ final class SocialPublisher
         private readonly SocialConnectionService $connections,
         private readonly MediaPipeline $media,
         private readonly PublisherRegistry $publishers,
+        private readonly AggregatorRoute $route,
     ) {}
 
     /**
@@ -95,6 +101,11 @@ final class SocialPublisher
      * failed when none did. A target that was taken back down is not a
      * failure — the post went out and came back — so a post with nothing
      * left on any network is cancelled rather than failed.
+     *
+     * A target still in `publishing` is a publish whose outcome is not
+     * known: the post is going out, not refused. `failed` means the
+     * platform answered and said no, and a post row that says otherwise
+     * invites the operator to publish it a second time.
      */
     public function deriveStatus(SocialPost $post): string
     {
@@ -104,13 +115,15 @@ final class SocialPublisher
             return SocialPost::STATUS_DRAFT;
         }
 
-        $published = $this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHED);
-
-        if ($published > 0) {
-            return $this->publishedStatus($published, $targets->count());
+        if ($this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHING) > 0) {
+            return SocialPost::STATUS_PUBLISHING;
         }
 
-        return $this->unpublishedStatus($targets);
+        $published = $this->countWithStatus($targets, SocialPostTarget::STATUS_PUBLISHED);
+
+        return $published > 0
+            ? $this->publishedStatus($published, $targets->count())
+            : $this->unpublishedStatus($targets);
     }
 
     /**
@@ -221,16 +234,36 @@ final class SocialPublisher
         $post->status = SocialPost::STATUS_PUBLISHING;
         $post->save();
 
+        $direct = [];
+        $aggregated = [];
+
         foreach ($targets as $target) {
             if ($onlyFailed && $target->status !== SocialPostTarget::STATUS_FAILED) {
                 continue;
             }
 
-            if (!$onlyFailed && $target->status === SocialPostTarget::STATUS_PUBLISHED) {
+            if (!$onlyFailed && $this->isSettled($target)) {
                 continue;
             }
 
+            // The plugin's own networks publish one target at a time, as
+            // they always did. The aggregator's targets go out together:
+            // one cross-post, one call.
+            if ($target->channel()->isDirect()) {
+                $direct[] = $target;
+
+                continue;
+            }
+
+            $aggregated[] = $target;
+        }
+
+        foreach ($direct as $target) {
             $this->publishTarget($post, $target);
+        }
+
+        if ($aggregated !== []) {
+            $this->route->publish($post, $aggregated);
         }
 
         $post = $post->fresh() ?? $post;
@@ -243,6 +276,29 @@ final class SocialPublisher
         $post->save();
 
         return $post;
+    }
+
+    /**
+     * Whether the target is not to be published again.
+     *
+     * A published target is done. A target in `publishing` that carries
+     * an idempotency key is a publish that started and never finished:
+     * the reconciliation owns it and replays it under the key it went
+     * out with. A second attempt here would mint a **new** key, and a
+     * new key is a new post — a double-publish.
+     *
+     * A target in `publishing` with no key is a different case: it was
+     * never given one, so there is nothing to replay, and it is
+     * publishable.
+     */
+    private function isSettled(SocialPostTarget $target): bool
+    {
+        if ($target->status === SocialPostTarget::STATUS_PUBLISHED) {
+            return true;
+        }
+
+        return $target->status === SocialPostTarget::STATUS_PUBLISHING
+            && (string) $target->idempotency_key !== '';
     }
 
     /**
@@ -260,32 +316,33 @@ final class SocialPublisher
 
         try {
             $account = $this->connections->findAccount((int) $target->account_id, (int) $post->principal_id);
-            $platform = SocialPlatform::tryFromName((string) $target->platform);
+            $channel = $target->channel();
 
-            if ($platform === null) {
-                throw SocialException::validation('This target has an unknown platform.');
-            }
+            // The adapter is resolved first: a channel nothing can
+            // publish is a different failure from a body that is too
+            // long, and it is the one the operator has to act on.
+            $publisher = $this->publishers->for($channel);
 
-            $body = $this->bodyFor($post, $platform);
+            $body = $this->bodyFor($post, $channel);
 
-            // The text is judged against the platform it is going to, with
-            // that platform's own body: one post aimed at Instagram and
+            // The text is judged against the channel it is going to, with
+            // that channel's own body: one post aimed at Instagram and
             // Facebook carries two bodies, and each has its own limit. The
             // hashtags are part of the text that goes out, so they are
             // counted against the limit as well.
-            $bodyFit = PlatformFit::checkBody($platform, $body);
+            $bodyFit = PlatformFit::checkBody($channel, $body);
             if (!$bodyFit['fits']) {
                 throw SocialException::validation(trim(
                     implode(' ', $bodyFit['reasons']) . ' ' . (string) $bodyFit['remedy'],
                 ));
             }
 
-            $result = $this->publishers->for($platform)->publish(new PublishRequest(
+            $result = $publisher->publish(new PublishRequest(
                 externalId: (string) $account->external_id,
                 kind: SocialAccountKind::from((string) $account->kind),
                 accessToken: $this->connections->tokenFor($account),
                 body: $body,
-                media: $this->prepareMedia($post, $platform),
+                media: $this->prepareMedia($post, $channel),
                 // The container is written down as soon as the platform has
                 // one, because the target is in `publishing` until the
                 // publish is done — and a publish that dies here leaves a
@@ -347,17 +404,29 @@ final class SocialPublisher
                 throw SocialException::conflict('This target has no account to delete with.');
             }
 
-            $platform = SocialPlatform::tryFromName((string) $target->platform);
+            $channel = $target->channel();
 
-            if ($platform === null) {
-                throw SocialException::validation('This target has an unknown platform.');
+            // The aggregator takes the post down itself, and it needs the
+            // account id: the endpoint refuses a post that reached
+            // several accounts of one network with `409
+            // ambiguous_account`, and the operator must never see that.
+            if (!$channel->isDirect()) {
+                $error = $this->route->unpublish($target);
+
+                if ($error !== null) {
+                    throw SocialException::platform($error, 'PLATFORM_REQUEST_FAILED');
+                }
+
+                return;
             }
+
+            $publisher = $this->publishers->for($channel);
 
             if ($target->external_id === null || $target->external_id === '') {
                 throw SocialException::conflict('This target has no published id to delete.');
             }
 
-            $result = $this->publishers->for($platform)->delete(new DeleteRequest(
+            $result = $publisher->delete(new DeleteRequest(
                 externalId: (string) $target->external_id,
                 kind: SocialAccountKind::from((string) $account->kind),
                 accessToken: $this->connections->tokenFor($account),
@@ -380,19 +449,19 @@ final class SocialPublisher
     }
 
     /**
-     * The attachment the platform will receive, checked against that
-     * platform's rules.
+     * The attachment the channel will receive, checked against that
+     * channel's rules.
      *
      * The check runs on the prepared media, not on the original: for
      * Instagram the prepared media is the JPEG derivative, which is what
      * the platform will actually see.
      */
-    private function prepareMedia(SocialPost $post, SocialPlatform $platform): ?PublishMedia
+    private function prepareMedia(SocialPost $post, SocialChannel $channel): ?PublishMedia
     {
         $attachment = $post->media()->orderBy('position')->first();
 
         if ($attachment === null) {
-            $rule = PlatformFit::rule($platform);
+            $rule = PlatformFit::rule($channel);
 
             if ($rule['media_required']) {
                 throw SocialException::validation(
@@ -413,9 +482,9 @@ final class SocialPublisher
         }
 
         $asset = $this->media->findAsset((string) $attachment->media_asset_id, (int) $post->principal_id);
-        $prepared = $this->media->prepare($asset, $platform);
+        $prepared = $this->media->prepare($asset, $channel);
 
-        $fit = PlatformFit::check($platform, $prepared->mimeType, $prepared->sizeBytes);
+        $fit = PlatformFit::check($channel, $prepared->mimeType, $prepared->sizeBytes);
         if (!$fit['fits']) {
             throw SocialException::validation(trim(
                 implode(' ', $fit['reasons']) . ' ' . (string) $fit['remedy'],
@@ -430,19 +499,8 @@ final class SocialPublisher
         );
     }
 
-    private function bodyFor(SocialPost $post, SocialPlatform $platform): string
+    private function bodyFor(SocialPost $post, SocialChannel $channel): string
     {
-        $bodies = $post->platform_bodies;
-
-        $body = (string) $post->body;
-
-        if (is_array($bodies)) {
-            $specific = $bodies[$platform->value] ?? null;
-            if (is_string($specific) && $specific !== '') {
-                $body = $specific;
-            }
-        }
-
-        return PlatformFit::composeText($body, is_array($post->hashtags) ? $post->hashtags : []);
+        return (new PostBodies($post))->for($channel);
     }
 }
