@@ -263,6 +263,22 @@ function jpegBytes(): string
 }
 
 /**
+ * A WebP of a solid colour.
+ *
+ * LinkedIn takes no WebP, so the conversion path needs one of these.
+ */
+function webpBytes(): string
+{
+    $image = imagecreatetruecolor(8, 8);
+    imagefill($image, 0, 0, imagecolorallocate($image, 40, 160, 90));
+
+    ob_start();
+    imagewebp($image);
+
+    return (string) ob_get_clean();
+}
+
+/**
  * The real core derivative service, with core's own image producer
  * registered — the registry is populated by the host's container, which
  * this suite does not boot.

@@ -374,7 +374,9 @@ aggregator's limits are Zernio's, and they differ for the same network.
 
 An attachment that does not fit is flagged **on the attachment**, with the
 remedy named — "Convert to JPEG", "Compress" — because the operator can act
-on that and not on a platform's error text.
+on that and not on a platform's error text. The flag is for a file the plugin
+**cannot** fix: a file it can convert is converted first, and the flag does not
+appear.
 
 A post carries **one** attachment, and the backend refuses a second one:
 the publish sends one file, so a second would be a file the operator
@@ -389,8 +391,20 @@ post still holds on every channel, and the publish refuses a second file.
 The aggregator's limits are the ones *Zernio* enforces on top of that; the
 plugin's own rule is the one it enforces itself.
 
-Instagram takes no PNG at all, so the plugin converts it through core's own
-image producer before publishing.
+A file the network will not take is **converted, not refused**. The archive
+holds a producer that re-encodes an image, so a WebP on its way to LinkedIn
+becomes a JPEG on the way there — the first type the network accepts that
+the archive can make, and the original stays in the library untouched. The
+fit check judges the converted file, so the operator is not told to convert a
+file the plugin has already converted for them.
+
+The aggregator's own channels are the exception: one post goes to the
+aggregator as **one** file for a group of networks, so a file converted for
+one of them would not fit the others. The operator's file has to satisfy all
+of them, and the fit check says which one it does not.
+
+A file the archive cannot convert — an SVG, a video where a network wants
+an image — is left as it is, and the fit check says the truth about it.
 
 A post carries **one** body, and every platform publishes it. A platform
 gets a body of its own only where its readers, its conventions or its limit
