@@ -103,6 +103,18 @@ JPEG when it publishes. Use `social_media` action `prepare` to see what
 Instagram will get — the JPEG derivative, its asset id and the public URL
 it will fetch.
 
+**A file the network will not take is converted, not refused.** The same
+holds for every network the plugin publishes itself: a WebP on its way to
+LinkedIn becomes a JPEG on the way there, because the archive can re-encode
+an image and the first type the network accepts is the one it gets. Attach
+the **original** asset id — the original stays in the library and the
+conversion is a row beside it.
+
+The aggregator is the exception: one post goes to the aggregator as one file
+for a group of networks, so the file has to satisfy all of them. A file the
+archive cannot convert — an SVG, a video where a network wants an image — is
+left as it is, and `check_fit` says so.
+
 The character limits are the platforms' limits, and the plugin **enforces
 them at publish time**: a body over its platform's limit is refused, and the
 refusal names the platform and the numbers. Each platform is judged against
@@ -178,13 +190,15 @@ aggregate with a note saying it covers every network in the post.
 
 - Media comes from the **Spora Media Archive**. `list_assets` shows it;
   the ids are what you attach.
-- Attach the **original** asset id. The backend converts for Instagram and
-  publishes the bytes for LinkedIn and Facebook.
+- Attach the **original** asset id. The backend converts what the network
+  will not take — for Instagram and for every network the plugin publishes
+  itself — and publishes the bytes.
 - **Check before you attach.** `check_fit` answers per platform and names
   the remedy: "Convert to JPEG", "Compress", "Convert the file to MP4".
-  It judges the asset as the platform receives it, so a PNG fits Instagram:
-  the backend converts it to a JPEG before it publishes. Attach an asset
-  only when it fits every platform you are targeting.
+  It judges the asset as the platform receives it, so a PNG fits Instagram
+  and a WebP fits LinkedIn: the backend converts before it publishes. A
+  remedy appears only for a file the plugin **cannot** convert. Attach an
+  asset only when it fits every platform you are targeting.
 - One attachment per post in this version, and the backend refuses a second
   one.
 - **Instagram fetches the media from the internet**, so the file has to be

@@ -33,6 +33,8 @@ final class SocialFixtures
 
     public const MIME_JPEG = 'image/jpeg';
 
+    public const MIME_WEBP = 'image/webp';
+
     /**
      * The zone the sample timestamps are written in.
      */
