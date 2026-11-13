@@ -178,11 +178,6 @@ it('never points the OAuth connect flow at an aggregator', function () {
         new Spora\Services\PrincipalService(new Spora\Services\PrincipalResolver()),
         connectionService(),
         new SocialSettings(socialConfig()),
-        new Spora\Plugins\Social\Service\SocialAppUrlProbe(
-            new Symfony\Component\HttpClient\MockHttpClient([
-                new Symfony\Component\HttpClient\Response\MockResponse('', ['http_code' => 200]),
-            ]),
-        ),
         aggregatorService(),
     );
 

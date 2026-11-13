@@ -12,7 +12,6 @@ use Spora\Plugins\Social\Http\SocialPostController;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\OAuth\SocialStateCodec;
 use Spora\Plugins\Social\Service\PlatformFit;
-use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialPublisher;
 use Spora\Plugins\Social\Service\SocialSettings;
@@ -21,8 +20,6 @@ use Spora\Plugins\Social\Tests\Support\FakeProviderResolver;
 use Spora\Plugins\Social\Tests\Support\SocialFixtures;
 use Spora\Services\PrincipalResolver;
 use Spora\Services\PrincipalService;
-use Symfony\Component\HttpClient\MockHttpClient;
-use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -43,7 +40,6 @@ function connectionController(
         $principalService,
         $connections ?? connectionService(),
         $settings ?? new SocialSettings(socialConfig()),
-        new SocialAppUrlProbe(new MockHttpClient([new MockResponse('', ['http_code' => 200])])),
         aggregatorService(),
     );
 }
@@ -229,8 +225,20 @@ it('answers with the configuration of the operator', function () {
         ->and($body['data']['providers']['meta']['configured'])->toBeTrue()
         ->and($body['data']['providers']['meta']['client_id'])->toBe('meta-app-id')
         ->and($body['data']['providers']['meta']['config_id'])->toBe('meta-config-id')
-        ->and($body['data']['app_url'])->toBe('https://spora.test')
-        ->and($body['data'])->toHaveKey('app_url_public');
+        ->and($body['data']['app_url'])->toBe('https://spora.test');
+});
+
+it('claims no reachability for the address it names', function (): void {
+    $auth = bootAuthLayer();
+    bootAuth($auth);
+
+    $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
+
+    // Reachability is a question only a request to the operator's own
+    // server can answer, and it answers it in five seconds while this
+    // request waits. The connect flow asks it where the answer decides
+    // something; the config names the address and stops there.
+    expect(decode($response)['data'])->not->toHaveKey('app_url_public');
 });
 
 it('answers with a 422 when a write names no principal', function () {
