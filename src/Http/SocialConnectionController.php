@@ -10,7 +10,6 @@ use Spora\Plugins\Social\Aggregator\AggregatorService;
 use Spora\Plugins\Social\Exception\SocialException;
 use Spora\Plugins\Social\Model\SocialProvider;
 use Spora\Plugins\Social\Service\PlatformFit;
-use Spora\Plugins\Social\Service\SocialAppUrlProbe;
 use Spora\Plugins\Social\Service\SocialConnectionService;
 use Spora\Plugins\Social\Service\SocialSettings;
 use Spora\Services\PrincipalResolver;
@@ -32,7 +31,6 @@ final class SocialConnectionController extends AbstractSocialController
         PrincipalService $principalService,
         private readonly SocialConnectionService $connections,
         private readonly SocialSettings $settings,
-        private readonly SocialAppUrlProbe $appUrlProbe,
         private readonly AggregatorService $aggregators,
     ) {
         parent::__construct($auth, $principals, $principalService);
@@ -54,6 +52,13 @@ final class SocialConnectionController extends AbstractSocialController
      * an attachment read the limits from here, because the backend is what
      * refuses the publish. A copy in the frontend warns about a number that
      * is no longer enforced.
+     *
+     * **Every answer here is read from this instance.** Whether the
+     * address is reachable from the internet is a question only a request
+     * to the operator's own server can answer, and it answers it in five
+     * seconds while the request that asked waits. The connect flow asks
+     * it where the answer changes what happens; here it would be a second
+     * opinion on an address the operator has already pinned.
      */
     public function config(Request $request): JsonResponse
     {
@@ -74,7 +79,6 @@ final class SocialConnectionController extends AbstractSocialController
                 'providers'      => $providers,
                 'aggregators'    => $this->aggregators($request),
                 'app_url'        => $this->settings->appUrl(),
-                'app_url_public' => $this->appUrlProbe->isPubliclyReachable($this->settings->appUrl()),
                 'rules'          => PlatformFit::apiRules(),
             ]);
         });

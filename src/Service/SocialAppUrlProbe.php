@@ -19,23 +19,22 @@ use Throwable;
  * (a loopback or a private-range host is not), and does the host answer on
  * it (a transport error means something between the platform and the
  * install is in the way).
+ *
+ * The second question leaves the host, so it costs a round trip — five
+ * seconds when nothing answers. Only the connect flow asks: it is the one
+ * place where the answer decides whether the connect is refused.
  */
 final class SocialAppUrlProbe
 {
     private const TIMEOUT_SECONDS = 5.0;
 
     /**
-     * How long an answer is reused.
+     * How long the whole request may take.
      *
-     * The probe leaves the host, and the config endpoint is read on every
-     * page load — so the answer is held for a while rather than asked
-     * again each time. Reachability does not change by the minute.
+     * The timeout is the idle one, so a host that answers slowly but keeps
+     * the connection open could hold the request for ever. This bounds it.
      */
-    private const TTL_SECONDS = 300;
-
-    private ?bool $cached = null;
-
-    private int $cachedAt = 0;
+    private const MAX_DURATION_SECONDS = 10.0;
 
     public function __construct(
         private readonly HttpClientInterface $client,
@@ -47,14 +46,7 @@ final class SocialAppUrlProbe
             return false;
         }
 
-        if ($this->cached !== null && (time() - $this->cachedAt) < self::TTL_SECONDS) {
-            return $this->cached;
-        }
-
-        $this->cached = $this->probe($appUrl);
-        $this->cachedAt = time();
-
-        return $this->cached;
+        return $this->probe($appUrl);
     }
 
     private function probe(string $appUrl): bool
@@ -105,6 +97,7 @@ final class SocialAppUrlProbe
         try {
             $response = $this->client->request('HEAD', $appUrl, [
                 'timeout'  => self::TIMEOUT_SECONDS,
+                'max_duration' => self::MAX_DURATION_SECONDS,
                 'max_redirects' => 3,
             ]);
 
