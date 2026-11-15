@@ -69,7 +69,9 @@ it('says that a public address the host does not answer on is not reachable', fu
     expect($probe->isPubliclyReachable(SocialFixtures::APP_URL))->toBeFalse();
 });
 
-it('asks the host only once for a while', function () {
+it('asks the host every time', function () {
+    // The answer is not held: the probe is built per request, so a cached
+    // answer would die with the request that made it.
     $calls = 0;
 
     $client = new MockHttpClient(static function () use (&$calls): MockResponse {
@@ -82,5 +84,5 @@ it('asks the host only once for a while', function () {
 
     expect($probe->isPubliclyReachable(SocialFixtures::APP_URL))->toBeTrue()
         ->and($probe->isPubliclyReachable(SocialFixtures::APP_URL))->toBeTrue()
-        ->and($calls)->toBe(1);
+        ->and($calls)->toBe(2);
 });

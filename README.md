@@ -129,7 +129,7 @@ The plugin ships both:
 | `SPORA_SOCIAL_LINKEDIN_API_VERSION` | The LinkedIn API version, in `YYYYMM`. Defaults to the current one; LinkedIn versions its APIs quarterly, so a fixed version stops working on a date nobody chose. |
 | `SPORA_SOCIAL_GRAPH_API_VERSION` | The Meta Graph API version every Facebook and Instagram endpoint carries. Defaults to the current one; Meta retires a version every year. |
 | `SPORA_SOCIAL_FRONTEND_URL` | Where the browser lands after an account is connected. Defaults to `SPORA_APP_URL`; set it when the SPA runs on another origin, as it does in local development. |
-| `SPORA_APP_URL` | Must be **publicly reachable over HTTPS**. Instagram fetches the published media from the internet, so an address only your network can see fails at the last step of a publish. The plugin checks this at connect time, and `GET /config` reports it as `app_url_public`. The OAuth redirect URI is built from it, and the platforms need that address registered — so it has to be the address you registered, not the one the request happened to arrive on. |
+| `SPORA_APP_URL` | Must be **publicly reachable over HTTPS**. Instagram fetches the published media from the internet, so an address only your network can see fails at the last step of a publish. The plugin checks this at connect time and refuses the connect with the setting to fix. The OAuth redirect URI is built from it, and the platforms need that address registered — so it has to be the address you registered, not the one the request happened to arrive on. |
 
 The **aggregator needs no setting**: its API key is held on the connection
 row, like a token, and the operator pastes it on the Accounts screen. The
