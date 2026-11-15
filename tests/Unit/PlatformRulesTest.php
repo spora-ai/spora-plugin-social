@@ -178,6 +178,35 @@ it('does not claim again what the code does not do', function (string $claim) {
     "the aggregator's numbers are an add-on on its plan" => "numbers are an add-on on its plan",
 ]);
 
+it('does not claim again in the plugin what it does not do', function (string $claim) {
+    // A docblock that promises a cache the code does not have is a claim
+    // the next reader believes. The probe's cache was one: the probe is
+    // built per request, so the answer it held died with the request that
+    // made it — and the config endpoint answered in five seconds because
+    // of it. The README is read here too, because the operator reads the
+    // same claim there. Each phrase below was wrong once, and the
+    // correction is the fix — so the phrase must not come back.
+    $text = strtolower((string) file_get_contents(BASE_PATH . '/README.md'));
+
+    $files = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(BASE_PATH . '/src', FilesystemIterator::SKIP_DOTS),
+    );
+
+    foreach ($files as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $text .= strtolower((string) file_get_contents($file->getPathname()));
+    }
+
+    expect($text)->not->toContain($claim);
+})->with([
+    'the probe holds its answer' => 'held for a while',
+    'the probe holds its answer because reachability is steady' => 'reachability does not change by the minute',
+    'the config endpoint reports the reachability' => '`get /config` reports it as `app_url_public`',
+]);
+
 it('declares the skill the tools bundle', function () {
     foreach ((new Spora\Plugins\Social\SocialPlugin())->tools() as $class) {
         $attributes = (new ReflectionClass($class))->getAttributes(Spora\Tools\Attributes\Tool::class);

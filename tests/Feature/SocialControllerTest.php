@@ -234,10 +234,6 @@ it('claims no reachability for the address it names', function (): void {
 
     $response = connectionController($auth)->config(jsonRequest('GET', '/api/v1/plugins/social/config'));
 
-    // Reachability is a question only a request to the operator's own
-    // server can answer, and it answers it in five seconds while this
-    // request waits. The connect flow asks it where the answer decides
-    // something; the config names the address and stops there.
     expect(decode($response)['data'])->not->toHaveKey('app_url_public');
 });
 

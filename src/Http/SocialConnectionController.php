@@ -53,12 +53,11 @@ final class SocialConnectionController extends AbstractSocialController
      * refuses the publish. A copy in the frontend warns about a number that
      * is no longer enforced.
      *
-     * **Every answer here is read from this instance.** Whether the
-     * address is reachable from the internet is a question only a request
-     * to the operator's own server can answer, and it answers it in five
-     * seconds while the request that asked waits. The connect flow asks
-     * it where the answer changes what happens; here it would be a second
-     * opinion on an address the operator has already pinned.
+     * **Every answer here is read from this instance.** The address is
+     * named, not tested: whether it is reachable from the internet takes a
+     * request to the operator's own server, and the connect flow asks that
+     * question where the answer changes what happens. Here it would be a
+     * second opinion on an address the operator has already pinned.
      */
     public function config(Request $request): JsonResponse
     {
