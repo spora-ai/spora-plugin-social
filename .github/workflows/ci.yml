@@ -22,12 +22,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8.6 is the newest PHP the platform ships (2026-11-19). The leg
-        # runs the same suite as 8.4 and 8.5, and the lock is what makes it
-        # possible: `league/oauth2-client` capped its own range at `<8.6.0`
-        # until 2.10.0 (2026-11-20), so before that release no lock could
-        # be installed on 8.6 at all. A dependency's declared range is not
-        # the plugin's verdict — the suite is.
+        # The leg runs the same suite as 8.4 and 8.5, and the lock is what
+        # makes it possible: `league/oauth2-client` capped its own range at
+        # `<8.6.0` until 2.10.0 lifted it, so before that release no lock
+        # could be installed on 8.6 at all. A dependency's declared range is
+        # not the plugin's verdict — the suite is.
         php: ['8.4', '8.5', '8.6']
     steps:
       - name: Checkout plugin
